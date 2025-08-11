@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\robot\build\CMakeFiles\69851fc86f198198dd74b548ed56ef64\generate.stamp.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{FB0D0AE6-AC14-3B50-8B6F-4DA75826340A}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
