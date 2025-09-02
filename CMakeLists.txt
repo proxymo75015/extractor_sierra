@@ -80,6 +80,7 @@ endif()
 option(BUILD_TESTS "Construire les tests unitaires" OFF)
 
 if(BUILD_TESTS)
+    enable_testing()
     # Catch2 via FetchContent
     FetchContent_Declare(Catch2
         GIT_REPOSITORY https://github.com/catchorg/Catch2.git
@@ -89,13 +90,13 @@ if(BUILD_TESTS)
     
     # Découverte automatique des sources de test
     file(GLOB TEST_SOURCES tests/*.cpp)
-    add_executable(tests ${TEST_SOURCES})
-    
+    add_executable(tests ${TEST_SOURCES} src/utilities.cpp)
+
     target_include_directories(tests PRIVATE
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/include
     )
-    
+
     target_link_libraries(tests PRIVATE
         Catch2::Catch2WithMain
         nlohmann_json::nlohmann_json
@@ -121,4 +122,5 @@ install(FILES
     CMakePresets.json
     DESTINATION share/${PROJECT_NAME}
     CONFIGURATIONS Release
+
 )
