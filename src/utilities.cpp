@@ -64,13 +64,19 @@ void log_error(const std::filesystem::path &path, const std::string &msg) {
 
 #ifdef _WIN32
 std::wstring make_long_path(const std::wstring &path) {
-    if (path.substr(0, 4) == L"\\\\?\\") {
-        return path;
+    namespace fs = std::filesystem;
+    fs::path absPath = fs::absolute(path);
+    std::wstring abs = absPath.native();
+
+    if (abs.rfind(L"\\\\?\\", 0) == 0) {
+        return abs;
     }
-    if (path.empty() || path.length() >= MAX_PATH) {
-        return L"\\\\?\\" + path;
+
+    bool isUnc = abs.rfind(L"\\\\", 0) == 0;
+    if (!isUnc && abs.length() >= MAX_PATH) {
+        return L"\\\\?\\" + abs;
     }
-    return path;
+    return abs;
 }
 #endif
 
