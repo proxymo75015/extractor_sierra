@@ -31,7 +31,7 @@ private:
     std::filesystem::path m_srcPath;
     std::filesystem::path m_dstDir;
     std::ifstream m_fp;
-    bool m_bigEndian;
+    bool m_bigEndian = false;bool m_bigEndian = false;
     bool m_extractAudio;
     uint16_t m_version;
     uint16_t m_audioBlkSize;
