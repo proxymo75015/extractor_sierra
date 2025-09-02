@@ -111,9 +111,8 @@ install(TARGETS robot_extractor
     CONFIGURATIONS Release
 )
 
-install(FILES 
-    LICENSE 
-    README.md
+install(FILES
+    readme.md
     DESTINATION .
     CONFIGURATIONS Release
 )
@@ -124,3 +123,4 @@ install(FILES
     CONFIGURATIONS Release
 
 )
+
