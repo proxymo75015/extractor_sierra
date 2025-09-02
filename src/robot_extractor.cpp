@@ -5,6 +5,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <filesystem>
+#include <span>
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #ifdef _WIN32
