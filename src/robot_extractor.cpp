@@ -323,7 +323,11 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     }
 
     if (m_hasAudio && m_extractAudio) {
-        m_fp.seekg(m_packetSizes[frameNo] - m_audioBlkSize, std::ios::cur);
+        // Skip the remaining bytes in the packet before the audio block.
+        // m_frameSizes[frameNo] bytes of frame data were already read above,
+        // so subtract them to avoid overshooting the file position.
+        m_fp.seekg(m_packetSizes[frameNo] - m_frameSizes[frameNo] - m_audioBlkSize,
+                   std::ios::cur);
         int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
         int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
         if (pos != 0 && size <= m_audioBlkSize - 8) {
