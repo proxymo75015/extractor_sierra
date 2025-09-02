@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <span>
 
+#include "utilities.hpp"
 #include "stb_image_write.h"
 
 namespace robot {
