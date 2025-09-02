@@ -19,6 +19,8 @@
 
 namespace robot {
 
+constexpr size_t kMaxLzsOutput = 1024 * 1024 * 16;
+
 template <typename T>
 concept Integral = std::is_integral_v<T>;
 
