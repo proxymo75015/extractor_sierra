@@ -11,6 +11,23 @@
 
 namespace robot {
 
+inline void expand_cel(std::span<std::byte> target,
+                       std::span<const std::byte> source,
+                       uint16_t w, uint16_t h, uint8_t scale) {
+    const int newH = (h * scale) / 100;
+    if (target.size() != static_cast<size_t>(w) * newH) {
+        throw std::runtime_error("Taille cible incorrecte pour l'interpolation verticale");
+    }
+    if (newH <= 0) {
+        throw std::runtime_error("Hauteur source invalide");
+    }
+    for (int y = 0; y < newH; ++y) {
+        size_t srcY = static_cast<size_t>(y) * h / newH;
+        std::copy_n(source.begin() + srcY * w, w,
+                    target.begin() + static_cast<size_t>(y) * w);
+    }
+}
+
 class RobotExtractor {
 public:
     RobotExtractor(const std::filesystem::path &srcPath, const std::filesystem::path &dstDir, bool extractAudio);
@@ -31,7 +48,7 @@ private:
     std::filesystem::path m_srcPath;
     std::filesystem::path m_dstDir;
     std::ifstream m_fp;
-    bool m_bigEndian = false;bool m_bigEndian = false;
+    bool m_bigEndian = false;
     bool m_extractAudio;
     uint16_t m_version;
     uint16_t m_audioBlkSize;
