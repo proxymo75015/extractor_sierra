@@ -138,4 +138,11 @@ std::vector<int16_t> dpcm16_decompress(std::span<const std::byte> in, int16_t &c
     return out;
 }
 
+template uint8_t read_scalar<uint8_t>(std::span<const std::byte>, bool);
+template int8_t read_scalar<int8_t>(std::span<const std::byte>, bool);
+template uint16_t read_scalar<uint16_t>(std::span<const std::byte>, bool);
+template int16_t read_scalar<int16_t>(std::span<const std::byte>, bool);
+template uint32_t read_scalar<uint32_t>(std::span<const std::byte>, bool);
+template int32_t read_scalar<int32_t>(std::span<const std::byte>, bool);
+
 } // namespace robot
