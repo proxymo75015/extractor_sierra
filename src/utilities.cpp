@@ -3,8 +3,40 @@
 #include <iomanip>
 #include <iostream>
 #include <mutex>
+#include <algorithm>
 
 namespace robot {
+
+template <Integral T>
+T read_scalar(std::span<const std::byte> data, bool bigEndian) {
+    constexpr size_t size = sizeof(T);
+    if (data.size() < size) {
+        throw std::runtime_error("Échec de la lecture de " +
+                                 std::to_string(size) +
+                                 " octets");
+    }
+    T value;
+    if constexpr (size == 1) {
+        value = static_cast<T>(std::to_integer<uint8_t>(data[0]));
+    } else {
+        if (bigEndian != (std::endian::native == std::endian::big)) {
+            #if defined(__cpp_lib_byteswap) || (__cplusplus >= 202302L)
+            uint64_t tmp = 0;
+            std::memcpy(&tmp, data.data(), size);
+            tmp = std::byteswap(tmp);
+            std::memcpy(&value, &tmp, size);
+            #else
+            std::array<std::byte, size> swapped_bytes;
+            std::reverse_copy(data.begin(), data.begin() + size, swapped_bytes.begin());
+            std::memcpy(&value, swapped_bytes.data(), size);
+            #endif
+        } else {
+            std::memcpy(&value, data.data(), size);
+        }
+    }
+    return value;
+}
+
 
 namespace {
 
