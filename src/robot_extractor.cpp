@@ -53,7 +53,29 @@ RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath, const std::
 
 void RobotExtractor::readHeader() {
     StreamExceptionGuard guard(m_fp);
-    uint16_t sig = read_scalar<uint16_t>(m_fp, false);
+    auto headerStart = m_fp.tellg();
+
+    if (g_force_be) {
+        m_bigEndian = true;
+    } else if (g_force_le) {
+        m_bigEndian = false;
+    } else {
+        uint16_t sigLE = read_scalar<uint16_t>(m_fp, false);
+        if (sigLE == kRobotSig || sigLE == 0x3d) {
+            m_bigEndian = false;
+        } else {
+            m_fp.seekg(headerStart);
+            uint16_t sigBE = read_scalar<uint16_t>(m_fp, true);
+            if (sigBE == kRobotSig || sigBE == 0x3d) {
+                m_bigEndian = true;
+            } else {
+                throw std::runtime_error("Signature Robot invalide");
+            }
+        }
+        m_fp.seekg(headerStart);
+    }
+
+    uint16_t sig = read_scalar<uint16_t>(m_fp, m_bigEndian);
     if (sig != kRobotSig && sig != 0x3d) {
         throw std::runtime_error("Signature Robot invalide");
     }
@@ -67,7 +89,7 @@ void RobotExtractor::readHeader() {
         m_version = 4;
         m_fp.seekg(2, std::ios::cur);
     } else {
-        m_version = read_scalar<uint16_t>(m_fp, false);
+    m_version = read_scalar<uint16_t>(m_fp, m_bigEndian);
     }
     m_audioBlkSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
     m_primerZeroCompressFlag = read_scalar<int16_t>(m_fp, m_bigEndian);
@@ -91,14 +113,6 @@ void RobotExtractor::readHeader() {
         area = read_scalar<int32_t>(m_fp, m_bigEndian);
     }
     m_fp.seekg(8, std::ios::cur);
-
-    if (g_force_be) m_bigEndian = true;
-    else if (g_force_le) m_bigEndian = false;
-    else {
-        m_fp.seekg(6, std::ios::beg);
-        uint16_t verBE = read_scalar<uint16_t>(m_fp, true);
-        m_bigEndian = (verBE != 0 && verBE <= 0x00FF);
-    }
 
     if (m_xRes > 7680 || m_yRes > 4320) {
         log_warn(m_srcPath, "Résolution suspecte, inversion endianness...");
