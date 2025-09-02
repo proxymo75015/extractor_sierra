@@ -16,33 +16,6 @@ bool g_quiet = false;
 bool g_force_be = false;
 bool g_force_le = false;
 
-namespace {
-
-void expand_cel(std::span<std::byte> target, std::span<const std::byte> source, uint16_t w, uint16_t h, uint8_t scale) {
-    const int newH = (h * scale) / 100;
-    if (target.size() != static_cast<size_t>(w) * newH) {
-        throw std::runtime_error("Taille cible incorrecte pour l'interpolation verticale");
-    }
-    if (newH <= 0) {
-        throw std::runtime_error("Hauteur source invalide");
-    }
-    size_t sourceOffset = 0;
-    size_t targetOffset = 0;
-    int remainder = 0;
-    for (int16_t y = 0; y < newH; ++y) {
-        remainder += h;
-        int16_t lines = remainder / newH;
-        remainder %= newH;
-        while (lines--) {
-            std::copy(source.begin() + sourceOffset, source.begin() + sourceOffset + w, target.begin() + targetOffset);
-            targetOffset += w;
-        }
-        sourceOffset += w;
-    }
-}
-
-} // namespace
-
 RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath, const std::filesystem::path &dstDir, bool extractAudio)
     : m_srcPath(srcPath), m_dstDir(dstDir), m_extractAudio(extractAudio) {
     m_fp.open(srcPath, std::ios::binary);
