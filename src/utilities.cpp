@@ -45,7 +45,7 @@ std::mutex g_logMutex;
 void log(const std::filesystem::path &path, const std::string &msg, const char *prefix) {
     if (g_quiet) return;
     std::lock_guard lock(g_logMutex);
-    std::cerr << prefix << path.u8string() << ": " << msg << '\n';
+    std::cerr << prefix << path.string() << ": " << msg << '\n';
 }
 
 } // namespace
