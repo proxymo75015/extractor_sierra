@@ -77,6 +77,8 @@ void log_error(const std::filesystem::path &path, const std::string &msg);
 std::wstring make_long_path(const std::wstring &path);
 #endif
 
+constexpr size_t kMaxLzsOutput = 10'000'000;
+
 std::vector<std::byte> lzs_decompress(std::span<const std::byte> in, size_t expected_size);
 std::vector<int16_t> dpcm16_decompress(std::span<const std::byte> in, int16_t &carry);
 
