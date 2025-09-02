@@ -21,7 +21,9 @@ TEST_CASE("Path handling") {
     SECTION("Long path handling") {
         fs::path longPath = std::string(300, 'a') + "\\file.rbt";
         auto result = make_long_path(longPath.wstring());
+        auto absolute = fs::absolute(longPath).wstring();
         REQUIRE(result.starts_with(L"\\\\?\\"));
+        REQUIRE(result.substr(4) == absolute);
     }
 
     SECTION("UNC path handling") {
@@ -45,3 +47,4 @@ TEST_CASE("Path handling") {
         // Vérifie que l'erreur est loguée, mais pas de REQUIRE sur le contenu exact
     }
 }
+
