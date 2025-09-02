@@ -9,6 +9,9 @@
 #include <bit>
 #include <cstring>
 #include <fstream>
+#include <vector>
+#include <span>
+#include <cstddef>
 
 #ifdef _WIN32
 #include <Windows.h>
