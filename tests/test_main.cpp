@@ -9,12 +9,16 @@
                                     "12345678901234567890123456789012345678901234567890"
                                     "12345678901234567890123456789012345678901234567890"
                                     "12345678901234567890123456789012345678901234567890";
-         auto long_path = make_long_path(path);
-         #ifdef _WIN32
-         REQUIRE(long_path.wstring().starts_with(L"\\\\?\\"));
-         #else
-         REQUIRE(long_path == std::filesystem::absolute(path));
-         #endif
+          #ifdef _WIN32
+          auto long_path = make_long_path(path);
+          #else
+          auto long_path = std::filesystem::absolute(path);
+          #endif
+          #ifdef _WIN32
+          REQUIRE(long_path.wstring().starts_with(L"\\\\?\\"));
+          #else
+          REQUIRE(long_path == std::filesystem::absolute(path));
+          #endif
      }
 
      TEST_CASE("log_error writes to file", "[utilities]") {
@@ -32,4 +36,5 @@
              }
          }
          REQUIRE(found);
+
      }
