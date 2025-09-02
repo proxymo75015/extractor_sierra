@@ -19,7 +19,6 @@ public:
 private:
     static constexpr uint16_t kRobotSig = 0x16;
     static constexpr size_t kMaxCelPixels = 1024 * 1024;
-    static constexpr size_t kMaxLzsOutput = 1024 * 1024 * 16;
     static constexpr size_t kMaxCuePoints = 256;
 
     void readHeader();
