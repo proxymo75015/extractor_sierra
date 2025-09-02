@@ -3,23 +3,22 @@
 #include <array>
 #include <cassert>
 #include <cstdint>
+#include <cstddef>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <bit>
 #include <cstring>
 #include <fstream>
-#include <vector>
 #include <span>
-#include <cstddef>
+#include <vector>
+#include <algorithm>
 
 #ifdef _WIN32
 #include <Windows.h>
 #endif
 
 namespace robot {
-
-constexpr size_t kMaxLzsOutput = 1024 * 1024 * 16;
 
 template <typename T>
 concept Integral = std::is_integral_v<T>;
@@ -54,6 +53,9 @@ T read_scalar(std::ifstream &f, bool bigEndian) {
     }
     return value;
 }
+
+template <Integral T>
+T read_scalar(std::span<const std::byte> data, bool bigEndian);
 
 class StreamExceptionGuard {
 public:
