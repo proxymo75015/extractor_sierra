@@ -195,10 +195,18 @@ void RobotExtractor::readSizesAndCues() {
     m_frameSizes.resize(m_numFrames);
     m_packetSizes.resize(m_numFrames);
     for (auto &size : m_frameSizes) {
-        size = m_version == 5 ? read_scalar<uint16_t>(m_fp, m_bigEndian) : read_scalar<int32_t>(m_fp, m_bigEndian);
+        if (m_version >= 6) {
+            size = read_scalar<int32_t>(m_fp, m_bigEndian);
+        } else {
+            size = read_scalar<uint16_t>(m_fp, m_bigEndian);
+        }
     }
     for (auto &size : m_packetSizes) {
-        size = m_version == 5 ? read_scalar<uint16_t>(m_fp, m_bigEndian) : read_scalar<int32_t>(m_fp, m_bigEndian);
+        if (m_version >= 6) {
+            size = read_scalar<int32_t>(m_fp, m_bigEndian);
+        } else {
+            size = read_scalar<uint16_t>(m_fp, m_bigEndian);
+        }
     }
     for (auto &time : m_cueTimes) {
         time = read_scalar<int32_t>(m_fp, m_bigEndian);
