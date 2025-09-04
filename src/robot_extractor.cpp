@@ -87,16 +87,30 @@ void RobotExtractor::readHeader() {
     };
 
     readHeaderData();
+    
+    auto resolution_invalid = [&]() {
+        return m_xRes <= 0 || m_yRes <= 0 || m_xRes > 7680 || m_yRes > 4320;
+    };
 
     if (m_xRes > 7680 || m_yRes > 4320) {
         log_warn(m_srcPath, "Résolution suspecte, inversion endianness...");
         m_bigEndian = !m_bigEndian;
         m_fp.seekg(headerStart);
         readHeaderData();
+        if (resolution_invalid()) {
+            throw std::runtime_error("Résolution invalide: " +
+                                     std::to_string(m_xRes) + "x" +
+                                     std::to_string(m_yRes));
+        }
+    } else if (m_xRes <= 0 || m_yRes <= 0) {
+        throw std::runtime_error("Résolution invalide: " +
+                                 std::to_string(m_xRes) + "x" +
+                                 std::to_string(m_yRes));        
     }
 
     if (m_version < 4 || m_version > 6) {
-        throw std::runtime_error("Version Robot non supportée: " + std::to_string(m_version));
+        throw std::runtime_error("Version Robot non supportée: " +
+                                 std::to_string(m_version));
     }
 }
 
@@ -462,6 +476,7 @@ void RobotExtractor::extract() {
 
 } // namespace robot
 
+#ifndef ROBOT_EXTRACTOR_NO_MAIN
 int main(int argc, char *argv[]) {
     bool extractAudio = false;
     std::vector<std::string> files;
@@ -484,7 +499,8 @@ int main(int argc, char *argv[]) {
         if (!known) files.push_back(arg);
     }
     if (files.size() != 2) {
-        std::cerr << "Usage: " << argv[0] << " [--audio] [--quiet] [--force-be | --force-le] <input.rbt> <output_dir>\n";
+        std::cerr << "Usage: " << argv[0]
+                  << " [--audio] [--quiet] [--force-be | --force-le] <input.rbt> <output_dir>\n";
         return 1;
     }
     try {
@@ -497,3 +513,4 @@ int main(int argc, char *argv[]) {
     }
     return 0;
 }
+#endif
