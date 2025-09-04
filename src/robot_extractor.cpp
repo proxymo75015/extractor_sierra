@@ -112,11 +112,11 @@ void RobotExtractor::readPrimer() {
         if (compType != 0) {
             throw std::runtime_error("Type de compression inconnu: " + std::to_string(compType));
         }
-        if (m_evenPrimerSize + m_oddPrimerSize != m_primerReservedSize) {
+        if (m_evenPrimerSize + m_oddPrimerSize != static_cast<std::streamsize>(m_primerReservedSize)) {
             m_fp.seekg(m_primerPosition + m_primerReservedSize, std::ios::beg);
         } else {
-            m_evenPrimer.resize(m_evenPrimerSize);
-            m_oddPrimer.resize(m_oddPrimerSize);
+            m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
+            m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
             if (m_evenPrimerSize > 0) {
                 try {
                     m_fp.read(reinterpret_cast<char *>(m_evenPrimer.data()), m_evenPrimerSize);
@@ -127,7 +127,7 @@ void RobotExtractor::readPrimer() {
                                              std::to_string(m_evenPrimerSize) +
                                              " octets");
                 }
-                if (static_cast<size_t>(m_fp.gcount()) < m_evenPrimerSize) {
+                if (m_fp.gcount() < m_evenPrimerSize) {
                     throw std::runtime_error(std::string("Primer audio pair tronqué pour ") +
                                              m_srcPath.string() + ": lu " +
                                              std::to_string(m_fp.gcount()) + "/" +
@@ -145,7 +145,7 @@ void RobotExtractor::readPrimer() {
                                              std::to_string(m_oddPrimerSize) +
                                              " octets");
                 }
-                if (static_cast<size_t>(m_fp.gcount()) < m_oddPrimerSize) {
+                if (m_fp.gcount() < m_oddPrimerSize) {
                     throw std::runtime_error(std::string("Primer audio impair tronqué pour ") +
                                              m_srcPath.string() + ": lu " +
                                              std::to_string(m_fp.gcount()) + "/" +
@@ -157,8 +157,8 @@ void RobotExtractor::readPrimer() {
     } else if (m_primerZeroCompressFlag) {
         m_evenPrimerSize = 19922;
         m_oddPrimerSize = 21024;
-        m_evenPrimer.assign(m_evenPrimerSize, std::byte{0});
-        m_oddPrimer.assign(m_oddPrimerSize, std::byte{0});
+        m_evenPrimer.assign(static_cast<size_t>(m_evenPrimerSize), std::byte{0});
+        m_oddPrimer.assign(static_cast<size_t>(m_oddPrimerSize), std::byte{0});
     } else {
         throw std::runtime_error("Flags de primer audio corrompus");
     }
