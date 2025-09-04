@@ -73,7 +73,7 @@ private:
     int32_t m_evenPrimerSize;
     int32_t m_oddPrimerSize;
     int32_t m_totalPrimerSize;
-    int32_t m_primerPosition;
+    std::streamoff m_primerPosition;
     std::vector<std::byte> m_evenPrimer;
     std::vector<std::byte> m_oddPrimer;
     int16_t m_audioPredictorEven = 0;
