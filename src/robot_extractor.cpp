@@ -204,7 +204,7 @@ void RobotExtractor::readSizesAndCues() {
         value = read_scalar<int16_t>(m_fp, m_bigEndian);
     }
     auto pos = m_fp.tellg();
-    int bytesRemaining = pos % 2048;
+    std::streamoff bytesRemaining = pos % 2048;
     if (bytesRemaining != 0) {
         m_fp.seekg(2048 - bytesRemaining, std::ios::cur);
     }
