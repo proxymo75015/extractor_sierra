@@ -281,8 +281,7 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
 
         uint16_t newH = h;
         if (verticalScale != 100) {
-            newH = (h * verticalScale) / 100;
-            std::vector<std::byte> expanded(cel_data.size() * verticalScale / 100);
+            std::vector<std::byte> expanded(static_cast<size_t>(w) * h);
             expand_cel(expanded, cel_data, w, h, verticalScale);
             cel_data = std::move(expanded);
         }
