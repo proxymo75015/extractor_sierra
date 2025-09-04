@@ -329,23 +329,31 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     }
 
     if (m_hasAudio && m_extractAudio) {
-        // Skip the remaining bytes in the packet before the audio block.
-        // m_frameSizes[frameNo] bytes of frame data were already read above,
-        // so subtract them to avoid overshooting the file position.
-        m_fp.seekg(m_packetSizes[frameNo] - m_frameSizes[frameNo] - m_audioBlkSize,
-                   std::ios::cur);
-        int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
-        int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
-        if (pos != 0 && size <= m_audioBlkSize - 8) {
-            std::vector<std::byte> audio(size);
-            m_fp.read(reinterpret_cast<char *>(audio.data()), size);
-            bool isEven = (pos % 2) == 0;
-            if (isEven && m_evenPrimerSize > 0) {
-                auto samples = dpcm16_decompress(audio, m_audioPredictorEven);
-                writeWav(samples, 22050, m_evenAudioIndex++, true);
-            } else if (!isEven && m_oddPrimerSize > 0) {
-                auto samples = dpcm16_decompress(audio, m_audioPredictorOdd);
-                writeWav(samples, 22050, m_oddAudioIndex++, false);
+        // Verify that the packet has enough data for a full audio block
+        if (m_packetSizes[frameNo] >= m_frameSizes[frameNo] + m_audioBlkSize) {
+            // Skip the remaining bytes in the packet before the audio block.
+            // m_frameSizes[frameNo] bytes of frame data were already read above,
+            // so subtract them to avoid overshooting the file position.
+            m_fp.seekg(m_packetSizes[frameNo] - m_frameSizes[frameNo] - m_audioBlkSize,
+                       std::ios::cur);
+            int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
+            int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
+            int32_t maxSize = static_cast<int32_t>(m_audioBlkSize) - 8;
+            if (pos != 0 && size > 0 && size <= maxSize) {
+                std::vector<std::byte> audio(size);
+                m_fp.read(reinterpret_cast<char *>(audio.data()), size);
+                bool isEven = (pos % 2) == 0;
+                if (isEven && m_evenPrimerSize > 0) {
+                    auto samples = dpcm16_decompress(audio, m_audioPredictorEven);
+                    writeWav(samples, 22050, m_evenAudioIndex++, true);
+                } else if (!isEven && m_oddPrimerSize > 0) {
+                    auto samples = dpcm16_decompress(audio, m_audioPredictorOdd);
+                    writeWav(samples, 22050, m_oddAudioIndex++, false);
+                }
+                m_fp.seekg(static_cast<std::streamoff>(maxSize - size), std::ios::cur);
+            } else {
+                // Invalid header, skip the rest of the audio block safely
+                m_fp.seekg(static_cast<std::streamoff>(maxSize), std::ios::cur);
             }
         }
     }
