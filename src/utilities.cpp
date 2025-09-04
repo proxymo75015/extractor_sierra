@@ -7,6 +7,10 @@
 
 namespace robot {
 
+bool g_quiet = false;
+bool g_force_be = false;
+bool g_force_le = false;
+
 template <Integral T>
 T read_scalar(std::span<const std::byte> data, bool bigEndian) {
     constexpr size_t size = sizeof(T);
