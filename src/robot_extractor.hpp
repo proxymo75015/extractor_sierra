@@ -70,8 +70,8 @@ private:
     std::array<int32_t, kMaxCuePoints> m_cueTimes;
     std::array<int16_t, kMaxCuePoints> m_cueValues;
     std::vector<std::byte> m_palette;
-    int32_t m_evenPrimerSize;
-    int32_t m_oddPrimerSize;
+    std::streamsize m_evenPrimerSize;
+    std::streamsize m_oddPrimerSize;
     int32_t m_totalPrimerSize;
     std::streamoff m_primerPosition;
     std::vector<std::byte> m_evenPrimer;
