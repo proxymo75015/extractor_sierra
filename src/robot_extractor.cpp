@@ -293,12 +293,12 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             rgba_buffer.reserve(new_capacity);
         }
         rgba_buffer.resize(required);
-        for (size_t i = 0; i < cel_data.size(); ++i) {
-            auto idx = static_cast<uint8_t>(cel_data[i]);
-            rgba_buffer[i * 4 + 0] = m_palette[idx * 3 + 0];
-            rgba_buffer[i * 4 + 1] = m_palette[idx * 3 + 1];
-            rgba_buffer[i * 4 + 2] = m_palette[idx * 3 + 2];
-            rgba_buffer[i * 4 + 3] = std::byte{255};
+        for (size_t pixel = 0; pixel < cel_data.size(); ++pixel) {
+            auto idx = static_cast<uint8_t>(cel_data[pixel]);
+            rgba_buffer[pixel * 4 + 0] = m_palette[idx * 3 + 0];
+            rgba_buffer[pixel * 4 + 1] = m_palette[idx * 3 + 1];
+            rgba_buffer[pixel * 4 + 2] = m_palette[idx * 3 + 2];
+            rgba_buffer[pixel * 4 + 3] = std::byte{255};
         }
 
         std::ostringstream oss;
