@@ -336,19 +336,19 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         if (pos != 0 && size <= m_audioBlkSize - 8) {
             std::vector<std::byte> audio(size);
             m_fp.read(reinterpret_cast<char *>(audio.data()), size);
-            if (m_evenPrimerSize > 0) {
+            bool isEven = (pos % 2) == 0;
+            if (isEven && m_evenPrimerSize > 0) {
                 auto samples = dpcm16_decompress(audio, m_audioPredictorEven);
-                writeWav(samples, 22050, frameNo, true);
-            }
-            if (m_oddPrimerSize > 0) {
+                writeWav(samples, 22050, m_evenAudioIndex++, true);
+            } else if (!isEven && m_oddPrimerSize > 0) {
                 auto samples = dpcm16_decompress(audio, m_audioPredictorOdd);
-                writeWav(samples, 22050, frameNo, false);
+                writeWav(samples, 22050, m_oddAudioIndex++, false);
             }
         }
     }
 }
 
-void RobotExtractor::writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate, int frameNo, bool isEvenChannel) {
+void RobotExtractor::writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate, int blockIndex, bool isEvenChannel) {
     if (sampleRate == 0) sampleRate = 22050;
     std::vector<std::byte> wav;
     size_t data_size = samples.size() * sizeof(int16_t);
@@ -373,7 +373,7 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples, uint32_t samp
         for (int i = 0; i < 2; ++i) wav.push_back(std::byte(sample >> (i * 8)));
     }
     std::ostringstream wavName;
-    wavName << "frame_" << std::setw(5) << std::setfill('0') << frameNo << (isEvenChannel ? "_even" : "_odd") << ".wav";
+    wavName << (isEvenChannel ? "even_" : "odd_") << std::setw(5) << std::setfill('0') << blockIndex << ".wav";
     std::ofstream wavFile(m_dstDir / wavName.str(), std::ios::binary);
     if (!wavFile) {
         throw std::runtime_error("Échec de l'ouverture du fichier WAV: " + wavName.str());
