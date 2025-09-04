@@ -4,16 +4,15 @@
 
 using robot::expand_cel;
 
-TEST_CASE("expand_cel enlarges image when scale > 100") {
+TEST_CASE("expand_cel recopie les lignes comprimées dans la cible finale") {
     const uint16_t w = 3;
-    const uint16_t h = 2;
-    const uint8_t scale = 200; // 2x height
-    const int newH = (h * scale) / 100;
+    const uint16_t h = 4;
+    const uint8_t scale = 50; // source à moitié de la hauteur
 
     std::vector<std::byte> source{
         std::byte{1}, std::byte{2}, std::byte{3},
         std::byte{4}, std::byte{5}, std::byte{6}
-    };
+    }; // hauteur source = 2 lignes
 
     std::vector<std::byte> expected{
         std::byte{1}, std::byte{2}, std::byte{3},
@@ -22,32 +21,24 @@ TEST_CASE("expand_cel enlarges image when scale > 100") {
         std::byte{4}, std::byte{5}, std::byte{6}
     };
 
-    std::vector<std::byte> target(static_cast<size_t>(w) * newH);
+    std::vector<std::byte> target(static_cast<size_t>(w) * h);
     expand_cel(target, source, w, h, scale);
 
     REQUIRE(target == expected);
 }
 
-TEST_CASE("expand_cel reduces image when scale < 100") {
-    const uint16_t w = 3;
-    const uint16_t h = 4;
-    const uint8_t scale = 50; // half height
-    const int newH = (h * scale) / 100;
+TEST_CASE("expand_cel vérifie les tailles de tampons") {
+    const uint16_t w = 2;
+    const uint16_t h = 2;
+    const uint8_t scale = 50; // hauteur source = 1
 
-    std::vector<std::byte> source{
-        std::byte{10}, std::byte{11}, std::byte{12},
-        std::byte{20}, std::byte{21}, std::byte{22},
-        std::byte{30}, std::byte{31}, std::byte{32},
-        std::byte{40}, std::byte{41}, std::byte{42}
-    };
+    // Taille incorrecte de la source
+    std::vector<std::byte> badSource(3);
+    std::vector<std::byte> goodTarget(static_cast<size_t>(w) * h);
+    REQUIRE_THROWS(expand_cel(goodTarget, badSource, w, h, scale));
 
-    std::vector<std::byte> expected{
-        std::byte{10}, std::byte{11}, std::byte{12},
-        std::byte{30}, std::byte{31}, std::byte{32}
-    };
-
-    std::vector<std::byte> target(static_cast<size_t>(w) * newH);
-    expand_cel(target, source, w, h, scale);
-
-    REQUIRE(target == expected);
+    // Taille incorrecte de la cible
+    std::vector<std::byte> goodSource(static_cast<size_t>(w) * ((h * scale) / 100));
+    std::vector<std::byte> badTarget(goodTarget.size() - 1);
+    REQUIRE_THROWS(expand_cel(badTarget, goodSource, w, h, scale));
 }
