@@ -90,8 +90,12 @@ if(BUILD_TESTS)
     
     # Découverte automatique des sources de test
     file(GLOB TEST_SOURCES tests/*.cpp)
-    add_executable(tests ${TEST_SOURCES} src/utilities.cpp)
+    add_executable(tests ${TEST_SOURCES}
+        src/utilities.cpp
+        src/robot_extractor.cpp
+        src/stb_image_write_impl.cpp)
 
+    target_compile_definitions(tests PRIVATE ROBOT_EXTRACTOR_NO_MAIN)
     target_include_directories(tests PRIVATE
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/include
@@ -123,4 +127,5 @@ install(FILES
     CONFIGURATIONS Release
 
 )
+
 
