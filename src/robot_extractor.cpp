@@ -353,9 +353,14 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples, uint32_t samp
     if (sampleRate == 0) sampleRate = 22050;
     std::vector<std::byte> wav;
     size_t data_size = samples.size() * sizeof(int16_t);
+        if (data_size > 0xFFFFFFFFu - 36) {
+        throw std::runtime_error(
+            "Taille de données audio trop grande pour un fichier WAV: " +
+            std::to_string(data_size));
+    }
     wav.reserve(44 + data_size);
     wav.insert(wav.end(), {std::byte{'R'}, std::byte{'I'}, std::byte{'F'}, std::byte{'F'}});
-    uint32_t riff_size = 36 + data_size;
+    uint32_t riff_size = 36 + static_cast<uint32_t>(data_size);
     for (int i = 0; i < 4; ++i) wav.push_back(std::byte(riff_size >> (i * 8)));
     wav.insert(wav.end(), {std::byte{'W'}, std::byte{'A'}, std::byte{'V'}, std::byte{'E'}});
     wav.insert(wav.end(), {std::byte{'f'}, std::byte{'m'}, std::byte{'t'}, std::byte{' '}});
