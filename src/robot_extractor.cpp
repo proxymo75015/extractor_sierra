@@ -289,7 +289,8 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
 
         size_t required = static_cast<size_t>(w) * newH * 4;
         if (required > rgba_buffer.capacity()) {
-            rgba_buffer.reserve(required * 1.5);
+            size_t new_capacity = static_cast<size_t>(required + required / 2);
+            rgba_buffer.reserve(new_capacity);
         }
         rgba_buffer.resize(required);
         for (size_t i = 0; i < cel_data.size(); ++i) {
