@@ -16,7 +16,8 @@ RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath, const std::
     : m_srcPath(srcPath), m_dstDir(dstDir), m_extractAudio(extractAudio) {
     m_fp.open(srcPath, std::ios::binary);
     if (!m_fp.is_open()) {
-        throw std::runtime_error("Impossible d'ouvrir " + srcPath.u8string());
+        throw std::runtime_error(std::string("Impossible d'ouvrir ") +
+                                 srcPath.string());
     }
 }
 
@@ -120,32 +121,36 @@ void RobotExtractor::readPrimer() {
                 try {
                     m_fp.read(reinterpret_cast<char *>(m_evenPrimer.data()), m_evenPrimerSize);
                 } catch (const std::ios_base::failure &) {
-                    throw std::runtime_error("Primer audio pair tronqué pour " +
-                                             m_srcPath.u8string() + ": lu " +
+                    throw std::runtime_error(std::string("Primer audio pair tronqué pour ") +
+                                             m_srcPath.string() + ": lu " +
                                              std::to_string(m_fp.gcount()) + "/" +
-                                             std::to_string(m_evenPrimerSize) + " octets");
+                                             std::to_string(m_evenPrimerSize) +
+                                             " octets");
                 }
                 if (static_cast<size_t>(m_fp.gcount()) < m_evenPrimerSize) {
-                    throw std::runtime_error("Primer audio pair tronqué pour " +
-                                             m_srcPath.u8string() + ": lu " +
+                    throw std::runtime_error(std::string("Primer audio pair tronqué pour ") +
+                                             m_srcPath.string() + ": lu " +
                                              std::to_string(m_fp.gcount()) + "/" +
-                                             std::to_string(m_evenPrimerSize) + " octets");
+                                             std::to_string(m_evenPrimerSize) +
+                                             " octets");
                 }
             }
             if (m_oddPrimerSize > 0) {
                 try {
                     m_fp.read(reinterpret_cast<char *>(m_oddPrimer.data()), m_oddPrimerSize);
                 } catch (const std::ios_base::failure &) {
-                    throw std::runtime_error("Primer audio impair tronqué pour " +
-                                             m_srcPath.u8string() + ": lu " +
+                    throw std::runtime_error(std::string("Primer audio impair tronqué pour ") +
+                                             m_srcPath.string() + ": lu " +
                                              std::to_string(m_fp.gcount()) + "/" +
-                                             std::to_string(m_oddPrimerSize) + " octets");
+                                             std::to_string(m_oddPrimerSize) +
+                                             " octets");
                 }
                 if (static_cast<size_t>(m_fp.gcount()) < m_oddPrimerSize) {
-                    throw std::runtime_error("Primer audio impair tronqué pour " +
-                                             m_srcPath.u8string() + ": lu " +
+                    throw std::runtime_error(std::string("Primer audio impair tronqué pour ") +
+                                             m_srcPath.string() + ": lu " +
                                              std::to_string(m_fp.gcount()) + "/" +
-                                             std::to_string(m_oddPrimerSize) + " octets");
+                                             std::to_string(m_oddPrimerSize) +
+                                             " octets");
                 }
             }
         }
@@ -166,18 +171,19 @@ void RobotExtractor::readPalette() {
     }
     StreamExceptionGuard guard(m_fp);
     if (m_paletteSize < 768) {
-        throw std::runtime_error("Taille de palette insuffisante dans l'en-tête pour " + 
-                                 m_srcPath.u8string() + ": " + 
+        throw std::runtime_error(std::string("Taille de palette insuffisante dans l'en-tête pour ") +
+                                 m_srcPath.string() + ": " +
                                  std::to_string(m_paletteSize) +
                                  " octets (768 requis)");
     }
     m_palette.resize(m_paletteSize);
     m_fp.read(reinterpret_cast<char *>(m_palette.data()), m_paletteSize);
     if (static_cast<size_t>(m_fp.gcount()) < m_paletteSize) {
-        throw std::runtime_error("Palette tronquée pour " + 
-                                 m_srcPath.u8string() + ": lue " + 
-                                 std::to_string(m_fp.gcount()) + "/" + 
-                                 std::to_string(m_paletteSize) + " octets");
+        throw std::runtime_error(std::string("Palette tronquée pour ") +
+                                 m_srcPath.string() + ": lue " +
+                                 std::to_string(m_fp.gcount()) + "/" +
+                                 std::to_string(m_paletteSize) +
+                                 " octets");
     }
 }
 
@@ -215,8 +221,8 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     }
 
     if (m_palette.size() < 768) {
-        throw std::runtime_error("Taille de palette insuffisante pour " + 
-                                 m_srcPath.u8string() + ": " + 
+        throw std::runtime_error(std::string("Taille de palette insuffisante pour ") +
+                                 m_srcPath.string() + ": " +
                                  std::to_string(m_palette.size()) +
                                  " octets (768 requis)");
     }
@@ -297,13 +303,15 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         std::ostringstream oss;
         oss << std::setw(5) << std::setfill('0') << frameNo << "_" << i << ".png";
         auto outPath = m_dstDir / oss.str();
+                std::string outPathStr = outPath.string();
         #ifdef _WIN32
         auto longPath = make_long_path(outPath.wstring());
         if (!stbi_write_png(longPath.c_str(), w, newH, 4, rgba_buffer.data(), w * 4)) {
         #else
-        if (!stbi_write_png(outPath.u8string().c_str(), w, newH, 4, rgba_buffer.data(), w * 4)) {
+        if (!stbi_write_png(outPathStr.c_str(), w, newH, 4, rgba_buffer.data(), w * 4)) {
         #endif
-            throw std::runtime_error("Échec de l'écriture de " + outPath.u8string());
+            throw std::runtime_error(std::string("Échec de l'écriture de ") +
+                                     outPathStr);
         }
 
         nlohmann::json celJson;
@@ -394,23 +402,28 @@ void RobotExtractor::extract() {
         nlohmann::json frameJson;
         exportFrame(i, frameJson);
         jsonDoc["frames"].push_back(frameJson);
-        m_fp.seekg(pos + m_packetSizes[i], std::ios::beg);
+        m_fp.seekg(pos + static_cast<std::streamoff>(m_packetSizes[i]),
+                   std::ios::beg);
     }
     
     auto tmpPath = m_dstDir / "metadata.json.tmp";
+    std::string tmpPathStr = tmpPath.string();
     {
         std::ofstream jsonFile(tmpPath, std::ios::binary);
         if (!jsonFile) {
-            throw std::runtime_error("Échec de l'ouverture du fichier JSON temporaire: " + tmpPath.u8string());
+            throw std::runtime_error(std::string("Échec de l'ouverture du fichier JSON temporaire: ") +
+                                     tmpPathStr);
         }
         jsonFile << std::setw(2) << jsonDoc;
         jsonFile.flush();
         if (!jsonFile) {
-            throw std::runtime_error("Échec de l'écriture du fichier JSON temporaire: " + tmpPath.u8string());
+            throw std::runtime_error(std::string("Échec de l'écriture du fichier JSON temporaire: ") +
+                                     tmpPathStr);
         }
         jsonFile.close();
         if (jsonFile.fail()) {
-            throw std::runtime_error("Échec de la fermeture du fichier JSON temporaire: " + tmpPath.u8string());
+            throw std::runtime_error(std::string("Échec de la fermeture du fichier JSON temporaire: ") +
+                                     tmpPathStr);;
         }
     }
     std::filesystem::rename(tmpPath, m_dstDir / "metadata.json");
