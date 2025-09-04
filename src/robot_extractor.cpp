@@ -12,11 +12,6 @@
 #include "stb_image_write.h"
 
 namespace robot {
-
-bool g_quiet = false;
-bool g_force_be = false;
-bool g_force_le = false;
-
 RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath, const std::filesystem::path &dstDir, bool extractAudio)
     : m_srcPath(srcPath), m_dstDir(dstDir), m_extractAudio(extractAudio) {
     m_fp.open(srcPath, std::ios::binary);
@@ -407,13 +402,13 @@ int main(int argc, char *argv[]) {
             extractAudio = true;
             known = true;
         } else if (arg == "--quiet") {
-            g_quiet = true;
+            robot::g_quiet = true;
             known = true;
         } else if (arg == "--force-be") {
-            g_force_be = true;
+            robot::g_force_be = true;
             known = true;
         } else if (arg == "--force-le") {
-            g_force_le = true;
+            robot::g_force_le = true;
             known = true;
         }
         if (!known) files.push_back(arg);
