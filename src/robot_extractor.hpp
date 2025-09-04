@@ -43,7 +43,7 @@ private:
     void readPalette();
     void readSizesAndCues();
     void exportFrame(int frameNo, nlohmann::json &frameJson);
-    void writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate, int frameNo, bool isEvenChannel);
+    void writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate, int blockIndex, bool isEvenChannel);
 
     std::filesystem::path m_srcPath;
     std::filesystem::path m_dstDir;
@@ -78,6 +78,8 @@ private:
     std::vector<std::byte> m_oddPrimer;
     int16_t m_audioPredictorEven = 0;
     int16_t m_audioPredictorOdd = 0;
+    int m_evenAudioIndex = 0;
+    int m_oddAudioIndex = 0;
 };
 
 } // namespace robot
