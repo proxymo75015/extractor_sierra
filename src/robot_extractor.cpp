@@ -498,6 +498,10 @@ int main(int argc, char *argv[]) {
         }
         if (!known) files.push_back(arg);
     }
+        if (robot::g_force_be && robot::g_force_le) {
+        std::cerr << "Les options --force-be et --force-le sont mutuellement exclusives\n";
+        return 1;
+    }
     if (files.size() != 2) {
         std::cerr << "Usage: " << argv[0]
                   << " [--audio] [--quiet] [--force-be | --force-le] <input.rbt> <output_dir>\n";
