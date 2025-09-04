@@ -15,14 +15,17 @@ inline void expand_cel(std::span<std::byte> target,
                        std::span<const std::byte> source,
                        uint16_t w, uint16_t h, uint8_t scale) {
     const int newH = (h * scale) / 100;
-    if (target.size() != static_cast<size_t>(w) * newH) {
-        throw std::runtime_error("Taille cible incorrecte pour l'interpolation verticale");
+    if (source.size() != static_cast<size_t>(w) * newH) {
+        throw std::runtime_error("Taille source incorrecte pour l'expansion verticale");
+    }
+    if (target.size() != static_cast<size_t>(w) * h) {
+        throw std::runtime_error("Taille cible incorrecte pour l'expansion verticale");
     }
     if (newH <= 0) {
         throw std::runtime_error("Hauteur source invalide");
     }
-    for (int y = 0; y < newH; ++y) {
-        size_t srcY = static_cast<size_t>(y) * h / newH;
+    for (int y = 0; y < h; ++y) {
+        size_t srcY = static_cast<size_t>(y) * newH / h;
         std::copy_n(source.begin() + srcY * w, w,
                     target.begin() + static_cast<size_t>(y) * w);
     }
