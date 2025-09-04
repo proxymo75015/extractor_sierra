@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <iomanip>
+#include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <filesystem>
