@@ -138,11 +138,12 @@ std::vector<std::byte> lzs_decompress(std::span<const std::byte> in, size_t expe
 
 std::vector<int16_t> dpcm16_decompress(std::span<const std::byte> in, int16_t &carry) {
     std::vector<int16_t> out(in.size());
+    int32_t acc = carry;
     for (size_t i = 0; i < in.size(); ++i) {
-        int16_t delta = static_cast<int8_t>(in[i]) * 256;
-        carry += delta;
-        if (carry > 32767) carry = 32767;
-        else if (carry < -32768) carry = -32768;
+        int32_t delta = static_cast<int8_t>(in[i]) * 256;
+        acc += delta;
+        acc = std::clamp(acc, -32768, 32767);
+        carry = static_cast<int16_t>(acc);
         out[i] = carry;
     }
     return out;
