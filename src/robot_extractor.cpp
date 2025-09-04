@@ -282,6 +282,13 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             cel_offset += compSz;
         }
 
+        size_t expected = static_cast<size_t>(w) *
+                          ((static_cast<size_t>(h) * verticalScale) / 100);
+        if (cel_data.size() != expected) {
+            throw std::runtime_error(
+                "Cel corrompu: taille de données incohérente");
+        }
+        
         uint16_t newH = h;
         if (verticalScale != 100) {
             std::vector<std::byte> expanded(static_cast<size_t>(w) * h);
