@@ -11,6 +11,19 @@ bool g_quiet = false;
 bool g_force_be = false;
 bool g_force_le = false;
 
+void read_exact(std::ifstream &f, void *data, size_t size) {
+    auto old = f.exceptions();
+    f.exceptions(std::ios::goodbit);
+    f.read(static_cast<char *>(data), static_cast<std::streamsize>(size));
+    std::streamsize got = f.gcount();
+    f.exceptions(old);
+    if (got != static_cast<std::streamsize>(size)) {
+        throw std::runtime_error("Lecture incomplète (" +
+                                 std::to_string(got) + "/" +
+                                 std::to_string(size) + " octets)");
+    }
+}
+
 template <Integral T>
 T read_scalar(std::span<const std::byte> data, bool bigEndian) {
     constexpr size_t size = sizeof(T);
