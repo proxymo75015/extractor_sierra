@@ -24,7 +24,7 @@ static std::vector<uint8_t> build_header(uint16_t primerReservedSize) {
     push16(h, 0x16);            // signature
     h.insert(h.end(), {'S','O','L','\0'});
     push16(h, 5);               // version
-    push16(h, 0);               // audio block size
+    push16(h, 8);               // audio block size
     push16(h, 0);               // primerZeroCompressFlag
     push16(h, 0);               // skip
     push16(h, 0);               // numFrames
