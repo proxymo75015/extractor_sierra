@@ -41,28 +41,19 @@ TEST_CASE("expand_cel gère les ratios non entiers") {
 
   REQUIRE(target == expected);
 }
-TEST_CASE("expand_cel réduit une source plus grande que la cible") {
+TEST_CASE("expand_cel rejette un scale supérieur à 100") {
   const uint16_t w = 2;
   const uint16_t h = 4;
   const uint8_t scale = 150; // source 1.5x plus haute
 
-  std::vector<std::byte> source{
-      std::byte{1},  std::byte{2},  // ligne 0
-      std::byte{3},  std::byte{4},  // ligne 1
-      std::byte{5},  std::byte{6},  // ligne 2
-      std::byte{7},  std::byte{8},  // ligne 3
-      std::byte{9},  std::byte{10}, // ligne 4
-      std::byte{11}, std::byte{12}  // ligne 5
-  };
-
-  std::vector<std::byte> expected{std::byte{1}, std::byte{2}, std::byte{3},
-                                  std::byte{4}, std::byte{7}, std::byte{8},
-                                  std::byte{9}, std::byte{10}};
+  std::vector<std::byte> source{std::byte{1},  std::byte{2},  std::byte{3},
+                                std::byte{4},  std::byte{5},  std::byte{6},
+                                std::byte{7},  std::byte{8},  std::byte{9},
+                                std::byte{10}, std::byte{11}, std::byte{12}};
 
   std::vector<std::byte> target(static_cast<size_t>(w) * h);
-  expand_cel(target, source, w, h, scale);
-
-  REQUIRE(target == expected);
+  
+  REQUIRE_THROWS(expand_cel(target, source, w, h, scale));
 }
 
 TEST_CASE("expand_cel vérifie les tailles de tampons") {
