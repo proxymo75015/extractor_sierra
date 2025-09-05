@@ -318,8 +318,11 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         if (w == 0 || h == 0 || pixel_count > kMaxCelPixels) {
             throw std::runtime_error("Dimensions de cel invalides");
         }
-
+            
+        size_t expected = static_cast<size_t>(w) *
+                          ((static_cast<size_t>(h) * verticalScale) / 100);
         std::vector<std::byte> cel_data;
+        cel_data.reserve(expected);
         size_t cel_offset = offset;
         for (int j = 0; j < numChunks; ++j) {
             if (cel_offset + 10 > frameData.size()) {
@@ -347,8 +350,6 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             cel_offset += compSz;
         }
 
-        size_t expected = static_cast<size_t>(w) *
-                          ((static_cast<size_t>(h) * verticalScale) / 100);
         if (cel_data.size() != expected) {
             throw std::runtime_error(
                 "Cel corrompu: taille de données incohérente");
