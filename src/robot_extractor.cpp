@@ -75,6 +75,9 @@ void RobotExtractor::readHeader() {
         m_yRes = read_scalar<int16_t>(m_fp, m_bigEndian);
         m_hasPalette = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
         m_hasAudio = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
+        if (m_hasAudio && m_audioBlkSize < 8) {
+            throw std::runtime_error("Taille de bloc audio invalide");
+        }           
         m_fp.seekg(2, std::ios::cur);
         m_frameRate = read_scalar<int16_t>(m_fp, m_bigEndian);
         m_isHiRes = read_scalar<int16_t>(m_fp, m_bigEndian) != 0;
@@ -253,7 +256,8 @@ void RobotExtractor::readSizesAndCues() {
         if (m_packetSizes[i] < m_frameSizes[i]) {
             throw std::runtime_error("Packet size < frame size");
         }
-        uint32_t maxSize = m_frameSizes[i] + static_cast<uint32_t>(m_audioBlkSize);
+        uint32_t maxSize = m_frameSizes[i] +
+                            (m_hasAudio ? static_cast<uint32_t>(m_audioBlkSize) : 0);
         if (m_packetSizes[i] > maxSize) {
             throw std::runtime_error("Packet size > frame size + audio block size");
         }
@@ -406,8 +410,7 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     }
         
     if (m_hasAudio) {
-        // Verify that the packet has enough data for a full audio block
-        if (m_packetSizes[frameNo] >= m_frameSizes[frameNo] + m_audioBlkSize) {
+        if (m_packetSizes[frameNo] == m_frameSizes[frameNo] + m_audioBlkSize) {
             // Skip the remaining bytes in the packet before the audio block.
             // m_frameSizes[frameNo] bytes of frame data were already read above,
             // so subtract them to avoid overshooting the file position.
@@ -415,8 +418,8 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                        std::ios::cur);
             int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
             int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
-            int32_t maxSize = static_cast<int32_t>(m_audioBlkSize) - 8;
-            if (pos != 0 && size > 0 && size <= maxSize) {
+            uint32_t maxSize = static_cast<uint32_t>(m_audioBlkSize) - 8;
+            if (pos != 0 && size > 0 && size <= static_cast<int32_t>(maxSize)) {
                 std::vector<std::byte> audio(size);
                 m_fp.read(reinterpret_cast<char *>(audio.data()), size);
                 bool isEven = (pos % 2) == 0;
@@ -431,7 +434,8 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                         writeWav(samples, 22050, m_oddAudioIndex++, false);
                     }
                 }
-                m_fp.seekg(static_cast<std::streamoff>(maxSize - size), std::ios::cur);
+                m_fp.seekg(static_cast<std::streamoff>(maxSize - static_cast<uint32_t>(size)),
+                           std::ios::cur);
             } else {
                 // Invalid header, skip the rest of the audio block safely
                 m_fp.seekg(static_cast<std::streamoff>(maxSize), std::ios::cur);
