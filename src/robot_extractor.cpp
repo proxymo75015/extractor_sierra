@@ -228,9 +228,6 @@ void RobotExtractor::readPalette() {
 
 void RobotExtractor::readSizesAndCues() {
     StreamExceptionGuard guard(m_fp);
-    if (m_numFrames > std::numeric_limits<uint16_t>::max()) {
-        throw std::runtime_error("Nombre de frames excessif");
-    }  
     m_frameSizes.resize(m_numFrames);
     m_packetSizes.resize(m_numFrames);
     for (auto &size : m_frameSizes) {
