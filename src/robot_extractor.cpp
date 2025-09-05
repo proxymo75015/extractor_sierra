@@ -9,6 +9,8 @@
 #include <filesystem>
 #include <span>
 #include <limits>
+#include <codecvt>
+#include <locale>
 
 #include "utilities.hpp"
 #include "stb_image_write.h"
@@ -344,13 +346,17 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         std::ostringstream oss;
         oss << std::setw(5) << std::setfill('0') << frameNo << "_" << i << ".png";
         auto outPath = m_dstDir / oss.str();
-                std::string outPathStr = outPath.string();
-        #ifdef _WIN32
+        std::string outPathStr;
+#ifdef _WIN32
         auto longPath = make_long_path(outPath.wstring());
-        if (!stbi_write_png(longPath.c_str(), w, newH, 4, rgba_buffer.data(), w * 4)) {
-        #else
+        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> conv;
+        std::string pathUtf8 = conv.to_bytes(longPath);
+        outPathStr = pathUtf8;
+        if (!stbi_write_png(pathUtf8.c_str(), w, newH, 4, rgba_buffer.data(), w * 4)) {
+#else
+        outPathStr = outPath.string();
         if (!stbi_write_png(outPathStr.c_str(), w, newH, 4, rgba_buffer.data(), w * 4)) {
-        #endif
+#endif
             throw std::runtime_error(std::string("Échec de l'écriture de ") +
                                      outPathStr);
         }
