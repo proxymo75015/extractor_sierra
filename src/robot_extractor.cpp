@@ -1,6 +1,7 @@
 #include "robot_extractor.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -126,13 +127,22 @@ void RobotExtractor::readPrimer() {
         int16_t compType = read_scalar<int16_t>(m_fp, m_bigEndian);
         m_evenPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
         m_oddPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
+        if (m_evenPrimerSize < 0 || m_oddPrimerSize < 0) {
+            throw std::runtime_error("Tailles de primer audio négatives");
+        }
         if (compType != 0) {
             throw std::runtime_error("Type de compression inconnu: " + std::to_string(compType));
         }
         if (m_evenPrimerSize + m_oddPrimerSize != static_cast<std::streamsize>(m_primerReservedSize)) {
             m_fp.seekg(m_primerPosition + m_primerReservedSize, std::ios::beg);
         } else {
+            if (m_evenPrimerSize < 0) {
+                throw std::runtime_error("Tailles de primer audio négatives");
+            }
             m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
+            if (m_oddPrimerSize < 0) {
+                throw std::runtime_error("Tailles de primer audio négatives");
+            }            
             m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
             if (m_evenPrimerSize > 0) {
                 try {
@@ -173,6 +183,9 @@ void RobotExtractor::readPalette() {
                                  std::to_string(m_paletteSize) +
                                  " octets (768 requis)");
     }
+    if (static_cast<int>(m_paletteSize) < 0) {
+        throw std::runtime_error("Taille de palette négative");
+    }    
     m_palette.resize(m_paletteSize);
     m_fp.read(reinterpret_cast<char *>(m_palette.data()), m_paletteSize);
     if (static_cast<size_t>(m_fp.gcount()) < m_paletteSize) {
@@ -186,7 +199,13 @@ void RobotExtractor::readPalette() {
 
 void RobotExtractor::readSizesAndCues() {
     StreamExceptionGuard guard(m_fp);
+    if (static_cast<int>(m_numFrames) < 0) {
+        throw std::runtime_error("Nombre de frames négatif");
+    }    
     m_frameSizes.resize(m_numFrames);
+    if (static_cast<int>(m_numFrames) < 0) {
+        throw std::runtime_error("Nombre de frames négatif");
+    }    
     m_packetSizes.resize(m_numFrames);
     for (auto &size : m_frameSizes) {
         if (m_version >= 6) {
@@ -303,6 +322,9 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             size_t new_capacity = static_cast<size_t>(required + required / 2);
             rgba_buffer.reserve(new_capacity);
         }
+        if (static_cast<int64_t>(required) < 0) {
+            throw std::runtime_error("Taille de tampon négative");
+        }        
         rgba_buffer.resize(required);
         for (size_t pixel = 0; pixel < cel_data.size(); ++pixel) {
             auto idx = static_cast<uint8_t>(cel_data[pixel]);
