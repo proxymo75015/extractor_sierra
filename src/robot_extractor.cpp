@@ -207,12 +207,19 @@ void RobotExtractor::readPalette() {
         throw std::runtime_error(std::string("Taille de palette insuffisante dans l'en-tête pour ") +
                                  m_srcPath.string() + ": " +
                                  std::to_string(m_paletteSize) +
-                                 " octets (768 requis et multiple de 3)");
+                                 " octets (768 requis, multiple de 3, maximum 1200)");
     }
     if (m_paletteSize % 3 != 0) {
         throw std::runtime_error(std::string("Taille de palette non multiple de 3 dans l'en-tête pour ") +
                                  m_srcPath.string() + ": " +
-                                 std::to_string(m_paletteSize) + " octets");
+                                 std::to_string(m_paletteSize) +
+                                 " octets (maximum 1200)");
+    }
+    if (m_paletteSize > 1200) {
+        throw std::runtime_error(std::string("Taille de palette excessive dans l'en-tête pour ") +
+                                 m_srcPath.string() + ": " +
+                                 std::to_string(m_paletteSize) +
+                                 " octets (maximum 1200)");
     }
     m_palette.resize(m_paletteSize);
     try {
@@ -288,11 +295,13 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     frameJson["cels"] = nlohmann::json::array();
 
     if (m_hasPalette) {
-        if (m_palette.size() < 768 || m_palette.size() % 3 != 0) {
-            throw std::runtime_error(std::string("Taille de palette insuffisante ou non multiple de 3 pour ") +
+        if (m_palette.size() < 768 || m_palette.size() % 3 != 0 ||
+            m_palette.size() > 1200) {
+            throw std::runtime_error(std::string(
+                                         "Taille de palette insuffisante, excessive ou non multiple de 3 pour ") +
                                      m_srcPath.string() + ": " +
                                      std::to_string(m_palette.size()) +
-                                     " octets (768 et multiple de 3 requis)");
+                                     " octets (768 et multiple de 3 requis, maximum 1200)");
         }
 
         size_t offset = 2;
