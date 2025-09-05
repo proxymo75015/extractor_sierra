@@ -250,19 +250,20 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         return;
     }
 
-    if (m_palette.size() < 768) {
-        throw std::runtime_error(std::string("Taille de palette insuffisante pour ") +
-                                 m_srcPath.string() + ": " +
-                                 std::to_string(m_palette.size()) +
-                                 " octets (768 requis)");
-    }
-
     frameJson["frame"] = frameNo;
     frameJson["cels"] = nlohmann::json::array();
-    size_t offset = 2;
 
-    std::vector<std::byte> rgba_buffer;
-    for (int i = 0; i < numCels; ++i) {
+    if (m_hasPalette) {
+        if (m_palette.size() < 768) {
+            throw std::runtime_error(std::string("Taille de palette insuffisante pour ") +
+                                     m_srcPath.string() + ": " +
+                                     std::to_string(m_palette.size()) +
+                                     " octets (768 requis)");
+        }
+
+        size_t offset = 2;
+        std::vector<std::byte> rgba_buffer;
+        for (int i = 0; i < numCels; ++i) {
         if (offset + 22 > frameData.size()) {
             throw std::runtime_error("En-tête de cel invalide");
         }
@@ -364,7 +365,11 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         frameJson["cels"].push_back(celJson);
         offset = cel_offset;
     }
-
+    } else {
+        log_warn(m_srcPath, "Palette manquante, cels ignorés pour la frame " +
+                                std::to_string(frameNo));
+    }
+        
     if (m_hasAudio && m_extractAudio) {
         // Verify that the packet has enough data for a full audio block
         if (m_packetSizes[frameNo] >= m_frameSizes[frameNo] + m_audioBlkSize) {
