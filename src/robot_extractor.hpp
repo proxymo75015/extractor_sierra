@@ -14,7 +14,10 @@ namespace robot {
 inline void expand_cel(std::span<std::byte> target,
                        std::span<const std::byte> source, uint16_t w,
                        uint16_t h, uint8_t scale) {
- if (scale == 0) {
+  if (scale < 1 || scale > 100) {
+    if (scale > 100) {
+      throw std::runtime_error("Scale supérieur à 100");
+    }
     throw std::runtime_error("Scale invalide");
   }
 
