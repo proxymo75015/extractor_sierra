@@ -68,3 +68,14 @@ TEST_CASE("expand_cel rejette un scale invalide") {
   REQUIRE_THROWS(expand_cel(target, source, w, h, 0));
   REQUIRE_THROWS(expand_cel(target, source, w, h, 150));
 }
+
+TEST_CASE("expand_cel détecte un facteur de réduction incohérent") {
+  const uint16_t w = 2;
+  const uint16_t h = 4;
+  const uint8_t badScale = 40; // attend 1 ligne mais en fournit 2
+
+  std::vector<std::byte> source(static_cast<size_t>(w) * 2);
+  std::vector<std::byte> target(static_cast<size_t>(w) * h);
+
+  REQUIRE_THROWS(expand_cel(target, source, w, h, badScale));
+}
