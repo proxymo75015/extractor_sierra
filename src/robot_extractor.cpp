@@ -482,7 +482,8 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples, uint32_t samp
     wav.insert(wav.end(), {std::byte{'d'}, std::byte{'a'}, std::byte{'t'}, std::byte{'a'}});
     for (int i = 0; i < 4; ++i) wav.push_back(std::byte(data_size >> (i * 8)));
     for (const auto &sample : samples) {
-        for (int i = 0; i < 2; ++i) wav.push_back(std::byte(sample >> (i * 8)));
+        uint16_t u = static_cast<uint16_t>(sample);
+        for (int i = 0; i < 2; ++i) wav.push_back(std::byte(u >> (i * 8)));
     }
     std::ostringstream wavName;
     wavName << (isEvenChannel ? "even_" : "odd_") << std::setw(5) << std::setfill('0') << blockIndex << ".wav";
