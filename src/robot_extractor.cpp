@@ -98,7 +98,7 @@ void RobotExtractor::readHeader() {
         return m_xRes <= 0 || m_yRes <= 0 || m_xRes > 7680 || m_yRes > 4320;
     };
 
-    if (m_xRes > 7680 || m_yRes > 4320) {
+    if (resolution_invalid()) {
         log_warn(m_srcPath, "Résolution suspecte, inversion endianness...");
         m_bigEndian = !m_bigEndian;
         m_fp.seekg(headerStart);
@@ -108,10 +108,6 @@ void RobotExtractor::readHeader() {
                                      std::to_string(m_xRes) + "x" +
                                      std::to_string(m_yRes));
         }
-    } else if (m_xRes <= 0 || m_yRes <= 0) {
-        throw std::runtime_error("Résolution invalide: " +
-                                 std::to_string(m_xRes) + "x" +
-                                 std::to_string(m_yRes));        
     }
 
     if (m_version < 4 || m_version > 6) {
