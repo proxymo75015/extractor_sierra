@@ -39,10 +39,16 @@ inline void expand_cel(std::span<std::byte> target,
     remainder %= sourceHeight;
     for (int i = 0; i < repeat; ++i) {
       --destY;
+      if (destY < 0) {
+        throw std::runtime_error("Expansion de cel hors limites");
+      }      
       std::copy_n(source.begin() + static_cast<size_t>(srcY) * w, w,
                   target.begin() + static_cast<size_t>(destY) * w);
     }
   }
+  if (destY != 0) {
+    throw std::runtime_error("Expansion de cel incohérente");
+  }  
 }
 
 class RobotExtractor {
