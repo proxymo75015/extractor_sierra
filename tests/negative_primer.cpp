@@ -75,7 +75,7 @@ TEST_CASE("Taille de primer négative") {
         extractor.extract();
         FAIL("Aucune exception levée");
     } catch (const std::runtime_error &e) {
-        REQUIRE(std::string(e.what()).find("Tailles de primer audio négatives") !=
+        REQUIRE(std::string(e.what()).find("Tailles de primer audio incohérentes") !=
                 std::string::npos);
     }
 }
