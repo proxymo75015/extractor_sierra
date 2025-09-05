@@ -23,7 +23,6 @@ static void push32(std::vector<uint8_t> &v, uint32_t x) {
 static std::vector<uint8_t> build_header() {
     std::vector<uint8_t> h;
     push16(h, 0x16);           // signature
-    push16(h, 0);              // skip
     h.insert(h.end(), {'S','O','L','\0'});
     push16(h, 5);              // version
     push16(h, 0);              // audio block size
