@@ -8,6 +8,7 @@
 #include <stdexcept>
 #include <filesystem>
 #include <span>
+#include <limits>
 
 #include "utilities.hpp"
 #include "stb_image_write.h"
@@ -198,13 +199,10 @@ void RobotExtractor::readPalette() {
 
 void RobotExtractor::readSizesAndCues() {
     StreamExceptionGuard guard(m_fp);
-    if (static_cast<int>(m_numFrames) < 0) {
-        throw std::runtime_error("Nombre de frames négatif");
-    }    
+    if (m_numFrames > std::numeric_limits<uint16_t>::max()) {
+        throw std::runtime_error("Nombre de frames excessif");
+    }  
     m_frameSizes.resize(m_numFrames);
-    if (static_cast<int>(m_numFrames) < 0) {
-        throw std::runtime_error("Nombre de frames négatif");
-    }    
     m_packetSizes.resize(m_numFrames);
     for (auto &size : m_frameSizes) {
         if (m_version >= 6) {
