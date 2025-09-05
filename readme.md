@@ -1,5 +1,6 @@
 Robot Extractor v1.0.0
 Extracts animations and audio from Atari Robot (.rbt) files, compatible with ScummVM's Robot file format (versions 4, 5, and 6).
+The palette data in the input file must contain a multiple of 3 bytes (RGB triples) and is expected to be at least 768 bytes long.
 Prerequisites
 
 C++20 compiler (GCC 11+, Clang 14+, MSVC 19.30+)
@@ -55,4 +56,5 @@ frame_XXXXX_odd.wav: Odd channel
 Compatibility
 This tool is designed to be compatible with ScummVM's Robot file format (versions 4, 5, and 6). It handles LZS decompression, DPCM-16 audio decoding, and palette-based RGBA conversion.
 License
+
 BSD 3-Clause License
