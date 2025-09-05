@@ -137,6 +137,11 @@ void RobotExtractor::readPrimer() {
         }
         if (m_evenPrimerSize + m_oddPrimerSize != static_cast<std::streamsize>(m_primerReservedSize)) {
             m_fp.seekg(m_primerPosition + m_primerReservedSize, std::ios::beg);
+            m_evenPrimerSize = 0;
+            m_oddPrimerSize = 0;
+            m_evenPrimer.clear();
+            m_oddPrimer.clear();
+            // Les données audio seront traitées sans primer.
         } else {
             if (m_evenPrimerSize < 0) {
                 throw std::runtime_error("Tailles de primer audio négatives");
