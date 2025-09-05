@@ -14,11 +14,11 @@ namespace robot {
 inline void expand_cel(std::span<std::byte> target,
                        std::span<const std::byte> source, uint16_t w,
                        uint16_t h, uint8_t scale) {
-  if (scale == 0 || scale > 100) {
+ if (scale == 0) {
     throw std::runtime_error("Scale invalide");
   }
 
-  const int sourceHeight = (h * scale) / 100;
+  const int sourceHeight = (static_cast<int>(h) * scale + 99) / 100;
   if (sourceHeight <= 0) {
     throw std::runtime_error("Hauteur source invalide");
   }
@@ -41,14 +41,14 @@ inline void expand_cel(std::span<std::byte> target,
       --destY;
       if (destY < 0) {
         throw std::runtime_error("Expansion de cel hors limites");
-      }      
+      }
       std::copy_n(source.begin() + static_cast<size_t>(srcY) * w, w,
                   target.begin() + static_cast<size_t>(destY) * w);
     }
   }
   if (destY != 0) {
     throw std::runtime_error("Expansion de cel incohérente");
-  }  
+  }
 }
 
 class RobotExtractor {
