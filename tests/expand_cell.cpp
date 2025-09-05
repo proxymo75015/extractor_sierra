@@ -68,7 +68,7 @@ TEST_CASE("expand_cel vérifie les tailles de tampons") {
 
   // Taille incorrecte de la cible
   std::vector<std::byte> goodSource(static_cast<size_t>(w) *
-                                    ((static_cast<int>(h) * scale + 99) / 100));
+                                    ((static_cast<int>(h) * scale) / 100));
   std::vector<std::byte> badTarget(goodTarget.size() - 1);
   REQUIRE_THROWS(expand_cel(badTarget, goodSource, w, h, scale));
 }
