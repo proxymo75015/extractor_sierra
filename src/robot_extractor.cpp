@@ -51,8 +51,7 @@ void RobotExtractor::readHeader() {
         if (sig != kRobotSig && sig != 0x3d) {
             throw std::runtime_error("Signature Robot invalide");
         }
-        m_fp.seekg(2, std::ios::cur);
-            std::array<char, 4> sol;
+             std::array<char, 4> sol;
         m_fp.read(sol.data(), sol.size());
         if (sol != std::array<char, 4>{'S', 'O', 'L', '\0'}) {
             throw std::runtime_error("Tag SOL invalide");
