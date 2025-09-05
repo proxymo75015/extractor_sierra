@@ -41,14 +41,14 @@ Output
 
 PNG files for each cel (frame_XXXXX_N.png)
 WAV files for audio tracks (if --audio is specified):
-frame_XXXXX_even.wav: Even channel (mono, 16-bit, 22.05 kHz)
-frame_XXXXX_odd.wav: Odd channel (mono, 16-bit, 22.05 kHz)
+frame_XXXXX_even.wav: Even channel (mono, 16-bit, 11.025 kHz)
+frame_XXXXX_odd.wav: Odd channel (mono, 16-bit, 11.025 kHz)
 
 
 metadata.json containing frame and cel metadata
 
 Format Audio
-The exported WAV files are in mono 16-bit 22.05 kHz format. For stereo audio in the original files, the channels are separated:
+The exported WAV files are in mono 16-bit 11.025 kHz format. For stereo audio in the original files, the channels are separated:
 
 frame_XXXXX_even.wav: Even channel
 frame_XXXXX_odd.wav: Odd channel
@@ -58,3 +58,4 @@ This tool is designed to be compatible with ScummVM's Robot file format (version
 License
 
 BSD 3-Clause License
+
