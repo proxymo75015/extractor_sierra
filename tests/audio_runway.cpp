@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <fstream>
 #include <vector>
+#include <array>
 
 #include "robot_extractor.hpp"
 
@@ -96,4 +97,14 @@ TEST_CASE("Audio block with runway is handled") {
     auto wavPath = outDir / "even_00001.wav";
     REQUIRE(fs::exists(wavPath));
     REQUIRE(fs::file_size(wavPath) == 52); // 44 header + 8 data bytes
+    
+    std::ifstream wav(wavPath, std::ios::binary);
+    REQUIRE(wav);
+    std::array<uint8_t, 44> header{};
+    wav.read(reinterpret_cast<char*>(header.data()), header.size());
+    uint32_t rate = header[24] |
+                    (static_cast<uint32_t>(header[25]) << 8) |
+                    (static_cast<uint32_t>(header[26]) << 16) |
+                    (static_cast<uint32_t>(header[27]) << 24);
+    REQUIRE(rate == 11025);
 }
