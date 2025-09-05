@@ -70,6 +70,10 @@ private:
     std::ifstream &m_stream;
 };
 
+// Lit exactement `size` octets depuis `f` dans `data`.
+// Lève std::runtime_error si la lecture est incomplète.
+void read_exact(std::ifstream &f, void *data, size_t size);
+
 void log_info(const std::filesystem::path &path, const std::string &msg);
 void log_warn(const std::filesystem::path &path, const std::string &msg);
 void log_error(const std::filesystem::path &path, const std::string &msg);
