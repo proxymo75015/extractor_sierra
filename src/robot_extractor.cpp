@@ -213,22 +213,17 @@ void RobotExtractor::readPalette() {
                                  std::to_string(m_paletteSize) +
                                  " octets (768 requis et multiple de 3)");
     }
-    if (static_cast<int>(m_paletteSize) < 0) {
-        throw std::runtime_error("Taille de palette négative");
-    }
     if (m_paletteSize % 3 != 0) {
         throw std::runtime_error(std::string("Taille de palette non multiple de 3 dans l'en-tête pour ") +
                                  m_srcPath.string() + ": " +
                                  std::to_string(m_paletteSize) + " octets");
     }
     m_palette.resize(m_paletteSize);
-    m_fp.read(reinterpret_cast<char *>(m_palette.data()), m_paletteSize);
-    if (static_cast<size_t>(m_fp.gcount()) < m_paletteSize) {
+    try {
+        read_exact(m_fp, m_palette.data(), static_cast<size_t>(m_paletteSize));
+    } catch (const std::runtime_error &) {
         throw std::runtime_error(std::string("Palette tronquée pour ") +
-                                 m_srcPath.string() + ": lue " +
-                                 std::to_string(m_fp.gcount()) + "/" +
-                                 std::to_string(m_paletteSize) +
-                                 " octets");
+                                 m_srcPath.string());
     }
 }
 
