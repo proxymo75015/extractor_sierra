@@ -205,11 +205,16 @@ void RobotExtractor::readPalette() {
         throw std::runtime_error(std::string("Taille de palette insuffisante dans l'en-tête pour ") +
                                  m_srcPath.string() + ": " +
                                  std::to_string(m_paletteSize) +
-                                 " octets (768 requis)");
+                                 " octets (768 requis et multiple de 3)");
     }
     if (static_cast<int>(m_paletteSize) < 0) {
         throw std::runtime_error("Taille de palette négative");
-    }    
+    }
+    if (m_paletteSize % 3 != 0) {
+        throw std::runtime_error(std::string("Taille de palette non multiple de 3 dans l'en-tête pour ") +
+                                 m_srcPath.string() + ": " +
+                                 std::to_string(m_paletteSize) + " octets");
+    }
     m_palette.resize(m_paletteSize);
     m_fp.read(reinterpret_cast<char *>(m_palette.data()), m_paletteSize);
     if (static_cast<size_t>(m_fp.gcount()) < m_paletteSize) {
@@ -289,11 +294,11 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     frameJson["cels"] = nlohmann::json::array();
 
     if (m_hasPalette) {
-        if (m_palette.size() < 768) {
-            throw std::runtime_error(std::string("Taille de palette insuffisante pour ") +
+        if (m_palette.size() < 768 || m_palette.size() % 3 != 0) {
+            throw std::runtime_error(std::string("Taille de palette insuffisante ou non multiple de 3 pour ") +
                                      m_srcPath.string() + ": " +
                                      std::to_string(m_palette.size()) +
-                                     " octets (768 requis)");
+                                     " octets (768 et multiple de 3 requis)");
         }
 
         size_t offset = 2;
