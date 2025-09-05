@@ -364,14 +364,16 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             cel_data = std::move(expanded);
         }
 
-        size_t required = static_cast<size_t>(w) * newH * 4;
+        size_t row_size = static_cast<size_t>(newH) * 4;
+        if (row_size != 0 && static_cast<size_t>(w) > SIZE_MAX / row_size) {
+            throw std::runtime_error(
+                "Débordement lors du calcul de la taille du tampon");
+        }
+        size_t required = static_cast<size_t>(w) * row_size;
         if (required > rgba_buffer.capacity()) {
             size_t new_capacity = static_cast<size_t>(required + required / 2);
             rgba_buffer.reserve(new_capacity);
         }
-        if (static_cast<int64_t>(required) < 0) {
-            throw std::runtime_error("Taille de tampon négative");
-        }        
         rgba_buffer.resize(required);
         for (size_t pixel = 0; pixel < cel_data.size(); ++pixel) {
             auto idx = static_cast<uint8_t>(cel_data[pixel]);
