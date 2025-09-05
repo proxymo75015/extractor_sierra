@@ -221,6 +221,15 @@ void RobotExtractor::readSizesAndCues() {
             size = read_scalar<uint16_t>(m_fp, m_bigEndian);
         }
     }
+    for (size_t i = 0; i < m_frameSizes.size(); ++i) {
+        if (m_packetSizes[i] < m_frameSizes[i]) {
+            throw std::runtime_error("Packet size < frame size");
+        }
+        uint32_t maxSize = m_frameSizes[i] + static_cast<uint32_t>(m_audioBlkSize);
+        if (m_packetSizes[i] > maxSize) {
+            throw std::runtime_error("Packet size > frame size + audio block size");
+        }
+    }    
     for (auto &time : m_cueTimes) {
         time = read_scalar<int32_t>(m_fp, m_bigEndian);
     }
