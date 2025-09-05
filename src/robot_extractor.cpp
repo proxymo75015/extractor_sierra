@@ -132,13 +132,25 @@ void RobotExtractor::readPrimer() {
         int16_t compType = read_scalar<int16_t>(m_fp, m_bigEndian);
         m_evenPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
         m_oddPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
-        if (m_evenPrimerSize < 0 || m_oddPrimerSize < 0) {
-            throw std::runtime_error("Tailles de primer audio négatives");
+
+        if (m_totalPrimerSize < 0 ||
+            m_totalPrimerSize > static_cast<int32_t>(m_primerReservedSize) ||
+            m_evenPrimerSize < 0 || m_oddPrimerSize < 0 ||
+            m_evenPrimerSize > m_totalPrimerSize ||
+            m_oddPrimerSize > m_totalPrimerSize ||
+            m_evenPrimerSize + m_oddPrimerSize > m_totalPrimerSize ||
+            m_evenPrimerSize + m_oddPrimerSize >
+                static_cast<int32_t>(m_primerReservedSize)) {
+            throw std::runtime_error("Tailles de primer audio incohérentes");
         }
+            
         if (compType != 0) {
-            throw std::runtime_error("Type de compression inconnu: " + std::to_string(compType));
+            throw std::runtime_error(
+                "Type de compression inconnu: " + std::to_string(compType));
         }
-        if (m_evenPrimerSize + m_oddPrimerSize != static_cast<std::streamsize>(m_primerReservedSize)) {
+
+        if (m_evenPrimerSize + m_oddPrimerSize !=
+            static_cast<std::streamsize>(m_primerReservedSize)) {
             m_fp.seekg(m_primerPosition + m_primerReservedSize, std::ios::beg);
             m_evenPrimerSize = 0;
             m_oddPrimerSize = 0;
@@ -146,13 +158,7 @@ void RobotExtractor::readPrimer() {
             m_oddPrimer.clear();
             // Les données audio seront traitées sans primer.
         } else {
-            if (m_evenPrimerSize < 0) {
-                throw std::runtime_error("Tailles de primer audio négatives");
-            }
-            m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
-            if (m_oddPrimerSize < 0) {
-                throw std::runtime_error("Tailles de primer audio négatives");
-            }            
+            m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));       
             m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
             if (m_evenPrimerSize > 0) {
                 try {
