@@ -424,17 +424,22 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
             int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
             uint32_t maxSize = static_cast<uint32_t>(m_audioBlkSize) - 8;
-            if (pos != 0 && size > 0 && size <= static_cast<int32_t>(maxSize)) {
-                std::vector<std::byte> audio(size);
-                m_fp.read(reinterpret_cast<char *>(audio.data()), size);
+            if (pos != 0 && size >= 8 && size <= static_cast<int32_t>(maxSize)) {
+                std::vector<std::byte> audio(static_cast<size_t>(size - 8));
+                std::array<std::byte, 8> runway{};
+                m_fp.read(reinterpret_cast<char *>(runway.data()), runway.size());
+                m_fp.read(reinterpret_cast<char *>(audio.data()),
+                          static_cast<std::streamsize>(audio.size()));
                 bool isEven = (pos % 2) == 0;
                 if (isEven && m_evenPrimerSize > 0) {
-                    auto samples = dpcm16_decompress(audio, m_audioPredictorEven);
+                    auto samples = dpcm16_decompress(std::span(audio),
+                                                     m_audioPredictorEven);
                     if (m_extractAudio) {
                         writeWav(samples, 22050, m_evenAudioIndex++, true);
                     }
                 } else if (!isEven && m_oddPrimerSize > 0) {
-                    auto samples = dpcm16_decompress(audio, m_audioPredictorOdd);
+                    auto samples = dpcm16_decompress(std::span(audio),
+                                                     m_audioPredictorOdd);
                     if (m_extractAudio) {
                         writeWav(samples, 22050, m_oddAudioIndex++, false);
                     }
