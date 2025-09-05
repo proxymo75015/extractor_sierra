@@ -4,6 +4,7 @@
 #include <iostream>
 #include <mutex>
 #include <algorithm>
+#include <array>
 
 namespace robot {
 
@@ -150,15 +151,29 @@ std::vector<std::byte> lzs_decompress(std::span<const std::byte> in, size_t expe
 }
 
 std::vector<int16_t> dpcm16_decompress(std::span<const std::byte> in, int16_t &carry) {
-    std::vector<int16_t> out(in.size());
-    int32_t acc = carry;
-    for (size_t i = 0; i < in.size(); ++i) {
-        int32_t delta = static_cast<int8_t>(in[i]) * 256;
-        acc += delta;
-        acc = std::clamp(acc, -32768, 32767);
-        carry = static_cast<int16_t>(acc);
-        out[i] = carry;
+    std::vector<int16_t> out;
+    out.reserve(in.size() * 2);
+
+    static constexpr std::array<int16_t, 16> DPCM_TABLE = {
+        -0x0c0, -0x080, -0x040, -0x020,
+        -0x010, -0x008, -0x004, -0x002,
+         0x002,  0x004,  0x008,  0x010,
+         0x020,  0x040,  0x080,  0x0c0,
+    };
+
+    int32_t predictor = carry;
+    for (auto byte : in) {
+        uint8_t b = static_cast<uint8_t>(byte);
+        uint8_t hi = b >> 4;
+        uint8_t lo = b & 0x0F;
+        for (uint8_t nib : {hi, lo}) {
+            predictor += DPCM_TABLE[nib];
+            predictor = std::clamp(predictor, -32768, 32767);
+            carry = static_cast<int16_t>(predictor);
+            out.push_back(carry);
+        }
     }
+    
     return out;
 }
 
