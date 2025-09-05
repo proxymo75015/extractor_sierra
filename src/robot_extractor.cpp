@@ -186,13 +186,13 @@ void RobotExtractor::readPrimer() {
     if (m_evenPrimerSize > 0) {
         auto evenPcm = dpcm16_decompress(std::span(m_evenPrimer), m_audioPredictorEven);
         if (m_extractAudio) {
-            writeWav(evenPcm, 22050, m_evenAudioIndex++, true);
+            writeWav(evenPcm, 11025, m_evenAudioIndex++, true);
         }
     }
     if (m_oddPrimerSize > 0) {
         auto oddPcm = dpcm16_decompress(std::span(m_oddPrimer), m_audioPredictorOdd);
         if (m_extractAudio) {
-            writeWav(oddPcm, 22050, m_oddAudioIndex++, false);
+            writeWav(oddPcm, 11025, m_oddAudioIndex++, false);
         }
     }
 }
@@ -441,13 +441,13 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                     auto samples = dpcm16_decompress(std::span(audio),
                                                      m_audioPredictorEven);
                     if (m_extractAudio) {
-                        writeWav(samples, 22050, m_evenAudioIndex++, true);
+                        writeWav(samples, 11025, m_evenAudioIndex++, true);
                     }
                 } else if (!isEven && m_oddPrimerSize > 0) {
                     auto samples = dpcm16_decompress(std::span(audio),
                                                      m_audioPredictorOdd);
                     if (m_extractAudio) {
-                        writeWav(samples, 22050, m_oddAudioIndex++, false);
+                        writeWav(samples, 11025, m_oddAudioIndex++, false);
                     }
                 }
                 m_fp.seekg(static_cast<std::streamoff>(maxSize - static_cast<uint32_t>(size)),
@@ -461,7 +461,7 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
 }
 
 void RobotExtractor::writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate, int blockIndex, bool isEvenChannel) {
-    if (sampleRate == 0) sampleRate = 22050;
+    if (sampleRate == 0) sampleRate = 11025;
     std::vector<std::byte> wav;
     size_t data_size = samples.size() * sizeof(int16_t);
         if (data_size > 0xFFFFFFFFu - 36) {
