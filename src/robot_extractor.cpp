@@ -176,6 +176,20 @@ void RobotExtractor::readPrimer() {
     } else {
         throw std::runtime_error("Flags de primer audio corrompus");
     }
+    
+    // Décompresser les buffers primer pour initialiser les prédicteurs audio
+    if (m_evenPrimerSize > 0) {
+        auto evenPcm = dpcm16_decompress(std::span(m_evenPrimer), m_audioPredictorEven);
+        if (m_extractAudio) {
+            writeWav(evenPcm, 22050, m_evenAudioIndex++, true);
+        }
+    }
+    if (m_oddPrimerSize > 0) {
+        auto oddPcm = dpcm16_decompress(std::span(m_oddPrimer), m_audioPredictorOdd);
+        if (m_extractAudio) {
+            writeWav(oddPcm, 22050, m_oddAudioIndex++, false);
+        }
+    }
 }
 
 void RobotExtractor::readPalette() {
@@ -391,7 +405,7 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                                 std::to_string(frameNo));
     }
         
-    if (m_hasAudio && m_extractAudio) {
+    if (m_hasAudio) {
         // Verify that the packet has enough data for a full audio block
         if (m_packetSizes[frameNo] >= m_frameSizes[frameNo] + m_audioBlkSize) {
             // Skip the remaining bytes in the packet before the audio block.
@@ -408,10 +422,14 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                 bool isEven = (pos % 2) == 0;
                 if (isEven && m_evenPrimerSize > 0) {
                     auto samples = dpcm16_decompress(audio, m_audioPredictorEven);
-                    writeWav(samples, 22050, m_evenAudioIndex++, true);
+                    if (m_extractAudio) {
+                        writeWav(samples, 22050, m_evenAudioIndex++, true);
+                    }
                 } else if (!isEven && m_oddPrimerSize > 0) {
                     auto samples = dpcm16_decompress(audio, m_audioPredictorOdd);
-                    writeWav(samples, 22050, m_oddAudioIndex++, false);
+                    if (m_extractAudio) {
+                        writeWav(samples, 22050, m_oddAudioIndex++, false);
+                    }
                 }
                 m_fp.seekg(static_cast<std::streamoff>(maxSize - size), std::ios::cur);
             } else {
