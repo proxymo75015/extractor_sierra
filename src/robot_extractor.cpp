@@ -136,38 +136,18 @@ void RobotExtractor::readPrimer() {
             m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
             if (m_evenPrimerSize > 0) {
                 try {
-                    m_fp.read(reinterpret_cast<char *>(m_evenPrimer.data()), m_evenPrimerSize);
-                } catch (const std::ios_base::failure &) {
+                    read_exact(m_fp, m_evenPrimer.data(), static_cast<size_t>(m_evenPrimerSize));
+                } catch (const std::runtime_error &) {
                     throw std::runtime_error(std::string("Primer audio pair tronqué pour ") +
-                                             m_srcPath.string() + ": lu " +
-                                             std::to_string(m_fp.gcount()) + "/" +
-                                             std::to_string(m_evenPrimerSize) +
-                                             " octets");
-                }
-                if (m_fp.gcount() < m_evenPrimerSize) {
-                    throw std::runtime_error(std::string("Primer audio pair tronqué pour ") +
-                                             m_srcPath.string() + ": lu " +
-                                             std::to_string(m_fp.gcount()) + "/" +
-                                             std::to_string(m_evenPrimerSize) +
-                                             " octets");
+                                            m_srcPath.string());
                 }
             }
             if (m_oddPrimerSize > 0) {
                 try {
-                    m_fp.read(reinterpret_cast<char *>(m_oddPrimer.data()), m_oddPrimerSize);
-                } catch (const std::ios_base::failure &) {
+                    read_exact(m_fp, m_oddPrimer.data(), static_cast<size_t>(m_oddPrimerSize));
+                } catch (const std::runtime_error &) {
                     throw std::runtime_error(std::string("Primer audio impair tronqué pour ") +
-                                             m_srcPath.string() + ": lu " +
-                                             std::to_string(m_fp.gcount()) + "/" +
-                                             std::to_string(m_oddPrimerSize) +
-                                             " octets");
-                }
-                if (m_fp.gcount() < m_oddPrimerSize) {
-                    throw std::runtime_error(std::string("Primer audio impair tronqué pour ") +
-                                             m_srcPath.string() + ": lu " +
-                                             std::to_string(m_fp.gcount()) + "/" +
-                                             std::to_string(m_oddPrimerSize) +
-                                             " octets");
+                                             m_srcPath.string());
                 }
             }
         }
