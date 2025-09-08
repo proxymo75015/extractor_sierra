@@ -78,6 +78,10 @@ void RobotExtractor::readHeader() {
         }           
         m_fp.seekg(2, std::ios::cur);
         m_frameRate = read_scalar<int16_t>(m_fp, m_bigEndian);
+        if (m_frameRate <= 0 || m_frameRate > 120) {
+            throw std::runtime_error("Fréquence d'image invalide: " +
+                                     std::to_string(m_frameRate));
+        }           
         m_isHiRes = read_scalar<int16_t>(m_fp, m_bigEndian) != 0;
         m_maxSkippablePackets = read_scalar<int16_t>(m_fp, m_bigEndian);
         m_maxCelsPerFrame = read_scalar<int16_t>(m_fp, m_bigEndian);
