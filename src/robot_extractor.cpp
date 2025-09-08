@@ -47,54 +47,7 @@ void RobotExtractor::readHeader() {
         m_fp.seekg(headerStart);
     }
 
-       auto readHeaderData = [&]() {
-        uint16_t sig = read_scalar<uint16_t>(m_fp, m_bigEndian);
-        if (sig != kRobotSig && sig != 0x3d) {
-            throw std::runtime_error("Signature Robot invalide");
-        }
-             std::array<char, 4> sol;
-        m_fp.read(sol.data(), sol.size());
-        if (sol != std::array<char, 4>{'S', 'O', 'L', '\0'}) {
-            throw std::runtime_error("Tag SOL invalide");
-        }
-        if (sig == 0x3d) {
-            m_version = 4;
-            m_fp.seekg(2, std::ios::cur);
-        } else {
-            m_version = read_scalar<uint16_t>(m_fp, m_bigEndian);
-        }
-        m_audioBlkSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
-        m_primerZeroCompressFlag = read_scalar<int16_t>(m_fp, m_bigEndian);
-        m_fp.seekg(2, std::ios::cur);
-        m_numFrames = read_scalar<uint16_t>(m_fp, m_bigEndian);
-        m_paletteSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
-        m_primerReservedSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
-        m_xRes = read_scalar<int16_t>(m_fp, m_bigEndian);
-        m_yRes = read_scalar<int16_t>(m_fp, m_bigEndian);
-        m_hasPalette = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
-        m_hasAudio = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
-        if (m_hasAudio && m_audioBlkSize < 8) {
-            throw std::runtime_error("Taille de bloc audio invalide");
-        }           
-        m_fp.seekg(2, std::ios::cur);
-        m_frameRate = read_scalar<int16_t>(m_fp, m_bigEndian);
-        if (m_frameRate <= 0 || m_frameRate > 120) {
-            throw std::runtime_error("Fréquence d'image invalide: " +
-                                     std::to_string(m_frameRate));
-        }           
-        m_isHiRes = read_scalar<int16_t>(m_fp, m_bigEndian) != 0;
-        m_maxSkippablePackets = read_scalar<int16_t>(m_fp, m_bigEndian);
-        m_maxCelsPerFrame = read_scalar<int16_t>(m_fp, m_bigEndian);
-        if (m_version == 4) {
-            m_maxCelsPerFrame = 1;
-        }
-        for (auto &area : m_maxCelArea) {
-            area = read_scalar<int32_t>(m_fp, m_bigEndian);
-        }
-        m_fp.seekg(8, std::ios::cur);
-    };
-
-    readHeaderData();
+    parseHeaderFields();
     
     auto resolution_invalid = [&]() {
         return m_xRes <= 0 || m_yRes <= 0 || m_xRes > 7680 || m_yRes > 4320;
@@ -104,7 +57,7 @@ void RobotExtractor::readHeader() {
         log_warn(m_srcPath, "Résolution suspecte, inversion endianness...");
         m_bigEndian = !m_bigEndian;
         m_fp.seekg(headerStart);
-        readHeaderData();
+        parseHeaderFields();
         if (resolution_invalid()) {
             throw std::runtime_error("Résolution invalide: " +
                                      std::to_string(m_xRes) + "x" +
@@ -116,6 +69,53 @@ void RobotExtractor::readHeader() {
         throw std::runtime_error("Version Robot non supportée: " +
                                  std::to_string(m_version));
     }
+}
+
+void RobotExtractor::parseHeaderFields() {
+    uint16_t sig = read_scalar<uint16_t>(m_fp, m_bigEndian);
+    if (sig != kRobotSig && sig != 0x3d) {
+        throw std::runtime_error("Signature Robot invalide");
+    }
+    std::array<char, 4> sol;
+    m_fp.read(sol.data(), sol.size());
+    if (sol != std::array<char, 4>{'S', 'O', 'L', '\0'}) {
+        throw std::runtime_error("Tag SOL invalide");
+    }
+    if (sig == 0x3d) {
+        m_version = 4;
+        m_fp.seekg(2, std::ios::cur);
+    } else {
+        m_version = read_scalar<uint16_t>(m_fp, m_bigEndian);
+    }
+    m_audioBlkSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
+    m_primerZeroCompressFlag = read_scalar<int16_t>(m_fp, m_bigEndian);
+    m_fp.seekg(2, std::ios::cur);
+    m_numFrames = read_scalar<uint16_t>(m_fp, m_bigEndian);
+    m_paletteSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
+    m_primerReservedSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
+    m_xRes = read_scalar<int16_t>(m_fp, m_bigEndian);
+    m_yRes = read_scalar<int16_t>(m_fp, m_bigEndian);
+    m_hasPalette = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
+    m_hasAudio = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
+    if (m_hasAudio && m_audioBlkSize < 8) {
+        throw std::runtime_error("Taille de bloc audio invalide");
+    }
+    m_fp.seekg(2, std::ios::cur);
+    m_frameRate = read_scalar<int16_t>(m_fp, m_bigEndian);
+    if (m_frameRate <= 0 || m_frameRate > 120) {
+        throw std::runtime_error("Fréquence d'image invalide: " +
+                                 std::to_string(m_frameRate));
+    }
+    m_isHiRes = read_scalar<int16_t>(m_fp, m_bigEndian) != 0;
+    m_maxSkippablePackets = read_scalar<int16_t>(m_fp, m_bigEndian);
+    m_maxCelsPerFrame = read_scalar<int16_t>(m_fp, m_bigEndian);
+    if (m_version == 4) {
+        m_maxCelsPerFrame = 1;
+    }
+    for (auto &area : m_maxCelArea) {
+        area = read_scalar<int32_t>(m_fp, m_bigEndian);
+    }
+    m_fp.seekg(8, std::ios::cur);
 }
 
 void RobotExtractor::readPrimer() {
