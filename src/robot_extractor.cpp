@@ -269,9 +269,12 @@ void RobotExtractor::readSizesAndCues() {
         } else {
             tmp = read_scalar<uint16_t>(m_fp, m_bigEndian);
         }
+        if (tmp < 2) {
+            throw std::runtime_error("Frame size too small");
+        }
         if (tmp > kMaxFrameSize) {
             throw std::runtime_error("Taille de frame excessive");
-        }        
+        }
         size = tmp;
     }
     for (auto &size : m_packetSizes) {
