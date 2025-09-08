@@ -37,17 +37,14 @@ T read_scalar(std::ifstream &f, bool bigEndian) {
         value = bytes[0];
     } else {
         if (bigEndian != (std::endian::native == std::endian::big)) {
-            #if defined(__cpp_lib_byteswap) || (__cplusplus >= 202302L)
-            // Solution portable 32/64 bits
-            uint64_t tmp = 0; // Initialisation explicite
-            std::memcpy(&tmp, bytes.data(), size);
-            tmp = std::byteswap(tmp);
-            std::memcpy(&value, &tmp, size);
-            #else
+#if defined(__cpp_lib_byteswap) || (__cplusplus >= 202302L)
+            std::memcpy(&value, bytes.data(), size);
+            value = std::byteswap(value);
+#else
             std::array<uint8_t, size> swapped_bytes;
             std::reverse_copy(bytes.begin(), bytes.end(), swapped_bytes.begin());
             std::memcpy(&value, swapped_bytes.data(), size);
-            #endif
+#endif
         } else {
             std::memcpy(&value, bytes.data(), size);
         }
