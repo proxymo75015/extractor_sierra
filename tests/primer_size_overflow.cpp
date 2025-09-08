@@ -27,7 +27,7 @@ static std::vector<uint8_t> build_header(uint16_t primerReservedSize) {
     push16(h, 8);               // audio block size
     push16(h, 0);               // primerZeroCompressFlag
     push16(h, 0);               // skip
-    push16(h, 0);               // numFrames
+    push16(h, 1);               // numFrames
     push16(h, 0);               // paletteSize
     push16(h, primerReservedSize);
     push16(h, 1);               // xRes
