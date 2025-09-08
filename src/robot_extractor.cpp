@@ -9,8 +9,6 @@
 #include <filesystem>
 #include <span>
 #include <limits>
-#include <codecvt>
-#include <locale>
 
 #include "utilities.hpp"
 #include "stb_image_write.h"
@@ -393,8 +391,9 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         std::string outPathStr;
 #ifdef _WIN32
         auto longPath = make_long_path(outPath.wstring());
-        std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> conv;
-        std::string pathUtf8 = conv.to_bytes(longPath);
+        // Conversion du chemin large en UTF-8 via std::filesystem::path::u8string
+        auto u8Path = std::filesystem::path{longPath}.u8string();
+        std::string pathUtf8(u8Path.begin(), u8Path.end());
         outPathStr = pathUtf8;
         if (!stbi_write_png(pathUtf8.c_str(), w, newH, 4, rgba_buffer.data(), w * 4)) {
 #else
