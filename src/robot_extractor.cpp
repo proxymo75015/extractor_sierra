@@ -285,7 +285,7 @@ void RobotExtractor::readSizesAndCues() {
     }
 }
 
-void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
+bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     StreamExceptionGuard guard(m_fp);
         if (m_frameSizes[frameNo] > kMaxFrameSize) {
         throw std::runtime_error("Taille de frame excessive");
@@ -295,7 +295,7 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     uint16_t numCels = read_scalar<uint16_t>(std::span(frameData).subspan(0, 2), m_bigEndian);
     if (numCels > m_maxCelsPerFrame) {
         log_warn(m_srcPath, "Nombre de cels excessif dans la frame " + std::to_string(frameNo));
-        return;
+        return false;
     }
 
     frameJson["frame"] = frameNo;
@@ -427,7 +427,7 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     if (remaining != 0) {
         throw std::runtime_error(std::to_string(remaining) +
                                  " octets non traités dans la frame");
-    }            
+    }
     } else {
         log_warn(m_srcPath, "Palette manquante, cels ignorés pour la frame " +
                                 std::to_string(frameNo));
@@ -472,6 +472,8 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             }
         }
     }
+
+    return true;        
 }
 
 void RobotExtractor::writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate, int blockIndex, bool isEvenChannel) {
@@ -531,8 +533,9 @@ void RobotExtractor::extract() {
     for (int i = 0; i < m_numFrames; ++i) {
         auto pos = m_fp.tellg();
         nlohmann::json frameJson;
-        exportFrame(i, frameJson);
-        jsonDoc["frames"].push_back(frameJson);
+        if (exportFrame(i, frameJson)) {
+            jsonDoc["frames"].push_back(frameJson);
+        }
         m_fp.seekg(pos + static_cast<std::streamoff>(m_packetSizes[i]),
                    std::ios::beg);
     }
