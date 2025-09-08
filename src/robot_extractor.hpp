@@ -66,6 +66,7 @@ private:
   static constexpr size_t kMaxCuePoints = 256;
 
   void readHeader();
+  void parseHeaderFields();
   void readPrimer();
   void readPalette();
   void readSizesAndCues();
