@@ -437,13 +437,14 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                 m_fp.read(reinterpret_cast<char *>(audio.data()),
                           static_cast<std::streamsize>(audio.size()));
                 bool isEven = (pos % 2) == 0;
-                if (isEven && m_evenPrimerSize > 0) {
+                // L'audio peut exister même sans primer, décompresser toujours.
+                if (isEven) {
                     auto samples = dpcm16_decompress(std::span(audio),
                                                      m_audioPredictorEven);
                     if (m_extractAudio) {
                         writeWav(samples, 11025, m_evenAudioIndex++, true);
                     }
-                } else if (!isEven && m_oddPrimerSize > 0) {
+                } else {
                     auto samples = dpcm16_decompress(std::span(audio),
                                                      m_audioPredictorOdd);
                     if (m_extractAudio) {
