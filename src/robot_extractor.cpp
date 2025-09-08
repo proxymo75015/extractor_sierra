@@ -309,15 +309,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     frameJson["cels"] = nlohmann::json::array();
 
     if (m_hasPalette) {
-        if (m_palette.size() < 768 || m_palette.size() % 3 != 0 ||
-            m_palette.size() > 1200) {
-            throw std::runtime_error(std::string(
-                                         "Taille de palette insuffisante, excessive ou non multiple de 3 pour ") +
-                                     m_srcPath.string() + ": " +
-                                     std::to_string(m_palette.size()) +
-                                     " octets (768 et multiple de 3 requis, maximum 1200)");
-        }
-
+        // Palette size has been validated in readPalette(); assume it is correct here.
         size_t offset = 2;
         for (int i = 0; i < numCels; ++i) {
         if (offset + 22 > frameData.size()) {
