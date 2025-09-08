@@ -366,6 +366,18 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             uint16_t compType = read_scalar<uint16_t>(chunkHeader.subspan(8, 2), m_bigEndian);
             cel_offset += 10;
 
+            size_t remaining_expected = expected - cel_data.size();
+            if (decompSz > remaining_expected) {
+                log_error(m_srcPath,
+                          "Taille de chunk décompressé excède l'espace restant pour le cel " +
+                              std::to_string(i) + " dans la frame " +
+                              std::to_string(frameNo));
+                if (cel_offset + compSz > frameData.size()) {
+                    throw std::runtime_error("Données de chunk insuffisantes");
+                }
+                cel_offset += compSz;
+                continue;
+            }
             if (cel_offset + compSz > frameData.size()) {
                 throw std::runtime_error("Données de chunk insuffisantes");
             }
@@ -377,7 +389,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                 if (compSz != decompSz) {
                     throw std::runtime_error(
                         "Données de cel malformées: taille de chunk incohérente");
-                }                
+                }
                 decomp.assign(comp.begin(), comp.end());
             } else {
                 throw std::runtime_error("Type de compression inconnu: " + std::to_string(compType));
