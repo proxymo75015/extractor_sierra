@@ -25,6 +25,18 @@ void read_exact(std::ifstream &f, void *data, size_t size) {
     }
 }
 
+void append_le16(std::vector<std::byte> &out, uint16_t value) {
+    for (int i = 0; i < 2; ++i) {
+        out.push_back(std::byte(value >> (i * 8)));
+    }
+}
+
+void append_le32(std::vector<std::byte> &out, uint32_t value) {
+    for (int i = 0; i < 4; ++i) {
+        out.push_back(std::byte(value >> (i * 8)));
+    }
+}
+
 template <Integral T>
 T read_scalar(std::span<const std::byte> data, bool bigEndian) {
     constexpr size_t size = sizeof(T);
