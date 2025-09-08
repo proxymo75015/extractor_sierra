@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
+#include <span>
 
 namespace robot {
 
