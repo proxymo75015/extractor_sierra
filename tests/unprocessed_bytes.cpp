@@ -69,7 +69,7 @@ TEST_CASE("Extra data after cels throws") {
     celHeader[1] = 100; // verticalScale
     celHeader[2] = 1;   // width
     celHeader[4] = 1;   // height
-    celHeader[14] = 1;  // dataSize
+    celHeader[14] = 11; // dataSize (10 bytes header + 1 byte pixel)
     celHeader[16] = 1;  // numChunks
     data.insert(data.end(), celHeader.begin(), celHeader.end());
 
