@@ -91,6 +91,10 @@ void RobotExtractor::parseHeaderFields() {
     m_primerZeroCompressFlag = read_scalar<int16_t>(m_fp, m_bigEndian);
     m_fp.seekg(2, std::ios::cur);
     m_numFrames = read_scalar<uint16_t>(m_fp, m_bigEndian);
+        if (m_numFrames == 0 || m_numFrames > kMaxFrames) {
+        throw std::runtime_error("Nombre de frames invalide: " +
+                                 std::to_string(m_numFrames));
+    }
     m_paletteSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
     m_primerReservedSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
     m_xRes = read_scalar<int16_t>(m_fp, m_bigEndian);
