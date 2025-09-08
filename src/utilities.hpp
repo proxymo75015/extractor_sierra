@@ -74,6 +74,12 @@ private:
 // Lève std::runtime_error si la lecture est incomplète.
 void read_exact(std::ifstream &f, void *data, size_t size);
 
+// Ajoute un entier 16 bits en little-endian dans un vecteur de bytes
+void append_le16(std::vector<std::byte> &out, uint16_t value);
+
+// Ajoute un entier 32 bits en little-endian dans un vecteur de bytes
+void append_le32(std::vector<std::byte> &out, uint32_t value);
+
 void log_info(const std::filesystem::path &path, const std::string &msg);
 void log_warn(const std::filesystem::path &path, const std::string &msg);
 void log_error(const std::filesystem::path &path, const std::string &msg);
