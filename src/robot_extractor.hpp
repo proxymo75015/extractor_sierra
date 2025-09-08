@@ -11,6 +11,10 @@
 
 namespace robot {
 
+#ifdef ROBOT_EXTRACTOR_TESTING
+#define private public
+#endif
+
 inline void expand_cel(std::span<std::byte> target,
                        std::span<const std::byte> source, uint16_t w,
                        uint16_t h, uint8_t scale) {
@@ -112,5 +116,9 @@ private:
   int m_evenAudioIndex = 0;
   int m_oddAudioIndex = 0;
 };
+
+#ifdef ROBOT_EXTRACTOR_TESTING
+#undef private
+#endif
 
 } // namespace robot
