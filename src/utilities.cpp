@@ -162,6 +162,9 @@ std::vector<std::byte> lzs_decompress(std::span<const std::byte> in, size_t expe
 
 std::vector<int16_t> dpcm16_decompress(std::span<const std::byte> in, int16_t &carry) {
     std::vector<int16_t> out;
+    if (in.size() > SIZE_MAX / 2) {
+        throw std::runtime_error("Entrée trop volumineuse");
+    }
     out.reserve(in.size() * 2);
 
     static constexpr std::array<int16_t, 16> DPCM_TABLE = {
