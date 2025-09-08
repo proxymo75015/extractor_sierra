@@ -71,7 +71,7 @@ private:
   void readPrimer();
   void readPalette();
   void readSizesAndCues();
-  void exportFrame(int frameNo, nlohmann::json &frameJson);
+  bool exportFrame(int frameNo, nlohmann::json &frameJson);
   void writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate,
                 int blockIndex, bool isEvenChannel);
 
