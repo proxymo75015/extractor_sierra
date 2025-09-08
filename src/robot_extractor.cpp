@@ -361,6 +361,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             if (compType == 0) {
                 decomp = lzs_decompress(comp, decompSz);
             } else if (compType == 2) {
+                if (compSz != decompSz) {
+                    throw std::runtime_error(
+                        "Données de cel malformées: taille de chunk incohérente");
+                }                
                 decomp.assign(comp.begin(), comp.end());
             } else {
                 throw std::runtime_error("Type de compression inconnu: " + std::to_string(compType));
