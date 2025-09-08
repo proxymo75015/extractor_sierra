@@ -237,28 +237,30 @@ void RobotExtractor::readSizesAndCues() {
     m_frameSizes.resize(m_numFrames);
     m_packetSizes.resize(m_numFrames);
     for (auto &size : m_frameSizes) {
-        int32_t tmp;
+        uint32_t tmp;
         if (m_version >= 6) {
-            tmp = read_scalar<int32_t>(m_fp, m_bigEndian);
+            int32_t tmpSigned = read_scalar<int32_t>(m_fp, m_bigEndian);
+            if (tmpSigned < 0) {
+                throw std::runtime_error("Taille de frame négative");
+            }
+            tmp = static_cast<uint32_t>(tmpSigned);
         } else {
-            tmp = read_scalar<int16_t>(m_fp, m_bigEndian);
+            tmp = read_scalar<uint16_t>(m_fp, m_bigEndian);
         }
-        if (tmp < 0) {
-            throw std::runtime_error("Taille de frame négative");
-        }
-        size = static_cast<uint32_t>(tmp);
+        size = tmp;
     }
     for (auto &size : m_packetSizes) {
-        int32_t tmp;
+        uint32_t tmp;
         if (m_version >= 6) {
-            tmp = read_scalar<int32_t>(m_fp, m_bigEndian);
+            int32_t tmpSigned = read_scalar<int32_t>(m_fp, m_bigEndian);
+            if (tmpSigned < 0) {
+                throw std::runtime_error("Taille de paquet négative");
+            }
+            tmp = static_cast<uint32_t>(tmpSigned);
         } else {
-            tmp = read_scalar<int16_t>(m_fp, m_bigEndian);
+            tmp = read_scalar<uint16_t>(m_fp, m_bigEndian);
         }
-        if (tmp < 0) {
-            throw std::runtime_error("Taille de paquet négative");
-        }
-        size = static_cast<uint32_t>(tmp);
+        size = tmp;
     }
     for (size_t i = 0; i < m_frameSizes.size(); ++i) {
         if (m_packetSizes[i] < m_frameSizes[i]) {
