@@ -48,6 +48,20 @@ void RobotExtractor::readHeader() {
     }
 
     parseHeaderFields();
+
+    auto version_invalid = [&]() {
+        return m_version < 4 || m_version > 6;
+    };
+
+    if (version_invalid()) {
+        m_bigEndian = !m_bigEndian;
+        m_fp.seekg(headerStart);
+        parseHeaderFields();
+        if (version_invalid()) {
+            throw std::runtime_error("Version Robot non supportée: " +
+                                     std::to_string(m_version));
+        }
+    }
     
     auto resolution_invalid = [&]() {
         return m_xRes < 0 || m_yRes < 0 || m_xRes > 7680 || m_yRes > 4320;
@@ -65,7 +79,7 @@ void RobotExtractor::readHeader() {
         }
     }
 
-    if (m_version < 4 || m_version > 6) {
+    if (version_invalid()) {
         throw std::runtime_error("Version Robot non supportée: " +
                                  std::to_string(m_version));
     }
