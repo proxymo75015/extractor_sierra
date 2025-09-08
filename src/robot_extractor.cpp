@@ -387,6 +387,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         m_rgbaBuffer.resize(required);
         for (size_t pixel = 0; pixel < cel_data.size(); ++pixel) {
             auto idx = static_cast<uint8_t>(cel_data[pixel]);
+            if (static_cast<size_t>(idx) >= m_palette.size() / 3) {
+                throw std::runtime_error("Indice de palette hors limites: " +
+                                         std::to_string(idx));
+            }
             m_rgbaBuffer[pixel * 4 + 0] = m_palette[idx * 3 + 0];
             m_rgbaBuffer[pixel * 4 + 1] = m_palette[idx * 3 + 1];
             m_rgbaBuffer[pixel * 4 + 2] = m_palette[idx * 3 + 2];
