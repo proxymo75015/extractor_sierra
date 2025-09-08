@@ -307,7 +307,6 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         }
 
         size_t offset = 2;
-        std::vector<std::byte> rgba_buffer;
         for (int i = 0; i < numCels; ++i) {
         if (offset + 22 > frameData.size()) {
             throw std::runtime_error("En-tête de cel invalide");
@@ -376,17 +375,17 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                 "Débordement lors du calcul de la taille du tampon");
         }
         size_t required = static_cast<size_t>(w) * row_size;
-        if (required > rgba_buffer.capacity()) {
+        if (required > m_rgbaBuffer.capacity()) {
             size_t new_capacity = static_cast<size_t>(required + required / 2);
-            rgba_buffer.reserve(new_capacity);
+            m_rgbaBuffer.reserve(new_capacity);
         }
-        rgba_buffer.resize(required);
+        m_rgbaBuffer.resize(required);
         for (size_t pixel = 0; pixel < cel_data.size(); ++pixel) {
             auto idx = static_cast<uint8_t>(cel_data[pixel]);
-            rgba_buffer[pixel * 4 + 0] = m_palette[idx * 3 + 0];
-            rgba_buffer[pixel * 4 + 1] = m_palette[idx * 3 + 1];
-            rgba_buffer[pixel * 4 + 2] = m_palette[idx * 3 + 2];
-            rgba_buffer[pixel * 4 + 3] = std::byte{255};
+            m_rgbaBuffer[pixel * 4 + 0] = m_palette[idx * 3 + 0];
+            m_rgbaBuffer[pixel * 4 + 1] = m_palette[idx * 3 + 1];
+            m_rgbaBuffer[pixel * 4 + 2] = m_palette[idx * 3 + 2];
+            m_rgbaBuffer[pixel * 4 + 3] = std::byte{255};
         }
 
         std::ostringstream oss;
@@ -399,10 +398,10 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         auto u8Path = std::filesystem::path{longPath}.u8string();
         std::string pathUtf8(u8Path.begin(), u8Path.end());
         outPathStr = pathUtf8;
-        if (!stbi_write_png(pathUtf8.c_str(), w, newH, 4, rgba_buffer.data(), w * 4)) {
+        if (!stbi_write_png(pathUtf8.c_str(), w, newH, 4, m_rgbaBuffer.data(), w * 4)) {
 #else
         outPathStr = outPath.string();
-        if (!stbi_write_png(outPathStr.c_str(), w, newH, 4, rgba_buffer.data(), w * 4)) {
+        if (!stbi_write_png(outPathStr.c_str(), w, newH, 4, m_rgbaBuffer.data(), w * 4)) {
 #endif
             throw std::runtime_error(std::string("Échec de l'écriture de ") +
                                      outPathStr);
