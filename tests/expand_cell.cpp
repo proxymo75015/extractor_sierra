@@ -41,7 +41,7 @@ TEST_CASE("expand_cel gère les ratios non entiers") {
 
   REQUIRE(target == expected);
 }
-TEST_CASE("expand_cel rejette un scale supérieur à 100") {
+TEST_CASE("expand_cel reconstruit un cel avec un scale supérieur à 100") {
   const uint16_t w = 2;
   const uint16_t h = 4;
   const uint8_t scale = 150; // source 1.5x plus haute
@@ -51,9 +51,14 @@ TEST_CASE("expand_cel rejette un scale supérieur à 100") {
                                 std::byte{7},  std::byte{8},  std::byte{9},
                                 std::byte{10}, std::byte{11}, std::byte{12}};
 
+  std::vector<std::byte> expected{std::byte{1},  std::byte{2},  std::byte{3},
+                                  std::byte{4},  std::byte{7},  std::byte{8},
+                                  std::byte{9},  std::byte{10}};
+
   std::vector<std::byte> target(static_cast<size_t>(w) * h);
-  
-  REQUIRE_THROWS(expand_cel(target, source, w, h, scale));
+  expand_cel(target, source, w, h, scale);
+
+  REQUIRE(target == expected);
 }
 
 TEST_CASE("expand_cel vérifie les tailles de tampons") {
