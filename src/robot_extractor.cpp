@@ -287,6 +287,9 @@ void RobotExtractor::readSizesAndCues() {
 
 void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     StreamExceptionGuard guard(m_fp);
+        if (m_frameSizes[frameNo] > kMaxFrameSize) {
+        throw std::runtime_error("Taille de frame excessive");
+    }
     std::vector<std::byte> frameData(m_frameSizes[frameNo]);
     m_fp.read(reinterpret_cast<char *>(frameData.data()), frameData.size());
     uint16_t numCels = read_scalar<uint16_t>(std::span(frameData).subspan(0, 2), m_bigEndian);
