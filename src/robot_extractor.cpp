@@ -303,6 +303,9 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     }
     std::vector<std::byte> frameData(m_frameSizes[frameNo]);
     m_fp.read(reinterpret_cast<char *>(frameData.data()), frameData.size());
+        if (frameData.size() < 2) {
+        throw std::runtime_error("Frame trop courte");
+    }
     uint16_t numCels = read_scalar<uint16_t>(std::span(frameData).subspan(0, 2), m_bigEndian);
     if (numCels > m_maxCelsPerFrame) {
         log_warn(m_srcPath, "Nombre de cels excessif dans la frame " + std::to_string(frameNo));
