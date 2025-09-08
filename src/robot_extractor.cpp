@@ -50,7 +50,7 @@ void RobotExtractor::readHeader() {
     parseHeaderFields();
     
     auto resolution_invalid = [&]() {
-        return m_xRes <= 0 || m_yRes <= 0 || m_xRes > 7680 || m_yRes > 4320;
+        return m_xRes < 0 || m_yRes < 0 || m_xRes > 7680 || m_yRes > 4320;
     };
 
     if (resolution_invalid()) {
