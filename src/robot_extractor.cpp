@@ -445,9 +445,12 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             m_fp.seekg(m_packetSizes[frameNo] - m_frameSizes[frameNo] - m_audioBlkSize,
                        std::ios::cur);
             int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
+            if (pos <= 0) {
+                throw std::runtime_error("Position audio invalide");
+            }
             int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
             uint32_t maxSize = static_cast<uint32_t>(m_audioBlkSize) - 8;
-            if (pos != 0 && size >= 8 && size <= static_cast<int32_t>(maxSize)) {
+            if (size >= 8 && size <= static_cast<int32_t>(maxSize)) {
                 std::vector<std::byte> audio(static_cast<size_t>(size - 8));
                 std::array<std::byte, 8> runway{};
                 m_fp.read(reinterpret_cast<char *>(runway.data()), runway.size());
