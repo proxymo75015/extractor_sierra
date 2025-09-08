@@ -477,14 +477,21 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                 bool isEven = (pos % 2) == 0;
                 // L'audio peut exister même sans primer, décompresser toujours.
                 if (isEven) {
-                    auto samples = dpcm16_decompress(std::span(audio),
-                                                     m_audioPredictorEven);
+                    // Décompresser le "runway" pour mettre à jour le prédicteur,
+                    // puis ignorer les échantillons produits.
+                    [[maybe_unused]] auto runwaySamples =
+                        dpcm16_decompress(std::span(runway), m_audioPredictorEven);
+                    auto samples =
+                        dpcm16_decompress(std::span(audio), m_audioPredictorEven);
                     if (m_extractAudio) {
                         writeWav(samples, 11025, m_evenAudioIndex++, true);
                     }
                 } else {
-                    auto samples = dpcm16_decompress(std::span(audio),
-                                                     m_audioPredictorOdd);
+                    // Même logique pour le canal impair.
+                    [[maybe_unused]] auto runwaySamples =
+                        dpcm16_decompress(std::span(runway), m_audioPredictorOdd);
+                    auto samples =
+                        dpcm16_decompress(std::span(audio), m_audioPredictorOdd);
                     if (m_extractAudio) {
                         writeWav(samples, 11025, m_oddAudioIndex++, false);
                     }
