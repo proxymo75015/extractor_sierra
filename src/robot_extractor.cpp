@@ -414,6 +414,12 @@ void RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         frameJson["cels"].push_back(celJson);
         offset = cel_offset;
     }
+    auto remaining = static_cast<std::ptrdiff_t>(frameData.size()) -
+                     static_cast<std::ptrdiff_t>(offset);
+    if (remaining != 0) {
+        throw std::runtime_error(std::to_string(remaining) +
+                                 " octets non traités dans la frame");
+    }            
     } else {
         log_warn(m_srcPath, "Palette manquante, cels ignorés pour la frame " +
                                 std::to_string(frameNo));
