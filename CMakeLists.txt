@@ -95,7 +95,7 @@ if(BUILD_TESTS)
         src/robot_extractor.cpp
         src/stb_image_write_impl.cpp)
 
-    target_compile_definitions(tests PRIVATE ROBOT_EXTRACTOR_NO_MAIN)
+    target_compile_definitions(tests PRIVATE ROBOT_EXTRACTOR_NO_MAIN ROBOT_EXTRACTOR_TESTING)
     target_include_directories(tests PRIVATE
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/include
@@ -127,5 +127,6 @@ install(FILES
     CONFIGURATIONS Release
 
 )
+
 
 
