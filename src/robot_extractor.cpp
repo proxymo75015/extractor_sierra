@@ -112,6 +112,10 @@ void RobotExtractor::parseHeaderFields() {
     if (m_version == 4) {
         m_maxCelsPerFrame = 1;
     }
+    if (m_maxCelsPerFrame < 1 || m_maxCelsPerFrame > 10) {
+        throw std::runtime_error("Nombre de cels par frame invalide: " +
+                                 std::to_string(m_maxCelsPerFrame));
+    }
     for (auto &area : m_maxCelArea) {
         area = read_scalar<int32_t>(m_fp, m_bigEndian);
     }
