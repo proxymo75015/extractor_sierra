@@ -547,7 +547,7 @@ void RobotExtractor::extract() {
         jsonFile.close();
         if (jsonFile.fail()) {
             throw std::runtime_error(std::string("Échec de la fermeture du fichier JSON temporaire: ") +
-                                     tmpPathStr);;
+                                     tmpPathStr);
         }
     }
     std::filesystem::rename(tmpPath, m_dstDir / "metadata.json");
