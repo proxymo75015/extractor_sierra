@@ -482,23 +482,22 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples, uint32_t samp
     wav.reserve(44 + data_size);
     wav.insert(wav.end(), {std::byte{'R'}, std::byte{'I'}, std::byte{'F'}, std::byte{'F'}});
     uint32_t riff_size = 36 + static_cast<uint32_t>(data_size);
-    for (int i = 0; i < 4; ++i) wav.push_back(std::byte(riff_size >> (i * 8)));
+    append_le32(wav, riff_size);
     wav.insert(wav.end(), {std::byte{'W'}, std::byte{'A'}, std::byte{'V'}, std::byte{'E'}});
     wav.insert(wav.end(), {std::byte{'f'}, std::byte{'m'}, std::byte{'t'}, std::byte{' '}});
     uint32_t fmt_size = 16;
-    for (int i = 0; i < 4; ++i) wav.push_back(std::byte(fmt_size >> (i * 8)));
-    wav.push_back(std::byte{1}); wav.push_back(std::byte{0}); // PCM
-    wav.push_back(std::byte{1}); wav.push_back(std::byte{0}); // Mono
-    for (int i = 0; i < 4; ++i) wav.push_back(std::byte(sampleRate >> (i * 8)));
+    append_le32(wav, fmt_size);
+    append_le16(wav, 1); // PCM
+    append_le16(wav, 1); // Mono
+    append_le32(wav, sampleRate);
     uint32_t byte_rate = sampleRate * 2;
-    for (int i = 0; i < 4; ++i) wav.push_back(std::byte(byte_rate >> (i * 8)));
-    wav.push_back(std::byte{2}); wav.push_back(std::byte{0}); // Block align
-    wav.push_back(std::byte{16}); wav.push_back(std::byte{0}); // Bits per sample
+    append_le32(wav, byte_rate);
+    append_le16(wav, 2); // Block align
+    append_le16(wav, 16); // Bits per sample
     wav.insert(wav.end(), {std::byte{'d'}, std::byte{'a'}, std::byte{'t'}, std::byte{'a'}});
-    for (int i = 0; i < 4; ++i) wav.push_back(std::byte(data_size >> (i * 8)));
+    append_le32(wav, static_cast<uint32_t>(data_size));
     for (const auto &sample : samples) {
-        uint16_t u = static_cast<uint16_t>(sample);
-        for (int i = 0; i < 2; ++i) wav.push_back(std::byte(u >> (i * 8)));
+        append_le16(wav, static_cast<uint16_t>(sample));
     }
     std::ostringstream wavName;
     wavName << (isEvenChannel ? "even_" : "odd_") << std::setw(5) << std::setfill('0') << blockIndex << ".wav";
