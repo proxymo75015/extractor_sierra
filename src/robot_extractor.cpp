@@ -387,12 +387,15 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             cel_data = std::move(expanded);
         }
 
-        size_t row_size = static_cast<size_t>(newH) * 4;
-        if (row_size != 0 && static_cast<size_t>(w) > SIZE_MAX / row_size) {
+        // Taille d'une ligne en octets (largeur en pixels * 4 octets RGBA)
+        size_t row_size = static_cast<size_t>(w) * 4;
+        // Vérifie qu'on peut multiplier la hauteur par la taille d'une ligne
+        // sans dépasser SIZE_MAX
+        if (row_size != 0 && static_cast<size_t>(newH) > SIZE_MAX / row_size) {
             throw std::runtime_error(
                 "Débordement lors du calcul de la taille du tampon");
         }
-        size_t required = static_cast<size_t>(w) * row_size;
+        size_t required = static_cast<size_t>(newH) * row_size;
         if (required > m_rgbaBuffer.capacity()) {
             size_t growth = required / 2;
             size_t max = std::numeric_limits<size_t>::max();
@@ -505,8 +508,9 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                 }
             }
         }
-    
-    return true;        
+    }
+
+    return true;   
 }
 
 void RobotExtractor::writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate, int blockIndex, bool isEvenChannel) {
