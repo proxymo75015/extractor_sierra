@@ -329,7 +329,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         uint16_t h = read_scalar<uint16_t>(celHeader.subspan(4, 2), m_bigEndian);
         int16_t x = read_scalar<int16_t>(celHeader.subspan(10, 2), m_bigEndian);
         int16_t y = read_scalar<int16_t>(celHeader.subspan(12, 2), m_bigEndian);
-        [[maybe_unused]] uint16_t dataSize = read_scalar<uint16_t>(celHeader.subspan(14, 2), m_bigEndian);
+        uint16_t dataSize = read_scalar<uint16_t>(celHeader.subspan(14, 2), m_bigEndian);
         uint16_t numChunks = read_scalar<uint16_t>(celHeader.subspan(16, 2), m_bigEndian);
         offset += 22;
 
@@ -371,6 +371,12 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             }
             cel_data.insert(cel_data.end(), decomp.begin(), decomp.end());
             cel_offset += compSz;
+        }
+            
+        size_t bytes_consumed = cel_offset - offset;
+        if (bytes_consumed != dataSize) {
+            throw std::runtime_error(
+                "Données de cel malformées: taille déclarée incohérente");
         }
 
         if (cel_data.size() != expected) {
