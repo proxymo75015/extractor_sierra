@@ -353,7 +353,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         if (w == 0 || h == 0 || pixel_count > kMaxCelPixels) {
             throw std::runtime_error("Dimensions de cel invalides");
         }
-            
+        if (verticalScale < 1 || verticalScale > 100) {
+            throw std::runtime_error("Facteur d'échelle vertical invalide");
+        }
+     
         size_t expected = static_cast<size_t>(w) *
                           ((static_cast<size_t>(h) * verticalScale) / 100);
         std::vector<std::byte> cel_data;
