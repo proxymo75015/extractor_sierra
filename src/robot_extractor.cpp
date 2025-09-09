@@ -250,6 +250,10 @@ void RobotExtractor::readPrimer() {
       writeWav(oddPcm, 11025, m_oddAudioIndex++, false);
     }
   }
+  m_evenPrimer.clear();
+  m_evenPrimer.shrink_to_fit();
+  m_oddPrimer.clear();
+  m_oddPrimer.shrink_to_fit();
 }
 
 void RobotExtractor::readPalette() {
