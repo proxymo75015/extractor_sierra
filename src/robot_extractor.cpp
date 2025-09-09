@@ -611,6 +611,10 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
   if (sampleRate == 0)
     sampleRate = 11025;
   std::vector<std::byte> wav;
+  if (samples.size() > std::numeric_limits<size_t>::max() / sizeof(int16_t)) {
+    throw std::runtime_error(
+        "Nombre d'échantillons audio dépasse la limite, fichier WAV corrompu potentiel");
+  }
   size_t data_size = samples.size() * sizeof(int16_t);
   if (data_size > 0xFFFFFFFFu - 36) {
     throw std::runtime_error(
