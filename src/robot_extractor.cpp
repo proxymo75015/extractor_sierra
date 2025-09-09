@@ -68,7 +68,8 @@ void RobotExtractor::readHeader() {
   }
 
   auto resolution_invalid = [&]() {
-    return m_xRes < 0 || m_yRes < 0 || m_xRes > 7680 || m_yRes > 4320;
+    return m_xRes < 0 || m_yRes < 0 || m_xRes > m_options.max_x_res ||
+           m_yRes > m_options.max_y_res;
   };
 
   if (resolution_invalid()) {
