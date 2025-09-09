@@ -6,6 +6,7 @@
 namespace fs = std::filesystem;
 
 using robot::log_error;
+using robot::ExtractorOptions;
 #ifdef _WIN32
 using robot::make_long_path;
 #endif
@@ -43,8 +44,10 @@ TEST_CASE("Path handling") {
     SECTION("Invalid filename characters") {
         fs::path invalidPath = "frame_0_cel_0/invalid.png";
         std::string errorMessage;
-        log_error(invalidPath, "Invalid character in filename: " + invalidPath.string());
+        ExtractorOptions opt;
+        log_error(invalidPath, "Invalid character in filename: " + invalidPath.string(), opt);
         // Vérifie que l'erreur est loguée, mais pas de REQUIRE sur le contenu exact
     }
 }
+
 
