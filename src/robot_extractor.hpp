@@ -6,9 +6,9 @@
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
+#include <span>
 #include <string>
 #include <vector>
-#include <span>
 
 namespace robot {
 
@@ -20,9 +20,6 @@ inline void expand_cel(std::span<std::byte> target,
                        std::span<const std::byte> source, uint16_t w,
                        uint16_t h, uint8_t scale) {
   if (scale < 1) {
-    throw std::runtime_error("Scale invalide");
-  }
-  if (scale > 100) {
     throw std::runtime_error("Scale invalide");
   }
   
