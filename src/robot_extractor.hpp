@@ -113,6 +113,8 @@ private:
   std::streamoff m_primerPosition;
   std::vector<std::byte> m_evenPrimer;
   std::vector<std::byte> m_oddPrimer;
+  std::vector<std::byte> m_frameBuffer;
+  std::vector<std::byte> m_celBuffer;
   std::vector<std::byte> m_rgbaBuffer;
   int16_t m_audioPredictorEven = 0;
   int16_t m_audioPredictorOdd = 0;
