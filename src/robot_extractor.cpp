@@ -581,7 +581,8 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples, uint32_t samp
         append_le16(wav, static_cast<uint16_t>(sample));
     }
     std::ostringstream wavName;
-    wavName << (isEvenChannel ? "even_" : "odd_") << std::setw(5) << std::setfill('0') << blockIndex << ".wav";
+    wavName << "frame_" << std::setw(5) << std::setfill('0') << blockIndex
+            << (isEvenChannel ? "_even" : "_odd") << ".wav";
     std::ofstream wavFile(m_dstDir / wavName.str(), std::ios::binary);
     if (!wavFile) {
         throw std::runtime_error("Échec de l'ouverture du fichier WAV: " + wavName.str());
