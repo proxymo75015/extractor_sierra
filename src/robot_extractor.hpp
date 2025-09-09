@@ -70,6 +70,7 @@ private:
   static constexpr uint16_t kMaxFrames = 10000;
   static constexpr size_t kMaxCelPixels = 1024 * 1024;
   static constexpr size_t kMaxFrameSize = 10 * 1024 * 1024;
+  static constexpr uint16_t kMaxAudioBlockSize = 65535;
   static constexpr size_t kMaxCuePoints = 256;
 
   void readHeader();
