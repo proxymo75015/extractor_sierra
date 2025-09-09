@@ -22,8 +22,10 @@ inline void expand_cel(std::span<std::byte> target,
   if (scale < 1) {
     throw std::runtime_error("Scale invalide");
   }
-  
   const int sourceHeight = static_cast<int>(h) * scale / 100;
+  if (scale > 100 || sourceHeight > static_cast<int>(h)) {
+    throw std::runtime_error("Scale invalide");
+  }
   if (sourceHeight <= 0) {
     throw std::runtime_error("Hauteur source invalide");
   }
