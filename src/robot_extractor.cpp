@@ -102,6 +102,9 @@ void RobotExtractor::parseHeaderFields() {
         m_version = read_scalar<uint16_t>(m_fp, m_bigEndian);
     }
     m_audioBlkSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
+    if (m_audioBlkSize >= kMaxAudioBlockSize) {
+        throw std::runtime_error("Taille de bloc audio excessive");
+    }    
     m_primerZeroCompressFlag = read_scalar<int16_t>(m_fp, m_bigEndian);
     m_fp.seekg(2, std::ios::cur);
     m_numFrames = read_scalar<uint16_t>(m_fp, m_bigEndian);
