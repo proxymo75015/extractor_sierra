@@ -8,10 +8,6 @@
 
 namespace robot {
 
-bool g_quiet = false;
-bool g_force_be = false;
-bool g_force_le = false;
-
 void read_exact(std::ifstream &f, void *data, size_t size) {
     auto old = f.exceptions();
     f.exceptions(std::ios::goodbit);
@@ -71,24 +67,28 @@ namespace {
 
 std::mutex g_logMutex;
 
-void log(const std::filesystem::path &path, const std::string &msg, const char *prefix) {
-    if (g_quiet) return;
+void log(const std::filesystem::path &path, const std::string &msg,
+         const char *prefix, const ExtractorOptions &opt) {
+    if (opt.quiet) return;
     std::lock_guard lock(g_logMutex);
     std::cerr << prefix << path.string() << ": " << msg << '\n';
 }
 
 } // namespace
 
-void log_info(const std::filesystem::path &path, const std::string &msg) {
-    log(path, msg, "");
+void log_info(const std::filesystem::path &path, const std::string &msg,
+              const ExtractorOptions &opt) {
+    log(path, msg, "", opt);
 }
 
-void log_warn(const std::filesystem::path &path, const std::string &msg) {
-    log(path, msg, "AVERTISSEMENT: ");
+void log_warn(const std::filesystem::path &path, const std::string &msg,
+              const ExtractorOptions &opt) {
+    log(path, msg, "AVERTISSEMENT: ", opt);
 }
 
-void log_error(const std::filesystem::path &path, const std::string &msg) {
-    log(path, msg, "ERREUR: ");
+void log_error(const std::filesystem::path &path, const std::string &msg,
+               const ExtractorOptions &opt) {
+    log(path, msg, "ERREUR: ", opt);
 }
 
 #ifdef _WIN32
