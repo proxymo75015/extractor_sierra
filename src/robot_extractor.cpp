@@ -404,6 +404,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       if (sourceHeight == 0) {
         throw std::runtime_error("Facteur d'échelle vertical invalide");
       }
+      if (w != 0 && sourceHeight > SIZE_MAX / w) {
+        throw std::runtime_error(
+            "Débordement lors du calcul de la taille de cel");
+      }
       size_t expected = static_cast<size_t>(w) * sourceHeight;
       m_celBuffer.clear();
       m_celBuffer.reserve(expected);
