@@ -21,10 +21,15 @@
 
 namespace robot {
 
+constexpr int kMaxXRes = 7680;
+constexpr int kMaxYRes = 4320;
+
 struct ExtractorOptions {
     bool quiet = false;
     bool force_be = false;
     bool force_le = false;
+    int max_x_res = kMaxXRes;
+    int max_y_res = kMaxYRes;
 };
 
 template <typename T>
