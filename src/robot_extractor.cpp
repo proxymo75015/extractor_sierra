@@ -16,8 +16,11 @@
 namespace robot {
 RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath,
                                const std::filesystem::path &dstDir,
-                               bool extractAudio)
-    : m_srcPath(srcPath), m_dstDir(dstDir), m_extractAudio(extractAudio) {
+                               bool extractAudio, ExtractorOptions options)
+    : m_srcPath(srcPath),
+      m_dstDir(dstDir),
+      m_extractAudio(extractAudio),
+      m_options(options) {
   m_fp.open(srcPath, std::ios::binary);
   if (!m_fp.is_open()) {
     throw std::runtime_error(std::string("Impossible d'ouvrir ") +
@@ -29,9 +32,9 @@ void RobotExtractor::readHeader() {
   StreamExceptionGuard guard(m_fp);
   auto headerStart = m_fp.tellg();
 
-  if (g_force_be) {
+  if (m_options.force_be) {
     m_bigEndian = true;
-  } else if (g_force_le) {
+  } else if (m_options.force_le) {
     m_bigEndian = false;
   } else {
     uint16_t sigLE = read_scalar<uint16_t>(m_fp, false);
@@ -69,7 +72,8 @@ void RobotExtractor::readHeader() {
   };
 
   if (resolution_invalid()) {
-    log_warn(m_srcPath, "Résolution suspecte, inversion endianness...");
+    log_warn(m_srcPath, "Résolution suspecte, inversion endianness...",
+             m_options);
     m_bigEndian = !m_bigEndian;
     m_fp.seekg(headerStart);
     parseHeaderFields();
@@ -334,8 +338,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
   uint16_t numCels = read_scalar<uint16_t>(
       std::span(m_frameBuffer).subspan(0, 2), m_bigEndian);
   if (numCels > m_maxCelsPerFrame) {
-    log_warn(m_srcPath, "Nombre de cels excessif dans la frame " +
-                            std::to_string(frameNo));
+    log_warn(m_srcPath,
+             "Nombre de cels excessif dans la frame " +
+                 std::to_string(frameNo),
+             m_options);
     return false;
   }
 
@@ -393,10 +399,11 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
 
         size_t remaining_expected = expected - m_celBuffer.size();
         if (decompSz > remaining_expected) {
-          log_error(m_srcPath, "Taille de chunk décompressé excède l'espace "
-                               "restant pour le cel " +
-                                   std::to_string(i) + " dans la frame " +
-                                   std::to_string(frameNo));
+          log_error(m_srcPath,
+                    "Taille de chunk décompressé excède l'espace "
+                    "restant pour le cel " + std::to_string(i) +
+                        " dans la frame " + std::to_string(frameNo),
+                    m_options);
           if (cel_offset + compSz > m_frameBuffer.size()) {
             throw std::runtime_error("Données de chunk insuffisantes");
           }
@@ -512,8 +519,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                                " octets non traités dans la frame");
     }
   } else {
-    log_warn(m_srcPath, "Palette manquante, cels ignorés pour la frame " +
-                            std::to_string(frameNo));
+    log_warn(m_srcPath,
+             "Palette manquante, cels ignorés pour la frame " +
+                 std::to_string(frameNo),
+             m_options);
   }
 
   if (m_hasAudio) {
@@ -678,6 +687,7 @@ void RobotExtractor::extract() {
 #ifndef ROBOT_EXTRACTOR_NO_MAIN
 int main(int argc, char *argv[]) {
   bool extractAudio = false;
+  robot::ExtractorOptions options;
   std::vector<std::string> files;
   for (int i = 1; i < argc; ++i) {
     std::string arg(argv[i]);
@@ -686,19 +696,19 @@ int main(int argc, char *argv[]) {
       extractAudio = true;
       known = true;
     } else if (arg == "--quiet") {
-      robot::g_quiet = true;
+      options.quiet = true;
       known = true;
     } else if (arg == "--force-be") {
-      robot::g_force_be = true;
+      options.force_be = true;
       known = true;
     } else if (arg == "--force-le") {
-      robot::g_force_le = true;
+      options.force_le = true;
       known = true;
     }
     if (!known)
       files.push_back(arg);
   }
-  if (robot::g_force_be && robot::g_force_le) {
+  if (options.force_be && options.force_le) {
     std::cerr << "Les options --force-be et --force-le sont mutuellement "
                  "exclusives\n";
     return 1;
@@ -711,10 +721,10 @@ int main(int argc, char *argv[]) {
   }
   try {
     std::filesystem::create_directories(files[1]);
-    robot::RobotExtractor extractor(files[0], files[1], extractAudio);
+    robot::RobotExtractor extractor(files[0], files[1], extractAudio, options);
     extractor.extract();
   } catch (const std::exception &e) {
-    robot::log_error(files[0], e.what());
+    robot::log_error(files[0], e.what(), options);
     return 1;
   }
   return 0;
