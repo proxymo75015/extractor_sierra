@@ -532,48 +532,53 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         m_fp.seekg(static_cast<std::streamoff>(audioBlkLen), std::ios::cur);
       } else {
         int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
-        if (pos <= 0) {
+        if (pos < 0) {
           throw std::runtime_error("Position audio invalide");
         }
-        int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
-        if (size < 8 || size < 0) {
-          throw std::runtime_error("Taille audio invalide");
-        }
-        uint32_t maxSize = audioBlkLen - 8;
-        if (size <= static_cast<int32_t>(maxSize)) {
-          std::vector<std::byte> audio(static_cast<size_t>(size - 8));
-          std::array<std::byte, 8> runway{};
-          m_fp.read(reinterpret_cast<char *>(runway.data()), runway.size());
-          m_fp.read(reinterpret_cast<char *>(audio.data()),
-                    static_cast<std::streamsize>(audio.size()));
-          bool isEven = (pos % 2) == 0;
-          // L'audio peut exister même sans primer, décompresser toujours.
-          if (isEven) {
-            // Décompresser le "runway" pour mettre à jour le prédicteur,
-            // puis ignorer les échantillons produits.
-            [[maybe_unused]] auto runwaySamples =
-                dpcm16_decompress(std::span(runway), m_audioPredictorEven);
-            auto samples =
-                dpcm16_decompress(std::span(audio), m_audioPredictorEven);
-            if (m_extractAudio) {
-              writeWav(samples, 11025, m_evenAudioIndex++, true);
-            }
-          } else {
-            // Même logique pour le canal impair.
-            [[maybe_unused]] auto runwaySamples =
-                dpcm16_decompress(std::span(runway), m_audioPredictorOdd);
-            auto samples =
-                dpcm16_decompress(std::span(audio), m_audioPredictorOdd);
-            if (m_extractAudio) {
-              writeWav(samples, 11025, m_oddAudioIndex++, false);
-            }
-          }
-          m_fp.seekg(static_cast<std::streamoff>(maxSize -
-                                                 static_cast<uint32_t>(size)),
+        if (pos == 0) {
+          m_fp.seekg(static_cast<std::streamoff>(audioBlkLen - 4),
                      std::ios::cur);
         } else {
-          // Invalid header, skip the rest of the audio block safely
-          m_fp.seekg(static_cast<std::streamoff>(maxSize), std::ios::cur);
+          int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
+          if (size < 8 || size < 0) {
+            throw std::runtime_error("Taille audio invalide");
+          }
+          uint32_t maxSize = audioBlkLen - 8;
+          if (size <= static_cast<int32_t>(maxSize)) {
+            std::vector<std::byte> audio(static_cast<size_t>(size - 8));
+            std::array<std::byte, 8> runway{};
+            m_fp.read(reinterpret_cast<char *>(runway.data()), runway.size());
+            m_fp.read(reinterpret_cast<char *>(audio.data()),
+                      static_cast<std::streamsize>(audio.size()));
+            bool isEven = (pos % 2) == 0;
+            // L'audio peut exister même sans primer, décompresser toujours.
+            if (isEven) {
+              // Décompresser le "runway" pour mettre à jour le prédicteur,
+              // puis ignorer les échantillons produits.
+              [[maybe_unused]] auto runwaySamples =
+                  dpcm16_decompress(std::span(runway), m_audioPredictorEven);
+              auto samples =
+                  dpcm16_decompress(std::span(audio), m_audioPredictorEven);
+              if (m_extractAudio) {
+                writeWav(samples, 11025, m_evenAudioIndex++, true);
+              }
+            } else {
+              // Même logique pour le canal impair.
+              [[maybe_unused]] auto runwaySamples =
+                  dpcm16_decompress(std::span(runway), m_audioPredictorOdd);
+              auto samples =
+                  dpcm16_decompress(std::span(audio), m_audioPredictorOdd);
+              if (m_extractAudio) {
+                writeWav(samples, 11025, m_oddAudioIndex++, false);
+              }
+            }
+            m_fp.seekg(static_cast<std::streamoff>(
+                           maxSize - static_cast<uint32_t>(size)),
+                       std::ios::cur);
+          } else {
+            // Invalid header, skip the rest of the audio block safely
+            m_fp.seekg(static_cast<std::streamoff>(maxSize), std::ios::cur);
+          }
         }
       }
     }
