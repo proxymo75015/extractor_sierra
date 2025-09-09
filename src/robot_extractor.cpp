@@ -17,9 +17,7 @@ namespace robot {
 RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath,
                                const std::filesystem::path &dstDir,
                                bool extractAudio, ExtractorOptions options)
-    : m_srcPath(srcPath),
-      m_dstDir(dstDir),
-      m_extractAudio(extractAudio),
+    : m_srcPath(srcPath), m_dstDir(dstDir), m_extractAudio(extractAudio),
       m_options(options) {
   m_fp.open(srcPath, std::ios::binary);
   if (!m_fp.is_open()) {
@@ -52,7 +50,7 @@ void RobotExtractor::readHeader() {
     m_fp.seekg(headerStart);
   }
 
-   parseHeaderFields();
+  parseHeaderFields();
 
   auto version_invalid = [&]() { return m_version < 4 || m_version > 6; };
 
@@ -172,11 +170,11 @@ void RobotExtractor::readPrimer() {
             static_cast<int32_t>(m_primerReservedSize)) {
       throw std::runtime_error("Tailles de primer audio incohérentes");
     }
-        
+      
     if (compType != 0) {
       throw std::runtime_error("Type de compression inconnu: " +
-                               std::to_string(compType));   
-        }
+                               std::to_string(compType));
+    }
 
     if (m_evenPrimerSize + m_oddPrimerSize !=
         static_cast<std::streamsize>(m_primerReservedSize)) {
@@ -227,9 +225,9 @@ void RobotExtractor::readPrimer() {
     auto evenPcm =
         dpcm16_decompress(std::span(m_evenPrimer), m_audioPredictorEven);
     if (evenPcm.size() >= runwaySamples) {
-      evenPcm.erase(
-          evenPcm.begin(),
-          evenPcm.begin() + static_cast<std::ptrdiff_t>(runwaySamples));
+      evenPcm.erase(evenPcm.begin(),
+                    evenPcm.begin() +
+                        static_cast<std::ptrdiff_t>(runwaySamples));
     } else {
       evenPcm.clear();
     }
@@ -241,12 +239,11 @@ void RobotExtractor::readPrimer() {
     auto oddPcm =
         dpcm16_decompress(std::span(m_oddPrimer), m_audioPredictorOdd);
     if (oddPcm.size() >= runwaySamples) {
-      oddPcm.erase(
-          oddPcm.begin(),
-          oddPcm.begin() + static_cast<std::ptrdiff_t>(runwaySamples));
+      oddPcm.erase(oddPcm.begin(),
+                   oddPcm.begin() + static_cast<std::ptrdiff_t>(runwaySamples));
     } else {
       oddPcm.clear();
-    }    
+    }
     if (m_extractAudio) {
       writeWav(oddPcm, 11025, m_oddAudioIndex++, false);
     }
@@ -260,11 +257,6 @@ void RobotExtractor::readPrimer() {
 }
 
 void RobotExtractor::readPalette() {
-  if (!m_hasPalette) {
-    m_fp.seekg(m_paletteSize, std::ios::cur);
-    return;
-  }
-  StreamExceptionGuard guard(m_fp);
   if (m_paletteSize < 768) {
     throw std::runtime_error(
         std::string("Taille de palette insuffisante dans l'en-tête pour ") +
@@ -284,6 +276,15 @@ void RobotExtractor::readPalette() {
         m_srcPath.string() + ": " + std::to_string(m_paletteSize) +
         " octets (maximum 1200)");
   }
+  if (!m_hasPalette) {
+    m_fp.seekg(m_paletteSize, std::ios::cur);
+    if (!m_fp) {
+      throw std::runtime_error(std::string("Palette tronquée pour ") +
+                               m_srcPath.string());
+    }
+    return;
+  }
+  StreamExceptionGuard guard(m_fp);
   m_palette.resize(m_paletteSize);
   try {
     read_exact(m_fp, m_palette.data(), static_cast<size_t>(m_paletteSize));
@@ -363,8 +364,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       std::span(m_frameBuffer).subspan(0, 2), m_bigEndian);
   if (numCels > m_maxCelsPerFrame) {
     log_warn(m_srcPath,
-             "Nombre de cels excessif dans la frame " +
-                 std::to_string(frameNo),
+             "Nombre de cels excessif dans la frame " + std::to_string(frameNo),
              m_options);
     return false;
   }
@@ -429,8 +429,9 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         if (decompSz > remaining_expected) {
           log_error(m_srcPath,
                     "Taille de chunk décompressé excède l'espace "
-                    "restant pour le cel " + std::to_string(i) +
-                        " dans la frame " + std::to_string(frameNo),
+                    "restant pour le cel " +
+                        std::to_string(i) + " dans la frame " +
+                        std::to_string(frameNo),
                     m_options);
           if (cel_offset + compSz > m_frameBuffer.size()) {
             throw std::runtime_error("Données de chunk insuffisantes");
@@ -527,7 +528,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         throw std::runtime_error(std::string("Échec de l'écriture de ") +
                                  outPathStr);
       }
-          
+        
       nlohmann::json celJson;
       celJson["index"] = i;
       celJson["x"] = x;
@@ -623,8 +624,8 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
     sampleRate = 11025;
   std::vector<std::byte> wav;
   if (samples.size() > std::numeric_limits<size_t>::max() / sizeof(int16_t)) {
-    throw std::runtime_error(
-        "Nombre d'échantillons audio dépasse la limite, fichier WAV corrompu potentiel");
+    throw std::runtime_error("Nombre d'échantillons audio dépasse la limite, "
+                             "fichier WAV corrompu potentiel");
   }
   size_t data_size = samples.size() * sizeof(int16_t);
   if (data_size > 0xFFFFFFFFu - 36) {
