@@ -559,11 +559,13 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                      std::ios::cur);
         } else {
           int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
-          if (size < 8 || size < 0) {
+          // "size" représente le nombre d'octets suivant ce champ, incluant
+          // les 8 octets de "runway" mais excluant l'en-tête "pos" + "size".
+          if (size < 8) {
             throw std::runtime_error("Taille audio invalide");
           }
-          uint32_t maxSize = audioBlkLen - 8;
-          if (size <= static_cast<int32_t>(maxSize)) {
+          int64_t maxSize = static_cast<int64_t>(audioBlkLen) - 8;
+          if (size <= maxSize) {
             std::vector<std::byte> audio(static_cast<size_t>(size - 8));
             std::array<std::byte, 8> runway{};
             m_fp.read(reinterpret_cast<char *>(runway.data()), runway.size());
@@ -591,9 +593,11 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                 writeWav(samples, 11025, m_oddAudioIndex++, false);
               }
             }
-            m_fp.seekg(static_cast<std::streamoff>(
-                           maxSize - static_cast<uint32_t>(size)),
-                       std::ios::cur);
+            int64_t toSkip = maxSize - size;
+            if (toSkip < 0) {
+              throw std::runtime_error("Taille audio incohérente");
+            }
+            m_fp.seekg(static_cast<std::streamoff>(toSkip), std::ios::cur);
           } else {
             // Invalid header, skip the rest of the audio block safely
             m_fp.seekg(static_cast<std::streamoff>(maxSize), std::ios::cur);
