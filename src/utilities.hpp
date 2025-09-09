@@ -21,6 +21,12 @@
 
 namespace robot {
 
+struct ExtractorOptions {
+    bool quiet = false;
+    bool force_be = false;
+    bool force_le = false;
+};
+
 template <typename T>
 concept Integral = std::is_integral_v<T>;
 
@@ -77,9 +83,12 @@ void append_le16(std::vector<std::byte> &out, uint16_t value);
 // Ajoute un entier 32 bits en little-endian dans un vecteur de bytes
 void append_le32(std::vector<std::byte> &out, uint32_t value);
 
-void log_info(const std::filesystem::path &path, const std::string &msg);
-void log_warn(const std::filesystem::path &path, const std::string &msg);
-void log_error(const std::filesystem::path &path, const std::string &msg);
+void log_info(const std::filesystem::path &path, const std::string &msg,
+              const ExtractorOptions &opt);
+void log_warn(const std::filesystem::path &path, const std::string &msg,
+              const ExtractorOptions &opt);
+void log_error(const std::filesystem::path &path, const std::string &msg,
+               const ExtractorOptions &opt);
 
 #ifdef _WIN32
 std::wstring make_long_path(const std::wstring &path);
@@ -89,9 +98,5 @@ constexpr size_t kMaxLzsOutput = 10'000'000;
 
 std::vector<std::byte> lzs_decompress(std::span<const std::byte> in, size_t expected_size);
 std::vector<int16_t> dpcm16_decompress(std::span<const std::byte> in, int16_t &carry);
-
-extern bool g_quiet;
-extern bool g_force_be;
-extern bool g_force_le;
 
 } // namespace robot
