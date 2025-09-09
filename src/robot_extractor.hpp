@@ -23,9 +23,6 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Scale invalide");
   }
   const int sourceHeight = static_cast<int>(h) * scale / 100;
-  if (scale > 100 || sourceHeight > static_cast<int>(h)) {
-    throw std::runtime_error("Scale invalide");
-  }
   if (sourceHeight <= 0) {
     throw std::runtime_error("Hauteur source invalide");
   }
@@ -38,23 +35,42 @@ inline void expand_cel(std::span<std::byte> target,
         "Taille cible incorrecte pour l'expansion verticale");
   }
 
-  int destY = static_cast<int>(h);
-  int remainder = 0;
-  for (int srcY = sourceHeight - 1; srcY >= 0; --srcY) {
-    remainder += h;
-    int repeat = remainder / sourceHeight;
-    remainder %= sourceHeight;
-    for (int i = 0; i < repeat; ++i) {
-      --destY;
-      if (destY < 0) {
-        throw std::runtime_error("Expansion de cel hors limites");
+  if (sourceHeight <= static_cast<int>(h)) {
+    int destY = static_cast<int>(h);
+    int remainder = 0;
+    for (int srcY = sourceHeight - 1; srcY >= 0; --srcY) {
+      remainder += h;
+      int repeat = remainder / sourceHeight;
+      remainder %= sourceHeight;
+      for (int i = 0; i < repeat; ++i) {
+        --destY;
+        if (destY < 0) {
+          throw std::runtime_error("Expansion de cel hors limites");
+        }
+        std::copy_n(source.begin() + static_cast<size_t>(srcY) * w, w,
+                    target.begin() + static_cast<size_t>(destY) * w);
+      }
+    }
+    if (destY != 0) {
+      throw std::runtime_error("Expansion de cel incohérente");
+    }
+  } else {
+    int srcY = sourceHeight;
+    int remainder = 0;
+    for (int destY = static_cast<int>(h) - 1; destY >= 0; --destY) {
+      remainder += sourceHeight;
+      int step = remainder / h;
+      remainder %= h;
+      srcY -= step;
+      if (srcY < 0) {
+        throw std::runtime_error("Réduction de cel hors limites");
       }
       std::copy_n(source.begin() + static_cast<size_t>(srcY) * w, w,
                   target.begin() + static_cast<size_t>(destY) * w);
     }
-  }
-  if (destY != 0) {
-    throw std::runtime_error("Expansion de cel incohérente");
+    if (srcY != 0) {
+      throw std::runtime_error("Réduction de cel incohérente");
+    }
   }
 }
 
