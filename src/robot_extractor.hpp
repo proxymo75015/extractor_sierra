@@ -59,7 +59,8 @@ inline void expand_cel(std::span<std::byte> target,
 class RobotExtractor {
 public:
   RobotExtractor(const std::filesystem::path &srcPath,
-                 const std::filesystem::path &dstDir, bool extractAudio);
+                 const std::filesystem::path &dstDir, bool extractAudio,
+                 ExtractorOptions options = {});
   void extract();
 
 private:
@@ -84,6 +85,7 @@ private:
   std::ifstream m_fp;
   bool m_bigEndian = false;
   bool m_extractAudio;
+  ExtractorOptions m_options;
   uint16_t m_version;
   uint16_t m_audioBlkSize;
   int16_t m_primerZeroCompressFlag;
