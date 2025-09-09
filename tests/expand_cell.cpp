@@ -84,6 +84,15 @@ TEST_CASE("expand_cel rejette un scale nul") {
 
   REQUIRE_THROWS(expand_cel(target, source, w, h, 0));
 }
+TEST_CASE("expand_cel rejette un scale trop grand") {
+  const uint16_t w = 1;
+  const uint16_t h = 1;
+  const uint8_t scale = 201;
+  std::vector<std::byte> target(1);
+  std::vector<std::byte> source(1);
+
+  REQUIRE_THROWS(expand_cel(target, source, w, h, scale));
+}
 
 TEST_CASE("expand_cel détecte un facteur de réduction incohérent") {
   const uint16_t w = 2;
