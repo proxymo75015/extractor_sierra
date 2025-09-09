@@ -504,9 +504,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       std::string outPathStr;
 #ifdef _WIN32
       auto longPath = make_long_path(outPath.wstring());
-      // Conversion du chemin large en UTF-8 via std::filesystem::path::u8string
-      auto u8Path = std::filesystem::path{longPath}.u8string();
-      std::string pathUtf8(u8Path.begin(), u8Path.end());
+      auto pathUtf8 = std::filesystem::path{longPath}.string();
       outPathStr = pathUtf8;
       if (!stbi_write_png(pathUtf8.c_str(), w, newH, 4, m_rgbaBuffer.data(),
                           w * 4)) {
