@@ -255,6 +255,8 @@ void RobotExtractor::readPrimer() {
   m_evenPrimer.shrink_to_fit();
   m_oddPrimer.clear();
   m_oddPrimer.shrink_to_fit();
+  m_evenPrimerSize = 0;
+  m_oddPrimerSize = 0;
 }
 
 void RobotExtractor::readPalette() {
