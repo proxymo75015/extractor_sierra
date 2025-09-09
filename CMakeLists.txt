@@ -16,7 +16,6 @@ endif()
 if(WIN32)
     add_compile_definitions(
         NOMINMAX
-        STBI_WINDOWS_UTF8
         _CRT_SECURE_NO_WARNINGS
     )
 endif()
@@ -127,6 +126,7 @@ install(FILES
     CONFIGURATIONS Release
 
 )
+
 
 
 
