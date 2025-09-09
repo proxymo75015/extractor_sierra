@@ -95,7 +95,7 @@ TEST_CASE("Truncated audio block is handled") {
     robot::RobotExtractor extractor(input, outDir, true);
     REQUIRE_NOTHROW(extractor.extract());
 
-    auto wavPath = outDir / "even_00001.wav";
+    auto wavPath = outDir / "frame_00001_even.wav";
     REQUIRE(fs::exists(wavPath));
     REQUIRE(fs::file_size(wavPath) == 52); // 44 header + 8 data bytes
 }
