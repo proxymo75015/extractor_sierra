@@ -642,6 +642,10 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
   append_le16(wav, 1); // PCM
   append_le16(wav, 1); // Mono
   append_le32(wav, sampleRate);
+  if (sampleRate > std::numeric_limits<uint32_t>::max() / 2) {
+    throw std::runtime_error("Fréquence d'échantillonnage trop élevée: " +
+                             std::to_string(sampleRate));
+  }
   uint32_t byte_rate = sampleRate * 2;
   append_le32(wav, byte_rate);
   append_le16(wav, 2);  // Block align
