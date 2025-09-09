@@ -17,6 +17,7 @@ void read_exact(std::ifstream &f, void *data, size_t size) {
     f.exceptions(std::ios::goodbit);
     f.read(static_cast<char *>(data), static_cast<std::streamsize>(size));
     std::streamsize got = f.gcount();
+    f.clear();
     f.exceptions(old);
     if (got != static_cast<std::streamsize>(size)) {
         throw std::runtime_error("Lecture incomplète (" +
