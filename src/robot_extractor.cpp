@@ -321,9 +321,9 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         if (m_frameSizes[frameNo] > kMaxFrameSize) {
         throw std::runtime_error("Taille de frame excessive");
     }
-    std::vector<std::byte> frameData(m_frameSizes[frameNo]);
-    read_exact(m_fp, frameData.data(), frameData.size());
-    uint16_t numCels = read_scalar<uint16_t>(std::span(frameData).subspan(0, 2), m_bigEndian);
+    m_frameBuffer.resize(m_frameSizes[frameNo]);
+    read_exact(m_fp, m_frameBuffer.data(), m_frameBuffer.size());
+    uint16_t numCels = read_scalar<uint16_t>(std::span(m_frameBuffer).subspan(0, 2), m_bigEndian);
     if (numCels > m_maxCelsPerFrame) {
         log_warn(m_srcPath, "Nombre de cels excessif dans la frame " + std::to_string(frameNo));
         return false;
@@ -336,10 +336,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         // Palette size has been validated in readPalette(); assume it is correct here.
         size_t offset = 2;
         for (int i = 0; i < numCels; ++i) {
-        if (offset + 22 > frameData.size()) {
+        if (offset + 22 > m_frameBuffer.size()) {
             throw std::runtime_error("En-tête de cel invalide");
         }
-        auto celHeader = std::span(frameData).subspan(offset, 22);
+        auto celHeader = std::span(m_frameBuffer).subspan(offset, 22);
         uint8_t verticalScale = static_cast<uint8_t>(celHeader[1]);
         uint16_t w = read_scalar<uint16_t>(celHeader.subspan(2, 2), m_bigEndian);
         uint16_t h = read_scalar<uint16_t>(celHeader.subspan(4, 2), m_bigEndian);
@@ -359,35 +359,35 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
      
         size_t expected = static_cast<size_t>(w) *
                           ((static_cast<size_t>(h) * verticalScale) / 100);
-        std::vector<std::byte> cel_data;
-        cel_data.reserve(expected);
+        m_celBuffer.clear();
+        m_celBuffer.reserve(expected);
         size_t cel_offset = offset;
         for (int j = 0; j < numChunks; ++j) {
-            if (cel_offset + 10 > frameData.size()) {
+            if (cel_offset + 10 > m_frameBuffer.size()) {
                 throw std::runtime_error("En-tête de chunk invalide");
             }
-            auto chunkHeader = std::span(frameData).subspan(cel_offset, 10);
+            auto chunkHeader = std::span(m_frameBuffer).subspan(cel_offset, 10);
             uint32_t compSz = read_scalar<uint32_t>(chunkHeader.subspan(0, 4), m_bigEndian);
             uint32_t decompSz = read_scalar<uint32_t>(chunkHeader.subspan(4, 4), m_bigEndian);
             uint16_t compType = read_scalar<uint16_t>(chunkHeader.subspan(8, 2), m_bigEndian);
             cel_offset += 10;
 
-            size_t remaining_expected = expected - cel_data.size();
+            size_t remaining_expected = expected - m_celBuffer.size();
             if (decompSz > remaining_expected) {
                 log_error(m_srcPath,
                           "Taille de chunk décompressé excède l'espace restant pour le cel " +
                               std::to_string(i) + " dans la frame " +
                               std::to_string(frameNo));
-                if (cel_offset + compSz > frameData.size()) {
+                if (cel_offset + compSz > m_frameBuffer.size()) {
                     throw std::runtime_error("Données de chunk insuffisantes");
                 }
                 cel_offset += compSz;
                 continue;
             }
-            if (cel_offset + compSz > frameData.size()) {
+            if (cel_offset + compSz > m_frameBuffer.size()) {
                 throw std::runtime_error("Données de chunk insuffisantes");
             }
-            auto comp = std::span(frameData).subspan(cel_offset, compSz);
+            auto comp = std::span(m_frameBuffer).subspan(cel_offset, compSz);
             std::vector<std::byte> decomp;
             if (compType == 0) {
                 decomp = lzs_decompress(comp, decompSz);
@@ -400,7 +400,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             } else {
                 throw std::runtime_error("Type de compression inconnu: " + std::to_string(compType));
             }
-            cel_data.insert(cel_data.end(), decomp.begin(), decomp.end());
+            m_celBuffer.insert(m_celBuffer.end(), decomp.begin(), decomp.end());
             cel_offset += compSz;
         }
             
@@ -410,7 +410,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                 "Données de cel malformées: taille déclarée incohérente");
         }
 
-        if (cel_data.size() != expected) {
+        if (m_celBuffer.size() != expected) {
             throw std::runtime_error(
                 "Cel corrompu: taille de données incohérente");
         }
@@ -418,8 +418,8 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         uint16_t newH = h;
         if (verticalScale != 100) {
             std::vector<std::byte> expanded(static_cast<size_t>(w) * h);
-            expand_cel(expanded, cel_data, w, h, verticalScale);
-            cel_data = std::move(expanded);
+            expand_cel(expanded, m_celBuffer, w, h, verticalScale);
+            m_celBuffer = std::move(expanded);
         }
 
         // Taille d'une ligne en octets (largeur en pixels * 4 octets RGBA)
@@ -443,8 +443,8 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             m_rgbaBuffer.reserve(new_capacity);
         }
         m_rgbaBuffer.resize(required);
-        for (size_t pixel = 0; pixel < cel_data.size(); ++pixel) {
-            auto idx = static_cast<uint8_t>(cel_data[pixel]);
+        for (size_t pixel = 0; pixel < m_celBuffer.size(); ++pixel) {
+            auto idx = static_cast<uint8_t>(m_celBuffer[pixel]);
             if (static_cast<size_t>(idx) >= m_palette.size() / 3) {
                 throw std::runtime_error("Indice de palette hors limites: " +
                                          std::to_string(idx));
@@ -484,7 +484,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         frameJson["cels"].push_back(celJson);
         offset = cel_offset;
     }
-    auto remaining = static_cast<std::ptrdiff_t>(frameData.size()) -
+    auto remaining = static_cast<std::ptrdiff_t>(m_frameBuffer.size()) -
                      static_cast<std::ptrdiff_t>(offset);
     if (remaining != 0) {
         throw std::runtime_error(std::to_string(remaining) +
