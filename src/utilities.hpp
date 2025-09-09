@@ -68,14 +68,20 @@ T read_scalar(std::span<const std::byte> data, bool bigEndian);
 
 class StreamExceptionGuard {
 public:
-    explicit StreamExceptionGuard(std::ifstream &stream) : m_stream(stream) {
+    explicit StreamExceptionGuard(std::ifstream &stream)
+        : m_stream(stream), m_oldMask(stream.exceptions()) {
         m_stream.exceptions(std::ios::failbit | std::ios::badbit);
     }
     ~StreamExceptionGuard() noexcept {
-        m_stream.exceptions(std::ios::goodbit);
+        try {
+            m_stream.exceptions(m_oldMask);
+        } catch (...) {
+            // ignore exceptions to maintain noexcept
+        }
     }
 private:
     std::ifstream &m_stream;
+    std::ios::iostate m_oldMask;
 };
 
 // Lit exactement `size` octets depuis `f` dans `data`.
