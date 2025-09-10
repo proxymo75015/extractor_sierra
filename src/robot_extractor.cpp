@@ -517,10 +517,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       std::string outPathStr;
 #ifdef _WIN32
       auto longPath = make_long_path(outPath.wstring());
-      auto pathUtf8 = std::filesystem::path{longPath}.string();
-      outPathStr = pathUtf8;
-      if (!stbi_write_png(pathUtf8.c_str(), w, newH, 4, m_rgbaBuffer.data(),
-                          w * 4)) {
+      auto pathUtf8 = std::filesystem::path{longPath}.u8string();
+      outPathStr.assign(pathUtf8.begin(), pathUtf8.end());
+      if (!stbi_write_png(reinterpret_cast<const char *>(pathUtf8.c_str()), w,
+                          newH, 4, m_rgbaBuffer.data(), w * 4)) {
 #else
       outPathStr = outPath.string();
       if (!stbi_write_png(outPathStr.c_str(), w, newH, 4, m_rgbaBuffer.data(),
@@ -665,21 +665,31 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
   std::ostringstream wavName;
   wavName << "frame_" << std::setw(5) << std::setfill('0') << blockIndex
           << (isEvenChannel ? "_even" : "_odd") << ".wav";
-  std::ofstream wavFile(m_dstDir / wavName.str(), std::ios::binary);
+  auto outPath = m_dstDir / wavName.str();
+  std::string outPathStr;
+#ifdef _WIN32
+  auto longPath = make_long_path(outPath.wstring());
+  auto pathUtf8 = std::filesystem::path{longPath}.u8string();
+  outPathStr.assign(pathUtf8.begin(), pathUtf8.end());
+  std::ofstream wavFile(std::filesystem::path{longPath}, std::ios::binary);
+#else
+  outPathStr = outPath.string();
+  std::ofstream wavFile(outPath, std::ios::binary);
+#endif
   if (!wavFile) {
     throw std::runtime_error("Échec de l'ouverture du fichier WAV: " +
-                             wavName.str());
+                             outPathStr);
   }
   wavFile.write(reinterpret_cast<const char *>(wav.data()), wav.size());
   wavFile.flush();
   if (!wavFile) {
     throw std::runtime_error("Échec de l'écriture du fichier WAV: " +
-                             wavName.str());
+                             outPathStr);
   }
   wavFile.close();
   if (wavFile.fail()) {
     throw std::runtime_error("Échec de la fermeture du fichier WAV: " +
-                             wavName.str());
+                             outPathStr);
   }
 }
 
