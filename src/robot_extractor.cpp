@@ -257,6 +257,14 @@ void RobotExtractor::readPrimer() {
 }
 
 void RobotExtractor::readPalette() {
+  if (!m_hasPalette) {
+    m_fp.seekg(m_paletteSize, std::ios::cur);
+    if (!m_fp) {
+      throw std::runtime_error(std::string("Palette tronquée pour ") +
+                               m_srcPath.string());
+    }
+    return;
+  }  
   if (m_paletteSize < 768) {
     throw std::runtime_error(
         std::string("Taille de palette insuffisante dans l'en-tête pour ") +
@@ -276,14 +284,7 @@ void RobotExtractor::readPalette() {
         m_srcPath.string() + ": " + std::to_string(m_paletteSize) +
         " octets (maximum 1200)");
   }
-  if (!m_hasPalette) {
-    m_fp.seekg(m_paletteSize, std::ios::cur);
-    if (!m_fp) {
-      throw std::runtime_error(std::string("Palette tronquée pour ") +
-                               m_srcPath.string());
-    }
-    return;
-  }
+
   StreamExceptionGuard guard(m_fp);
   m_palette.resize(m_paletteSize);
   try {
