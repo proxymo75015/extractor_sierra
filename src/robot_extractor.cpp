@@ -596,8 +596,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             if (isEven) {
               // Décompresser le "runway" pour mettre à jour le prédicteur,
               // puis ignorer les échantillons produits.
-              [[maybe_unused]] auto runwaySamples =
-                  dpcm16_decompress(std::span(runway), m_audioPredictorEven);
+              dpcm16_decompress_last(std::span(runway), m_audioPredictorEven);
               auto samples =
                   dpcm16_decompress(std::span(audio), m_audioPredictorEven);
               if (m_extractAudio) {
@@ -605,8 +604,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
               }
             } else {
               // Même logique pour le canal impair.
-              [[maybe_unused]] auto runwaySamples =
-                  dpcm16_decompress(std::span(runway), m_audioPredictorOdd);
+              dpcm16_decompress_last(std::span(runway), m_audioPredictorOdd);
               auto samples =
                   dpcm16_decompress(std::span(audio), m_audioPredictorOdd);
               if (m_extractAudio) {
