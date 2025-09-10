@@ -5,17 +5,26 @@
 #include <mutex>
 #include <algorithm>
 #include <array>
+#include <limits>
 
 namespace robot {
 
+std::streamsize checked_streamsize(size_t size) {
+    if (size > static_cast<size_t>(std::numeric_limits<std::streamsize>::max())) {
+        throw std::runtime_error("Taille dépasse la limite de streamsize");
+    }
+    return static_cast<std::streamsize>(size);
+}
+
 void read_exact(std::ifstream &f, void *data, size_t size) {
+        std::streamsize ss = checked_streamsize(size);
     auto old = f.exceptions();
     f.exceptions(std::ios::goodbit);
-    f.read(static_cast<char *>(data), static_cast<std::streamsize>(size));
+    f.read(static_cast<char *>(data), ss);
     std::streamsize got = f.gcount();
     f.clear();
     f.exceptions(old);
-    if (got != static_cast<std::streamsize>(size)) {
+    if (got != ss) {
         throw std::runtime_error("Lecture incomplète (" +
                                  std::to_string(got) + "/" +
                                  std::to_string(size) + " octets)");
