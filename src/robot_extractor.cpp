@@ -487,16 +487,11 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             "Débordement lors du calcul de la taille du tampon");
       }
       size_t required = static_cast<size_t>(newH) * row_size;
+      if (required > kMaxCelPixels * 4) {
+        throw std::runtime_error("Tampon RGBA dépasse la limite");
+      }
       if (required > m_rgbaBuffer.capacity()) {
-        size_t growth = required / 2;
-        size_t max = std::numeric_limits<size_t>::max();
-        size_t new_capacity;
-        if (required > max - growth) {
-          new_capacity = max;
-        } else {
-          new_capacity = required + growth;
-        }
-        m_rgbaBuffer.reserve(new_capacity);
+        m_rgbaBuffer.reserve(required);
       }
       m_rgbaBuffer.resize(required);
       for (size_t pixel = 0; pixel < m_celBuffer.size(); ++pixel) {
