@@ -1,5 +1,7 @@
 #include "robot_extractor.hpp"
 #include <catch2/catch_test_macros.hpp>
+#include <algorithm>
+#include <cstddef>
 #include <vector>
 
 using robot::expand_cel;
@@ -103,4 +105,70 @@ TEST_CASE("expand_cel détecte un facteur de réduction incohérent") {
   std::vector<std::byte> target(static_cast<size_t>(w) * h);
 
   REQUIRE_THROWS(expand_cel(target, source, w, h, badScale));
+}
+
+TEST_CASE("expand_cel traite de grands cels à l'agrandissement") {
+  const size_t maxPixels = robot::RobotExtractor::kMaxCelPixels;
+  const uint16_t w = 1024;
+  const uint16_t h = static_cast<uint16_t>(maxPixels / w);
+  REQUIRE(static_cast<size_t>(w) * h == maxPixels);
+  const uint8_t scale = 50;
+
+  const int sourceHeight = static_cast<int>(h) * scale / 100;
+  std::vector<std::byte> source(static_cast<size_t>(w) * sourceHeight);
+  for (int y = 0; y < sourceHeight; ++y) {
+    const auto offset = static_cast<size_t>(y) * w;
+    auto row = source.begin() + static_cast<std::ptrdiff_t>(offset);
+    std::fill_n(row, static_cast<std::size_t>(w),
+                std::byte(y & 0xFF));
+  }
+
+  std::vector<std::byte> target(static_cast<size_t>(w) * h);
+  expand_cel(target, source, w, h, scale);
+
+  for (int y = 0; y < static_cast<int>(h); ++y) {
+    std::byte expected = std::byte((y / 2) & 0xFF);
+    const auto offset = static_cast<size_t>(y) * w;
+    auto row = target.begin() + static_cast<std::ptrdiff_t>(offset);
+    bool ok = std::all_of(row, row + static_cast<std::ptrdiff_t>(w),
+                          [expected](std::byte b) { return b == expected; });
+    REQUIRE(ok);
+  }
+}
+
+TEST_CASE("expand_cel traite de grands cels à la réduction") {
+  const size_t maxPixels = robot::RobotExtractor::kMaxCelPixels;
+  const uint16_t w = 1024;
+  const uint16_t h = static_cast<uint16_t>(maxPixels / w);
+  REQUIRE(static_cast<size_t>(w) * h == maxPixels);
+  const uint8_t scale = 150;
+
+  const int sourceHeight = static_cast<int>(h) * scale / 100;
+  std::vector<std::byte> source(static_cast<size_t>(w) * sourceHeight);
+  for (int y = 0; y < sourceHeight; ++y) {
+    const auto offset = static_cast<size_t>(y) * w;
+    auto row = source.begin() + static_cast<std::ptrdiff_t>(offset);
+    std::fill_n(row, static_cast<std::size_t>(w),
+                std::byte(y & 0xFF));
+  }
+
+  std::vector<std::byte> target(static_cast<size_t>(w) * h);
+  expand_cel(target, source, w, h, scale);
+
+  int srcY = sourceHeight;
+  int remainder = 0;
+  for (int destY = static_cast<int>(h) - 1; destY >= 0; --destY) {
+    remainder += sourceHeight;
+    int step = remainder / static_cast<int>(h);
+    remainder %= static_cast<int>(h);
+    srcY -= step;
+    REQUIRE(srcY >= 0);
+    std::byte expected = std::byte(srcY & 0xFF);
+    const auto offset = static_cast<size_t>(destY) * w;
+    auto row = target.begin() + static_cast<std::ptrdiff_t>(offset);
+    bool ok = std::all_of(row, row + static_cast<std::ptrdiff_t>(w),
+                          [expected](std::byte b) { return b == expected; });
+    REQUIRE(ok);
+  }
+  REQUIRE(srcY == 0);
 }
