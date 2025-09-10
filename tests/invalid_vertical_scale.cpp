@@ -51,3 +51,43 @@ TEST_CASE("Vertical scale of zero throws") {
             std::string::npos);
   }
 }
+
+TEST_CASE("Vertical scale above 200 throws") {
+  std::vector<uint8_t> data;
+  data.reserve(2 + 22);
+  push16(data, 1); // numCels
+
+  std::vector<uint8_t> celHeader(22, 0);
+  celHeader[1] = 201; // verticalScale invalide (>200)
+  celHeader[2] = 1;   // width
+  celHeader[4] = 1;   // height
+  data.insert(data.end(), celHeader.begin(), celHeader.end());
+
+  fs::path tmpDir = fs::temp_directory_path();
+  fs::path input = tmpDir / "invalid_vertical_scale_high.bin";
+  fs::path outDir = tmpDir / "invalid_vertical_scale_high_out";
+  fs::create_directories(outDir);
+
+  std::ofstream out(input, std::ios::binary);
+  out.write(reinterpret_cast<const char *>(data.data()),
+            static_cast<std::streamsize>(data.size()));
+  out.close();
+
+  robot::RobotExtractor extractor(input, outDir, false);
+  extractor.m_hasPalette = true;
+  extractor.m_bigEndian = false;
+  extractor.m_maxCelsPerFrame = 1;
+  extractor.m_frameSizes = {static_cast<uint32_t>(data.size())};
+  extractor.m_packetSizes = {static_cast<uint32_t>(data.size())};
+  extractor.m_palette.assign(768, std::byte{0});
+  extractor.m_fp.seekg(0, std::ios::beg);
+
+  nlohmann::json frameJson;
+  try {
+    extractor.exportFrame(0, frameJson);
+    FAIL("No exception thrown");
+  } catch (const std::runtime_error &e) {
+    REQUIRE(std::string(e.what()).find("Facteur d'échelle vertical invalide") !=
+            std::string::npos);
+  }
+}
