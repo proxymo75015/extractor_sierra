@@ -95,7 +95,7 @@ void RobotExtractor::parseHeaderFields() {
     throw std::runtime_error("Signature Robot invalide");
   }
   std::array<char, 4> sol;
-  m_fp.read(sol.data(), sol.size());
+  m_fp.read(sol.data(), checked_streamsize(sol.size()));
   if (sol != std::array<char, 4>{'S', 'O', 'L', '\0'}) {
     throw std::runtime_error("Tag SOL invalide");
   }
@@ -577,9 +577,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
           if (size <= maxSize) {
             std::vector<std::byte> audio(static_cast<size_t>(size - 8));
             std::array<std::byte, 8> runway{};
-            m_fp.read(reinterpret_cast<char *>(runway.data()), runway.size());
+            m_fp.read(reinterpret_cast<char *>(runway.data()),
+                      checked_streamsize(runway.size()));
             m_fp.read(reinterpret_cast<char *>(audio.data()),
-                      static_cast<std::streamsize>(audio.size()));
+                      checked_streamsize(audio.size()));
             bool isEven = (pos % 2) == 0;
             // L'audio peut exister même sans primer, décompresser toujours.
             if (isEven) {
@@ -680,7 +681,8 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
     throw std::runtime_error("Échec de l'ouverture du fichier WAV: " +
                              outPathStr);
   }
-  wavFile.write(reinterpret_cast<const char *>(wav.data()), wav.size());
+  wavFile.write(reinterpret_cast<const char *>(wav.data()),
+               checked_streamsize(wav.size()));
   wavFile.flush();
   if (!wavFile) {
     throw std::runtime_error("Échec de l'écriture du fichier WAV: " +
