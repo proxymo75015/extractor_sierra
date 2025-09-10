@@ -3,6 +3,7 @@
 #include "utilities.hpp"
 #include <array>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -38,20 +39,26 @@ inline void expand_cel(std::span<std::byte> target,
         "Taille cible incorrecte pour l'expansion verticale");
   }
 
+  const std::byte *srcBase = source.data();
+  std::byte *destBase = target.data();
+  const size_t rowBytes = static_cast<size_t>(w);
+
   if (sourceHeight <= static_cast<int>(h)) {
     int destY = static_cast<int>(h);
     int remainder = 0;
+    std::byte *destPtr = destBase + static_cast<size_t>(h) * rowBytes;
     for (int srcY = sourceHeight - 1; srcY >= 0; --srcY) {
       remainder += h;
       int repeat = remainder / sourceHeight;
       remainder %= sourceHeight;
+      const std::byte *srcPtr = srcBase + static_cast<size_t>(srcY) * rowBytes;      
       for (int i = 0; i < repeat; ++i) {
+        destPtr -= rowBytes;        
         --destY;
         if (destY < 0) {
           throw std::runtime_error("Expansion de cel hors limites");
         }
-        std::copy_n(source.begin() + static_cast<size_t>(srcY) * w, w,
-                    target.begin() + static_cast<size_t>(destY) * w);
+        std::memcpy(destPtr, srcPtr, rowBytes);
       }
     }
     if (destY != 0) {
@@ -60,6 +67,8 @@ inline void expand_cel(std::span<std::byte> target,
   } else {
     int srcY = sourceHeight;
     int remainder = 0;
+    std::byte *destPtr = destBase +
+                         (static_cast<size_t>(h) - 1) * rowBytes;    
     for (int destY = static_cast<int>(h) - 1; destY >= 0; --destY) {
       remainder += sourceHeight;
       int step = remainder / h;
@@ -68,8 +77,10 @@ inline void expand_cel(std::span<std::byte> target,
       if (srcY < 0) {
         throw std::runtime_error("Réduction de cel hors limites");
       }
-      std::copy_n(source.begin() + static_cast<size_t>(srcY) * w, w,
-                  target.begin() + static_cast<size_t>(destY) * w);
+      const std::byte *srcPtr =
+          srcBase + static_cast<size_t>(srcY) * rowBytes;
+      std::memcpy(destPtr, srcPtr, rowBytes);
+      destPtr -= rowBytes;
     }
     if (srcY != 0) {
       throw std::runtime_error("Réduction de cel incohérente");
