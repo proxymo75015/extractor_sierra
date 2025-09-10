@@ -113,5 +113,7 @@ constexpr size_t kMaxLzsOutput = 10'000'000;
 
 std::vector<std::byte> lzs_decompress(std::span<const std::byte> in, size_t expected_size);
 std::vector<int16_t> dpcm16_decompress(std::span<const std::byte> in, int16_t &carry);
+// Décompresse sans stocker les échantillons, ne met à jour que `carry`.
+void dpcm16_decompress_last(std::span<const std::byte> in, int16_t &carry);
 
 } // namespace robot
