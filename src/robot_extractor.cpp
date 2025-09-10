@@ -224,30 +224,35 @@ void RobotExtractor::readPrimer() {
   const size_t runwaySamples = kRunwayBytes * 2; // 8 bytes => 16 samples
 
   if (m_evenPrimerSize > 0) {
-    auto evenPcm =
-        dpcm16_decompress(std::span(m_evenPrimer), m_audioPredictorEven);
-    if (evenPcm.size() >= runwaySamples) {
-      evenPcm.erase(evenPcm.begin(),
-                    evenPcm.begin() +
-                        static_cast<std::ptrdiff_t>(runwaySamples));
-    } else {
-      evenPcm.clear();
-    }
     if (m_extractAudio) {
+      auto evenPcm =
+          dpcm16_decompress(std::span(m_evenPrimer), m_audioPredictorEven);
+      if (evenPcm.size() >= runwaySamples) {
+        evenPcm.erase(evenPcm.begin(),
+                      evenPcm.begin() +
+                          static_cast<std::ptrdiff_t>(runwaySamples));
+      } else {
+        evenPcm.clear();
+      }
       writeWav(evenPcm, 11025, m_evenAudioIndex++, true);
+    } else {
+      dpcm16_decompress_last(std::span(m_evenPrimer), m_audioPredictorEven);
     }
   }
   if (m_oddPrimerSize > 0) {
-    auto oddPcm =
-        dpcm16_decompress(std::span(m_oddPrimer), m_audioPredictorOdd);
-    if (oddPcm.size() >= runwaySamples) {
-      oddPcm.erase(oddPcm.begin(),
-                   oddPcm.begin() + static_cast<std::ptrdiff_t>(runwaySamples));
-    } else {
-      oddPcm.clear();
-    }
     if (m_extractAudio) {
+      auto oddPcm =
+          dpcm16_decompress(std::span(m_oddPrimer), m_audioPredictorOdd);
+      if (oddPcm.size() >= runwaySamples) {
+        oddPcm.erase(
+            oddPcm.begin(),
+            oddPcm.begin() + static_cast<std::ptrdiff_t>(runwaySamples));
+      } else {
+        oddPcm.clear();
+      }
       writeWav(oddPcm, 11025, m_oddAudioIndex++, false);
+    } else {
+      dpcm16_decompress_last(std::span(m_oddPrimer), m_audioPredictorOdd);
     }
   }
   m_evenPrimer.clear();
