@@ -1,6 +1,7 @@
 #include "robot_extractor.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <filesystem>
 #include <iomanip>
@@ -619,7 +620,6 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
                               bool isEvenChannel) {
   if (sampleRate == 0)
     sampleRate = 11025;
-  std::vector<std::byte> wav;
   if (samples.size() > std::numeric_limits<size_t>::max() / sizeof(int16_t)) {
     throw std::runtime_error("Nombre d'échantillons audio dépasse la limite, "
                              "fichier WAV corrompu potentiel");
@@ -630,34 +630,50 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
         "Taille de données audio trop grande pour un fichier WAV: " +
         std::to_string(data_size));
   }
-  wav.reserve(44 + data_size);
-  wav.insert(wav.end(),
-             {std::byte{'R'}, std::byte{'I'}, std::byte{'F'}, std::byte{'F'}});
-  uint32_t riff_size = 36 + static_cast<uint32_t>(data_size);
-  append_le32(wav, riff_size);
-  wav.insert(wav.end(),
-             {std::byte{'W'}, std::byte{'A'}, std::byte{'V'}, std::byte{'E'}});
-  wav.insert(wav.end(),
-             {std::byte{'f'}, std::byte{'m'}, std::byte{'t'}, std::byte{' '}});
-  uint32_t fmt_size = 16;
-  append_le32(wav, fmt_size);
-  append_le16(wav, 1); // PCM
-  append_le16(wav, 1); // Mono
-  append_le32(wav, sampleRate);
   if (sampleRate > std::numeric_limits<uint32_t>::max() / 2) {
     throw std::runtime_error("Fréquence d'échantillonnage trop élevée: " +
                              std::to_string(sampleRate));
   }
+  uint32_t riff_size = 36 + static_cast<uint32_t>(data_size);
   uint32_t byte_rate = sampleRate * 2;
-  append_le32(wav, byte_rate);
-  append_le16(wav, 2);  // Block align
-  append_le16(wav, 16); // Bits per sample
-  wav.insert(wav.end(),
-             {std::byte{'d'}, std::byte{'a'}, std::byte{'t'}, std::byte{'a'}});
-  append_le32(wav, static_cast<uint32_t>(data_size));
-  for (const auto &sample : samples) {
-    append_le16(wav, static_cast<uint16_t>(sample));
-  }
+
+  std::array<char, 44> header{};
+  auto write_le16 = [](char *dst, uint16_t v) {
+    dst[0] = static_cast<char>(v & 0xFF);
+    dst[1] = static_cast<char>((v >> 8) & 0xFF);
+  };
+  auto write_le32 = [](char *dst, uint32_t v) {
+    dst[0] = static_cast<char>(v & 0xFF);
+    dst[1] = static_cast<char>((v >> 8) & 0xFF);
+    dst[2] = static_cast<char>((v >> 16) & 0xFF);
+    dst[3] = static_cast<char>((v >> 24) & 0xFF);
+  };
+
+  header[0] = 'R';
+  header[1] = 'I';
+  header[2] = 'F';
+  header[3] = 'F';
+  write_le32(header.data() + 4, riff_size);
+  header[8] = 'W';
+  header[9] = 'A';
+  header[10] = 'V';
+  header[11] = 'E';
+  header[12] = 'f';
+  header[13] = 'm';
+  header[14] = 't';
+  header[15] = ' ';
+  write_le32(header.data() + 16, 16);    // fmt chunk size
+  write_le16(header.data() + 20, 1);      // PCM
+  write_le16(header.data() + 22, 1);      // Mono
+  write_le32(header.data() + 24, sampleRate);
+  write_le32(header.data() + 28, byte_rate);
+  write_le16(header.data() + 32, 2);      // Block align
+  write_le16(header.data() + 34, 16);     // Bits per sample
+  header[36] = 'd';
+  header[37] = 'a';
+  header[38] = 't';
+  header[39] = 'a';
+  write_le32(header.data() + 40, static_cast<uint32_t>(data_size));
   std::ostringstream wavName;
   wavName << "frame_" << std::setw(5) << std::setfill('0') << blockIndex
           << (isEvenChannel ? "_even" : "_odd") << ".wav";
@@ -676,8 +692,9 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
     throw std::runtime_error("Échec de l'ouverture du fichier WAV: " +
                              outPathStr);
   }
-  wavFile.write(reinterpret_cast<const char *>(wav.data()),
-               checked_streamsize(wav.size()));
+  wavFile.write(header.data(), checked_streamsize(header.size()));
+  wavFile.write(reinterpret_cast<const char *>(samples.data()),
+                checked_streamsize(data_size));
   wavFile.flush();
   if (!wavFile) {
     throw std::runtime_error("Échec de l'écriture du fichier WAV: " +
