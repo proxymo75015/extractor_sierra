@@ -524,15 +524,22 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       outPathStr.assign(pathUtf8.begin(), pathUtf8.end());
       if (!stbi_write_png(reinterpret_cast<const char *>(pathUtf8.c_str()), w,
                           newH, 4, m_rgbaBuffer.data(), w * 4)) {
+        std::error_code ec;
+        std::filesystem::remove(longPath, ec);
+        throw std::runtime_error(std::string("Échec de l'écriture de ") +
+                                 outPathStr);
+      }        
 #else
       outPathStr = outPath.string();
       if (!stbi_write_png(outPathStr.c_str(), w, newH, 4, m_rgbaBuffer.data(),
                           w * 4)) {
-#endif
+        std::error_code ec;
+        std::filesystem::remove(outPath, ec);
         throw std::runtime_error(std::string("Échec de l'écriture de ") +
                                  outPathStr);
       }
-        
+#endif
+      
       nlohmann::json celJson;
       celJson["index"] = i;
       celJson["x"] = x;
