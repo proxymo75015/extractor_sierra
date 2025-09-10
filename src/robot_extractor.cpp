@@ -408,7 +408,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       if (verticalScale < 1) {
         throw std::runtime_error("Facteur d'échelle vertical invalide");
       }
-
+      if (verticalScale > 200) {
+        throw std::runtime_error("Facteur d'échelle vertical invalide");
+      }
+      
       size_t sourceHeight = (static_cast<size_t>(h) * verticalScale) / 100;
       if (sourceHeight == 0) {
         throw std::runtime_error("Facteur d'échelle vertical invalide");
