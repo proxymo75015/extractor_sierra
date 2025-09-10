@@ -200,6 +200,28 @@ std::vector<int16_t> dpcm16_decompress(std::span<const std::byte> in, int16_t &c
     return out;
 }
 
+void dpcm16_decompress_last(std::span<const std::byte> in, int16_t &carry) {
+    static constexpr std::array<int16_t, 16> DPCM_TABLE = {
+        -0x0c0, -0x080, -0x040, -0x020,
+        -0x010, -0x008, -0x004, -0x002,
+         0x002,  0x004,  0x008,  0x010,
+         0x020,  0x040,  0x080,  0x0c0,
+    };
+
+    int32_t predictor = carry;
+    for (auto byte : in) {
+        uint8_t b = static_cast<uint8_t>(byte);
+        uint8_t hi = b >> 4;
+        predictor += DPCM_TABLE[hi];
+        predictor = std::clamp(predictor, -32768, 32767);
+        carry = static_cast<int16_t>(predictor);
+        uint8_t lo = b & 0x0F;
+        predictor += DPCM_TABLE[lo];
+        predictor = std::clamp(predictor, -32768, 32767);
+        carry = static_cast<int16_t>(predictor);
+    }
+}
+
 template uint8_t read_scalar<uint8_t>(std::span<const std::byte>, bool);
 template int8_t read_scalar<int8_t>(std::span<const std::byte>, bool);
 template uint16_t read_scalar<uint16_t>(std::span<const std::byte>, bool);
