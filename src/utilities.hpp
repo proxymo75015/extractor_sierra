@@ -14,6 +14,7 @@
 #include <vector>
 #include <algorithm>
 #include <type_traits>
+#include <limits>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -83,6 +84,9 @@ private:
     std::ifstream &m_stream;
     std::ios::iostate m_oldMask;
 };
+
+// Vérifie que `size` tient dans un std::streamsize et retourne la conversion.
+std::streamsize checked_streamsize(size_t size);
 
 // Lit exactement `size` octets depuis `f` dans `data`.
 // Lève std::runtime_error si la lecture est incomplète.
