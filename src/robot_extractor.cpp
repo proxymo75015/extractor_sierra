@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <system_error>
 #include <span>
 #include <sstream>
 #include <stdexcept>
@@ -749,7 +750,23 @@ void RobotExtractor::extract() {
           tmpPathStr);
     }
   }
-  std::filesystem::rename(tmpPath, m_dstDir / "metadata.json");
+  auto finalPath = m_dstDir / "metadata.json";
+  std::error_code ec;
+  std::filesystem::rename(tmpPath, finalPath, ec);
+  if (ec) {
+    std::filesystem::copy_file(tmpPath, finalPath,
+                               std::filesystem::copy_options::overwrite_existing,
+                               ec);
+    if (ec) {
+      throw std::runtime_error("Échec de la copie de " + tmpPathStr + " vers " +
+                               finalPath.string() + ": " + ec.message());
+    }
+    std::filesystem::remove(tmpPath, ec);
+    if (ec) {
+      throw std::runtime_error("Échec de la suppression du fichier temporaire " +
+                               tmpPathStr + ": " + ec.message());
+    }
+  }
 }
 
 } // namespace robot
