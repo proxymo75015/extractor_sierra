@@ -36,6 +36,32 @@ struct ExtractorOptions {
 template <typename T>
 concept Integral = std::is_integral_v<T>;
 
+namespace detail {
+
+template <Integral T>
+T read_scalar_impl(const uint8_t *bytes, bool bigEndian) {
+    T value;
+    if constexpr (sizeof(T) == 1) {
+        value = bytes[0];
+    } else {
+        if (bigEndian != (std::endian::native == std::endian::big)) {
+#if defined(__cpp_lib_byteswap) || (__cplusplus >= 202302L)
+            std::memcpy(&value, bytes, sizeof(T));
+            value = std::byteswap(value);
+#else
+            std::array<uint8_t, sizeof(T)> swapped_bytes;
+            std::reverse_copy(bytes, bytes + sizeof(T), swapped_bytes.begin());
+            std::memcpy(&value, swapped_bytes.data(), sizeof(T));
+#endif
+        } else {
+            std::memcpy(&value, bytes, sizeof(T));
+        }
+    }
+    return value;
+}
+
+} // namespace detail
+
 template <Integral T>
 T read_scalar(std::ifstream &f, bool bigEndian) {
     constexpr size_t size = sizeof(T);
@@ -44,24 +70,7 @@ T read_scalar(std::ifstream &f, bool bigEndian) {
     if (f.gcount() != static_cast<std::streamsize>(size)) {
         throw std::runtime_error("Échec de la lecture de " + std::to_string(size) + " octets");
     }
-    T value;
-    if constexpr (size == 1) {
-        value = bytes[0];
-    } else {
-        if (bigEndian != (std::endian::native == std::endian::big)) {
-#if defined(__cpp_lib_byteswap) || (__cplusplus >= 202302L)
-            std::memcpy(&value, bytes.data(), size);
-            value = std::byteswap(value);
-#else
-            std::array<uint8_t, size> swapped_bytes;
-            std::reverse_copy(bytes.begin(), bytes.end(), swapped_bytes.begin());
-            std::memcpy(&value, swapped_bytes.data(), size);
-#endif
-        } else {
-            std::memcpy(&value, bytes.data(), size);
-        }
-    }
-    return value;
+    return detail::read_scalar_impl<T>(bytes.data(), bigEndian);
 }
 
 template <Integral T>
