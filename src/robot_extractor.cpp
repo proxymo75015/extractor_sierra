@@ -116,13 +116,22 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
 }
 
 void RobotExtractor::readPrimer() {
+  const std::uintmax_t fileSize = std::filesystem::file_size(m_srcPath);
   if (!m_hasAudio) {
+    std::streamoff curPos = m_fp.tellg();
+    if (curPos < 0 || static_cast<std::uintmax_t>(curPos) + m_primerReservedSize > fileSize) {
+      throw std::runtime_error("Primer hors limites");
+    }
     m_fp.seekg(m_primerReservedSize, std::ios::cur);
     return;
   }
   StreamExceptionGuard guard(m_fp);
   if (m_primerReservedSize != 0) {
     m_primerPosition = m_fp.tellg();
+    if (m_primerPosition < 0 ||
+        static_cast<std::uintmax_t>(m_primerPosition) + m_primerReservedSize > fileSize) {
+      throw std::runtime_error("Primer hors limites");
+    }
     m_totalPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
     int16_t compType = read_scalar<int16_t>(m_fp, m_bigEndian);
     m_evenPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
