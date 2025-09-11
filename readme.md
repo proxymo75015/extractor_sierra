@@ -32,10 +32,10 @@ Usage
 
 Options
 
---audio: Extract audio tracks as WAV files
---quiet: Suppress console output
---force-be: Force big-endian byte order
---force-le: Force little-endian byte order
+--audio: Extract audio tracks as WAV files␊
+--quiet: Suppress console output␊
+--force-be: Force big-endian byte order. Cannot be used with --force-le
+--force-le: Force little-endian byte order. Cannot be used with --force-be
 
 Output
 
@@ -58,4 +58,5 @@ This tool is designed to be compatible with ScummVM's Robot file format (version
 License
 
 BSD 3-Clause License
+
 
