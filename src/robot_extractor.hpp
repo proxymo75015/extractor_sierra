@@ -22,6 +22,7 @@ inline void expand_cel(std::span<std::byte> target,
                        uint16_t h, uint8_t scale) {
   if (scale < 1) {
     throw std::runtime_error("Scale invalide");
+  }    
   if (scale > 200) {
     throw std::runtime_error("Scale trop grand");
   }
