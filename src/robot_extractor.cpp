@@ -389,122 +389,129 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
   frameJson["frame"] = frameNo;
   frameJson["cels"] = nlohmann::json::array();
 
-  if (m_hasPalette) {
-    // Palette size has been validated in readPalette(); assume it is correct
-    // here.
-    size_t offset = 2;
-    for (int i = 0; i < numCels; ++i) {
-      if (offset + 22 > m_frameBuffer.size()) {
-        throw std::runtime_error("En-tête de cel invalide");
-      }
-      auto celHeader = std::span(m_frameBuffer).subspan(offset, 22);
-      uint8_t verticalScale = static_cast<uint8_t>(celHeader[1]);
-      uint16_t w = read_scalar<uint16_t>(celHeader.subspan(2, 2), m_bigEndian);
-      uint16_t h = read_scalar<uint16_t>(celHeader.subspan(4, 2), m_bigEndian);
-      int16_t x = read_scalar<int16_t>(celHeader.subspan(10, 2), m_bigEndian);
-      int16_t y = read_scalar<int16_t>(celHeader.subspan(12, 2), m_bigEndian);
-      uint16_t dataSize =
-          read_scalar<uint16_t>(celHeader.subspan(14, 2), m_bigEndian);
-      uint16_t numChunks =
-          read_scalar<uint16_t>(celHeader.subspan(16, 2), m_bigEndian);
-      offset += 22;
+  size_t offset = 2;
+  if (!m_hasPalette) {
+    frameJson["palette_required"] = true;
+    log_warn(m_srcPath,
+             "Palette manquante, décodage des cels sans PNG pour la frame " +
+                 std::to_string(frameNo),
+             m_options);
+  }
+  // Palette size has been validated in readPalette(); assume it is correct
+  // here.
+  for (int i = 0; i < numCels; ++i) {
+    if (offset + 22 > m_frameBuffer.size()) {
+      throw std::runtime_error("En-tête de cel invalide");
+    }
+    auto celHeader = std::span(m_frameBuffer).subspan(offset, 22);
+    uint8_t verticalScale = static_cast<uint8_t>(celHeader[1]);
+    uint16_t w = read_scalar<uint16_t>(celHeader.subspan(2, 2), m_bigEndian);
+    uint16_t h = read_scalar<uint16_t>(celHeader.subspan(4, 2), m_bigEndian);
+    int16_t x = read_scalar<int16_t>(celHeader.subspan(10, 2), m_bigEndian);
+    int16_t y = read_scalar<int16_t>(celHeader.subspan(12, 2), m_bigEndian);
+    uint16_t dataSize =
+        read_scalar<uint16_t>(celHeader.subspan(14, 2), m_bigEndian);
+    uint16_t numChunks =
+        read_scalar<uint16_t>(celHeader.subspan(16, 2), m_bigEndian);
+    offset += 22;
 
-      if (offset + dataSize > m_frameBuffer.size()) {
-        throw std::runtime_error("Cel data exceeds frame buffer");
-      }
-      
-      size_t pixel_count = static_cast<size_t>(w) * h;
-      if (w == 0 || h == 0 || pixel_count > kMaxCelPixels) {
-        throw std::runtime_error("Dimensions de cel invalides");
-      }
-      if (verticalScale < 1) {
-        throw std::runtime_error("Facteur d'échelle vertical invalide");
-      }
-      if (verticalScale > 200) {
-        throw std::runtime_error("Facteur d'échelle vertical invalide");
-      }
-      
-      size_t sourceHeight = (static_cast<size_t>(h) * verticalScale) / 100;
-      if (sourceHeight == 0) {
-        throw std::runtime_error("Facteur d'échelle vertical invalide");
-      }
-      if (w != 0 && sourceHeight > SIZE_MAX / w) {
-        throw std::runtime_error(
-            "Débordement lors du calcul de la taille de cel");
-      }
-      size_t expected = static_cast<size_t>(w) * sourceHeight;
-            if (expected > kMaxCelPixels) {
-        throw std::runtime_error(
-            "Cel décompressé dépasse la taille maximale");
-      }
-      m_celBuffer.clear();
-      m_celBuffer.reserve(expected);
-      size_t cel_offset = offset;
-      for (int j = 0; j < numChunks; ++j) {
-        if (cel_offset + 10 > m_frameBuffer.size()) {
-          throw std::runtime_error("En-tête de chunk invalide");
-        }
-        auto chunkHeader = std::span(m_frameBuffer).subspan(cel_offset, 10);
-        uint32_t compSz =
-            read_scalar<uint32_t>(chunkHeader.subspan(0, 4), m_bigEndian);
-        uint32_t decompSz =
-            read_scalar<uint32_t>(chunkHeader.subspan(4, 4), m_bigEndian);
-        uint16_t compType =
-            read_scalar<uint16_t>(chunkHeader.subspan(8, 2), m_bigEndian);
-        cel_offset += 10;
+    if (offset + dataSize > m_frameBuffer.size()) {
+      throw std::runtime_error("Cel data exceeds frame buffer");
+    }
 
-        size_t remaining_expected = expected - m_celBuffer.size();
-        if (decompSz > remaining_expected) {
-          log_error(m_srcPath,
-                    "Taille de chunk décompressé excède l'espace "
-                    "restant pour le cel " +
-                        std::to_string(i) + " dans la frame " +
-                        std::to_string(frameNo),
-                    m_options);
-          if (cel_offset + compSz > m_frameBuffer.size()) {
-            throw std::runtime_error("Données de chunk insuffisantes");
-          }
-          cel_offset += compSz;
-          continue;
-        }
+    size_t pixel_count = static_cast<size_t>(w) * h;
+    if (w == 0 || h == 0 || pixel_count > kMaxCelPixels) {
+      throw std::runtime_error("Dimensions de cel invalides");
+    }
+    if (verticalScale < 1) {
+      throw std::runtime_error("Facteur d'échelle vertical invalide");
+    }
+    if (verticalScale > 200) {
+      throw std::runtime_error("Facteur d'échelle vertical invalide");
+    }
+
+    size_t sourceHeight = (static_cast<size_t>(h) * verticalScale) / 100;
+    if (sourceHeight == 0) {
+      throw std::runtime_error("Facteur d'échelle vertical invalide");
+    }
+    if (w != 0 && sourceHeight > SIZE_MAX / w) {
+      throw std::runtime_error(
+          "Débordement lors du calcul de la taille de cel");
+    }
+    size_t expected = static_cast<size_t>(w) * sourceHeight;
+    if (expected > kMaxCelPixels) {
+      throw std::runtime_error(
+          "Cel décompressé dépasse la taille maximale");
+    }
+    m_celBuffer.clear();
+    m_celBuffer.reserve(expected);
+    size_t cel_offset = offset;
+    for (int j = 0; j < numChunks; ++j) {
+      if (cel_offset + 10 > m_frameBuffer.size()) {
+        throw std::runtime_error("En-tête de chunk invalide");
+      }
+      auto chunkHeader = std::span(m_frameBuffer).subspan(cel_offset, 10);
+      uint32_t compSz =
+          read_scalar<uint32_t>(chunkHeader.subspan(0, 4), m_bigEndian);
+      uint32_t decompSz =
+          read_scalar<uint32_t>(chunkHeader.subspan(4, 4), m_bigEndian);
+      uint16_t compType =
+          read_scalar<uint16_t>(chunkHeader.subspan(8, 2), m_bigEndian);
+      cel_offset += 10;
+
+      size_t remaining_expected = expected - m_celBuffer.size();
+      if (decompSz > remaining_expected) {
+        log_error(m_srcPath,
+                  "Taille de chunk décompressé excède l'espace "
+                  "restant pour le cel " +
+                      std::to_string(i) + " dans la frame " +
+                      std::to_string(frameNo),
+                  m_options);
         if (cel_offset + compSz > m_frameBuffer.size()) {
           throw std::runtime_error("Données de chunk insuffisantes");
         }
-        auto comp = std::span(m_frameBuffer).subspan(cel_offset, compSz);
-        if (compType == 0) {
-          auto decomp = lzs_decompress(comp, decompSz);
-          m_celBuffer.insert(m_celBuffer.end(), decomp.begin(), decomp.end());
-        } else if (compType == 2) {
-          if (compSz != decompSz) {
-            throw std::runtime_error(
-                "Données de cel malformées: taille de chunk incohérente");
-          }
-          m_celBuffer.insert(m_celBuffer.end(), comp.begin(),
-                             comp.begin() + static_cast<ptrdiff_t>(decompSz));
-        } else {
-          throw std::runtime_error("Type de compression inconnu: " +
-                                   std::to_string(compType));
-        }
         cel_offset += compSz;
+        continue;        
       }
-
-      size_t bytes_consumed = cel_offset - offset;
-      if (bytes_consumed != dataSize) {
-        throw std::runtime_error(
-            "Données de cel malformées: taille déclarée incohérente");
+      if (cel_offset + compSz > m_frameBuffer.size()) {
+        throw std::runtime_error("Données de chunk insuffisantes");
       }
-
-      if (m_celBuffer.size() != expected) {
-        throw std::runtime_error("Cel corrompu: taille de données incohérente");
+      auto comp = std::span(m_frameBuffer).subspan(cel_offset, compSz);
+      if (compType == 0) {
+        auto decomp = lzs_decompress(comp, decompSz);
+        m_celBuffer.insert(m_celBuffer.end(), decomp.begin(), decomp.end());
+      } else if (compType == 2) {
+        if (compSz != decompSz) {
+          throw std::runtime_error(
+              "Données de cel malformées: taille de chunk incohérente");
+        }
+        m_celBuffer.insert(m_celBuffer.end(), comp.begin(),
+                           comp.begin() + static_cast<ptrdiff_t>(decompSz));
+      } else {
+        throw std::runtime_error("Type de compression inconnu: " +
+                                 std::to_string(compType));
       }
+      cel_offset += compSz;
+    }
 
-      uint16_t newH = h;
-      if (verticalScale != 100) {
-        std::vector<std::byte> expanded(static_cast<size_t>(w) * h);
-        expand_cel(expanded, m_celBuffer, w, h, verticalScale);
-        m_celBuffer = std::move(expanded);
-      }
+    size_t bytes_consumed = cel_offset - offset;
+    if (bytes_consumed != dataSize) {
+      throw std::runtime_error(
+          "Données de cel malformées: taille déclarée incohérente");
+    }
 
+    if (m_celBuffer.size() != expected) {
+      throw std::runtime_error("Cel corrompu: taille de données incohérente");
+    }
+
+    uint16_t newH = h;
+    if (verticalScale != 100) {
+      std::vector<std::byte> expanded(static_cast<size_t>(w) * h);
+      expand_cel(expanded, m_celBuffer, w, h, verticalScale);
+      m_celBuffer = std::move(expanded);
+    }
+
+    if (m_hasPalette) {
       // Taille d'une ligne en octets (largeur en pixels * 4 octets RGBA)
       size_t row_size = static_cast<size_t>(w) * 4;
       // Vérifie qu'on peut multiplier la hauteur par la taille d'une ligne
@@ -534,31 +541,31 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       }
 
       std::ostringstream oss;
-      oss << std::setw(5) << std::setfill('0') << frameNo << "_" << i << ".png";
+      oss << std::setw(5) << std::setfill('0') << frameNo << "_" << i
+          << ".png";
       auto outPath = m_dstDir / oss.str();
-      write_png_cross_platform(outPath, w, newH, 4, m_rgbaBuffer.data(), w * 4);
-      
-      nlohmann::json celJson;
-      celJson["index"] = i;
-      celJson["x"] = x;
-      celJson["y"] = y;
-      celJson["width"] = w;
-      celJson["height"] = newH;
-      celJson["vertical_scale"] = verticalScale;
-      frameJson["cels"].push_back(celJson);
-      offset = cel_offset;
+      write_png_cross_platform(outPath, w, newH, 4, m_rgbaBuffer.data(),
+                               w * 4);
     }
-    auto remaining = static_cast<std::ptrdiff_t>(m_frameBuffer.size()) -
-                     static_cast<std::ptrdiff_t>(offset);
-    if (remaining != 0) {
-      throw std::runtime_error(std::to_string(remaining) +
-                               " octets non traités dans la frame");
+
+    nlohmann::json celJson;
+    celJson["index"] = i;
+    celJson["x"] = x;
+    celJson["y"] = y;
+    celJson["width"] = w;
+    celJson["height"] = newH;
+    celJson["vertical_scale"] = verticalScale;
+    if (!m_hasPalette) {
+      celJson["palette_required"] = true;
     }
-  } else {
-    log_warn(m_srcPath,
-             "Palette manquante, cels ignorés pour la frame " +
-                 std::to_string(frameNo),
-             m_options);
+    frameJson["cels"].push_back(celJson);
+    offset = cel_offset;
+  }
+  auto remaining = static_cast<std::ptrdiff_t>(m_frameBuffer.size()) -
+                   static_cast<std::ptrdiff_t>(offset);
+  if (remaining != 0) {
+    throw std::runtime_error(std::to_string(remaining) +
+                             " octets non traités dans la frame");
   }
 
   if (m_hasAudio) {
