@@ -30,68 +30,30 @@ RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath,
 
 void RobotExtractor::readHeader() {
   StreamExceptionGuard guard(m_fp);
-  auto headerStart = m_fp.tellg();
-
   if (m_options.force_be) {
     m_bigEndian = true;
   } else if (m_options.force_le) {
     m_bigEndian = false;
   } else {
-    uint16_t sigLE = read_scalar<uint16_t>(m_fp, false);
-    if (sigLE == kRobotSig || sigLE == 0x3d) {
-      m_bigEndian = false;
-    } else {
-      m_fp.seekg(headerStart);
-      uint16_t sigBE = read_scalar<uint16_t>(m_fp, true);
-      if (sigBE == kRobotSig || sigBE == 0x3d) {
-        m_bigEndian = true;
-      } else {
-        throw std::runtime_error("Signature Robot invalide");
-      }
-    }
-    m_fp.seekg(headerStart);
+    m_bigEndian = detect_endianness(m_fp);
   }
 
-  parseHeaderFields();
+  parseHeaderFields(m_bigEndian);
 
-  auto version_invalid = [&]() { return m_version < 4 || m_version > 6; };
-
-  if (version_invalid()) {
-    m_bigEndian = !m_bigEndian;
-    m_fp.seekg(headerStart);
-    parseHeaderFields();
-
-    if (version_invalid()) {
-      throw std::runtime_error("Version Robot non supportée: " +
-                               std::to_string(m_version));
-    }
-  }
-
-  auto resolution_invalid = [&]() {
-    return m_xRes < 0 || m_yRes < 0 || m_xRes > m_options.max_x_res ||
-           m_yRes > m_options.max_y_res;
-  };
-
-  if (resolution_invalid()) {
-    log_warn(m_srcPath, "Résolution suspecte, inversion endianness...",
-             m_options);
-    m_bigEndian = !m_bigEndian;
-    m_fp.seekg(headerStart);
-    parseHeaderFields();
-    if (resolution_invalid()) {
-      throw std::runtime_error(
-          "Résolution invalide: " + std::to_string(m_xRes) + "x" +
-          std::to_string(m_yRes));
-    }
-  }
-
-  if (version_invalid()) {
+  if (m_version < 4 || m_version > 6) {
     throw std::runtime_error("Version Robot non supportée: " +
                              std::to_string(m_version));
   }
+
+  if (m_xRes < 0 || m_yRes < 0 || m_xRes > m_options.max_x_res ||
+      m_yRes > m_options.max_y_res) {
+    throw std::runtime_error("Résolution invalide: " + std::to_string(m_xRes) +
+                             "x" + std::to_string(m_yRes));
+  }  
 }
 
-void RobotExtractor::parseHeaderFields() {
+void RobotExtractor::parseHeaderFields(bool bigEndian) {
+  m_bigEndian = bigEndian;
   uint16_t sig = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (sig != kRobotSig && sig != 0x3d) {
     throw std::runtime_error("Signature Robot invalide");
