@@ -36,16 +36,25 @@ inline int validate_expand_params(std::span<std::byte> target,
   if (sourceHeight <= 0) {
     throw std::runtime_error("Hauteur source invalide");
   }
-  if (source.size() != static_cast<size_t>(w) * sourceHeight) {
+  const size_t wSize = static_cast<size_t>(w);
+  if (static_cast<size_t>(sourceHeight) > SIZE_MAX / wSize) {
+    throw std::runtime_error(
+        "Multiplication de la taille source dépasse SIZE_MAX");
+  }
+  if (static_cast<size_t>(h) > SIZE_MAX / wSize) {
+    throw std::runtime_error(
+        "Multiplication de la taille cible dépasse SIZE_MAX");
+  }
+  if (source.size() != wSize * static_cast<size_t>(sourceHeight)) {
     throw std::runtime_error(
         "Taille source incorrecte pour l'expansion verticale");
   }
-  if (target.size() != static_cast<size_t>(w) * h) {
+  if (target.size() != wSize * static_cast<size_t>(h)) {
     throw std::runtime_error(
         "Taille cible incorrecte pour l'expansion verticale");
   }
 
-    return sourceHeight;
+  return sourceHeight;
 }
 
 // Agrandit une image lorsque la source est plus petite que la cible.
