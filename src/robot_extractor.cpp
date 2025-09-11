@@ -393,6 +393,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
           read_scalar<uint16_t>(celHeader.subspan(16, 2), m_bigEndian);
       offset += 22;
 
+      if (offset + dataSize > m_frameBuffer.size()) {
+        throw std::runtime_error("Cel data exceeds frame buffer");
+      }
+      
       size_t pixel_count = static_cast<size_t>(w) * h;
       if (w == 0 || h == 0 || pixel_count > kMaxCelPixels) {
         throw std::runtime_error("Dimensions de cel invalides");
