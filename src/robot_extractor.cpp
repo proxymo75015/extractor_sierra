@@ -729,6 +729,18 @@ void RobotExtractor::extract() {
 
   auto tmpPath = m_dstDir / "metadata.json.tmp";
   std::string tmpPathStr = tmpPath.string();
+    struct TempFileGuard {
+    std::filesystem::path path;
+    bool active{true};
+    ~TempFileGuard() noexcept {
+      if (active) {
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+      }
+    }
+    void release() noexcept { active = false; }
+  } guard{tmpPath};
+
   {
     std::ofstream jsonFile(tmpPath, std::ios::binary);
     if (!jsonFile) {
@@ -767,6 +779,7 @@ void RobotExtractor::extract() {
                                tmpPathStr + ": " + ec.message());
     }
   }
+  guard.release();  
 }
 
 } // namespace robot
