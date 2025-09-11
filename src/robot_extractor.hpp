@@ -23,10 +23,13 @@ inline void expand_cel(std::span<std::byte> target,
                        uint16_t h, uint8_t scale) {
   if (scale < 1) {
     throw std::runtime_error("Scale invalide");
-  }    
+  }
   if (scale > 200) {
     throw std::runtime_error("Scale trop grand");
   }
+  if (w == 0 || h == 0) {
+    throw std::runtime_error("Dimensions de cel invalides");
+  }  
   const int sourceHeight = static_cast<int>(h) * scale / 100;
   if (sourceHeight <= 0) {
     throw std::runtime_error("Hauteur source invalide");
