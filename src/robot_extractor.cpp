@@ -264,12 +264,9 @@ void RobotExtractor::readPrimer() {
 }
 
 void RobotExtractor::readPalette() {
+  StreamExceptionGuard guard(m_fp);  
   if (!m_hasPalette) {
     m_fp.seekg(m_paletteSize, std::ios::cur);
-    if (!m_fp) {
-      throw std::runtime_error(std::string("Palette tronquée pour ") +
-                               m_srcPath.string());
-    }
     return;
   }
   
@@ -293,7 +290,6 @@ void RobotExtractor::readPalette() {
         " octets (768 requis, multiple de 3, maximum 1200)");
   }
 
-  StreamExceptionGuard guard(m_fp);
   m_palette.resize(m_paletteSize);
   try {
     read_exact(m_fp, m_palette.data(), static_cast<size_t>(m_paletteSize));
