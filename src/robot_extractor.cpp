@@ -30,6 +30,10 @@ RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath,
 
 void RobotExtractor::readHeader() {
   StreamExceptionGuard guard(m_fp);
+  if (m_options.force_be && m_options.force_le) {
+    throw std::runtime_error(
+        "Options force_be et force_le mutuellement exclusives");
+  }  
   if (m_options.force_be) {
     m_bigEndian = true;
   } else if (m_options.force_le) {
