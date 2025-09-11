@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <iomanip>
@@ -413,7 +414,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       throw std::runtime_error("En-tête de cel invalide");
     }
     auto celHeader = std::span(m_frameBuffer).subspan(offset, 22);
-    uint8_t verticalScale = static_cast<uint8_t>(celHeader[1]);
+    uint8_t verticalScale = std::to_integer<uint8_t>(celHeader[1]);
     uint16_t w = read_scalar<uint16_t>(celHeader.subspan(2, 2), m_bigEndian);
     uint16_t h = read_scalar<uint16_t>(celHeader.subspan(4, 2), m_bigEndian);
     int16_t x = read_scalar<int16_t>(celHeader.subspan(10, 2), m_bigEndian);
@@ -538,7 +539,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       }
       m_rgbaBuffer.resize(required);
       for (size_t pixel = 0; pixel < m_celBuffer.size(); ++pixel) {
-        auto idx = static_cast<uint8_t>(m_celBuffer[pixel]);
+        auto idx = std::to_integer<uint8_t>(m_celBuffer[pixel]);
         if (static_cast<size_t>(idx) >= m_palette.size() / 3) {
           throw std::runtime_error("Indice de palette hors limites: " +
                                    std::to_string(idx));
