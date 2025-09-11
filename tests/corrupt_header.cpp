@@ -7,7 +7,7 @@
 
 namespace fs = std::filesystem;
 
-TEST_CASE("Invalid resolution after endian swap throws") {
+TEST_CASE("Invalid resolution throws") {
     fs::path tmpDir = fs::temp_directory_path();
     fs::path input = tmpDir / "corrupt_header.rbt";
     std::vector<unsigned char> data = {
