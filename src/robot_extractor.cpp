@@ -589,7 +589,16 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             throw std::runtime_error("Taille audio invalide");
           }
           int64_t maxSize = static_cast<int64_t>(audioBlkLen) - 8;
-          if (size <= maxSize) {
+          if (size != static_cast<int32_t>(m_audioBlkSize) || size > maxSize) {
+            log_error(m_srcPath,
+                      "Taille de bloc audio inattendue: " +
+                          std::to_string(size) +
+                          " (attendu: " +
+                          std::to_string(m_audioBlkSize) + ")",
+                      m_options);
+            // En-tête invalide, ignorer le reste du bloc audio en toute sécurité
+            m_fp.seekg(static_cast<std::streamoff>(maxSize), std::ios::cur);
+          } else {
             std::vector<std::byte> block(static_cast<size_t>(size));
             m_fp.read(reinterpret_cast<char *>(block.data()),
                       checked_streamsize(block.size()));
@@ -601,9 +610,6 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
               throw std::runtime_error("Taille audio incohérente");
             }
             m_fp.seekg(static_cast<std::streamoff>(toSkip), std::ios::cur);
-          } else {
-            // Invalid header, skip the rest of the audio block safely
-            m_fp.seekg(static_cast<std::streamoff>(maxSize), std::ios::cur);
           }
         }
       }
