@@ -129,6 +129,9 @@ void log_error(const std::filesystem::path &path, const std::string &msg,
 std::wstring make_long_path(const std::wstring &path);
 #endif
 
+void write_png_cross_platform(const std::filesystem::path &path, int w, int h,
+                              int comp, const void *data, int stride);
+
 constexpr size_t kMaxLzsOutput = 10'000'000;
 
 std::vector<std::byte> lzs_decompress(std::span<const std::byte> in, size_t expected_size);
