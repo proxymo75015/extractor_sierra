@@ -80,19 +80,6 @@ void write_le32(char *dst, uint32_t value) {
     dst[3] = static_cast<char>((value >> 24) & 0xFF);
 }
 
-template <Integral T>
-T read_scalar(std::span<const std::byte> data, bool bigEndian) {
-    constexpr size_t size = sizeof(T);
-    if (data.size() < size) {
-        throw std::runtime_error("Échec de la lecture de " +
-                                 std::to_string(size) +
-                                 " octets");
-    }
-    return detail::read_scalar_impl<T>(
-        reinterpret_cast<const uint8_t *>(data.data()), bigEndian);
-}
-
-
 namespace {
 
 std::mutex g_logMutex;
@@ -260,12 +247,5 @@ void dpcm16_decompress_last(std::span<const std::byte> in, int16_t &carry) {
         carry = static_cast<int16_t>(predictor);
     }
 }
-
-template uint8_t read_scalar<uint8_t>(std::span<const std::byte>, bool);
-template int8_t read_scalar<int8_t>(std::span<const std::byte>, bool);
-template uint16_t read_scalar<uint16_t>(std::span<const std::byte>, bool);
-template int16_t read_scalar<int16_t>(std::span<const std::byte>, bool);
-template uint32_t read_scalar<uint32_t>(std::span<const std::byte>, bool);
-template int32_t read_scalar<int32_t>(std::span<const std::byte>, bool);
 
 } // namespace robot
