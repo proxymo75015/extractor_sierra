@@ -676,22 +676,31 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
   auto longPath = make_long_path(outPath.wstring());
   auto pathUtf8 = std::filesystem::path{longPath}.u8string();
   outPathStr.assign(pathUtf8.begin(), pathUtf8.end());
-  std::ofstream wavFile(std::filesystem::path{longPath}, std::ios::binary);
+  std::filesystem::path fsOutPath{longPath};
+  std::ofstream wavFile(fsOutPath, std::ios::binary);
 #else
   outPathStr = outPath.string();
-  std::ofstream wavFile(outPath, std::ios::binary);
+  std::filesystem::path fsOutPath = outPath;
+  std::ofstream wavFile(fsOutPath, std::ios::binary);
 #endif
   if (!wavFile) {
     throw std::runtime_error("Échec de l'ouverture du fichier WAV: " +
                              outPathStr);
   }
-  wavFile.write(header.data(), checked_streamsize(header.size()));
-  wavFile.write(reinterpret_cast<const char *>(samples.data()),
-                checked_streamsize(data_size));
-  wavFile.flush();
-  if (!wavFile) {
-    throw std::runtime_error("Échec de l'écriture du fichier WAV: " +
-                             outPathStr);
+  try {
+    wavFile.write(header.data(), checked_streamsize(header.size()));
+    wavFile.write(reinterpret_cast<const char *>(samples.data()),
+                  checked_streamsize(data_size));
+    wavFile.flush();
+    if (!wavFile) {
+      throw std::runtime_error("Échec de l'écriture du fichier WAV: " +
+                               outPathStr);
+    }
+  } catch (...) {
+    wavFile.close();
+    std::error_code ec;
+    std::filesystem::remove(fsOutPath, ec);
+    throw;
   }
   wavFile.close();
   if (wavFile.fail()) {
