@@ -204,6 +204,10 @@ std::vector<std::byte> lzs_decompress(std::span<const std::byte> in, size_t expe
         }
     }
 
+    if (in_pos != in.size()) {
+        throw std::runtime_error("Flux LZS malformé: octets non traités");
+    }
+    
     if (out_pos != expected_size) {
         throw std::runtime_error("Taille décompressée (" + std::to_string(out_pos) +
                                  ") ne correspond pas à la taille attendue (" +
