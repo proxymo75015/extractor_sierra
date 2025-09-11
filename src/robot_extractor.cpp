@@ -414,6 +414,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             "Débordement lors du calcul de la taille de cel");
       }
       size_t expected = static_cast<size_t>(w) * sourceHeight;
+            if (expected > kMaxCelPixels) {
+        throw std::runtime_error(
+            "Cel décompressé dépasse la taille maximale");
+      }
       m_celBuffer.clear();
       m_celBuffer.reserve(expected);
       size_t cel_offset = offset;
