@@ -111,6 +111,8 @@ private:
   void parseHeaderFields();
   void readPrimer();
   void readPalette();
+  void processPrimerChannel(std::vector<std::byte> &primer, int16_t &predictor,
+                            bool isEven);
   void readSizesAndCues();
   bool exportFrame(int frameNo, nlohmann::json &frameJson);
   void writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate,
