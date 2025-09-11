@@ -98,6 +98,12 @@ void append_le16(std::vector<std::byte> &out, uint16_t value);
 // Ajoute un entier 32 bits en little-endian dans un vecteur de bytes
 void append_le32(std::vector<std::byte> &out, uint32_t value);
 
+// Écrit un entier 16 bits en little-endian dans un tampon fixé
+void write_le16(char *dst, uint16_t value);
+
+// Écrit un entier 32 bits en little-endian dans un tampon fixé
+void write_le32(char *dst, uint32_t value);
+
 void log_info(const std::filesystem::path &path, const std::string &msg,
               const ExtractorOptions &opt);
 void log_warn(const std::filesystem::path &path, const std::string &msg,
