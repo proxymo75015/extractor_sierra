@@ -21,12 +21,16 @@ std::streamsize checked_streamsize(size_t size) {
 }
 
 void read_exact(std::ifstream &f, void *data, size_t size) {
-        std::streamsize ss = checked_streamsize(size);
+    std::streamsize ss = checked_streamsize(size);
     auto old = f.exceptions();
     f.exceptions(std::ios::goodbit);
+    auto start = f.tellg();
     f.read(static_cast<char *>(data), ss);
     std::streamsize got = f.gcount();
     f.clear();
+    if (got != ss) {
+        f.seekg(start);
+    }
     f.exceptions(old);
     if (got != ss) {
         throw std::runtime_error("Lecture incomplète (" +
