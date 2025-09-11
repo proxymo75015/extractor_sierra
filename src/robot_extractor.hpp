@@ -8,6 +8,7 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
