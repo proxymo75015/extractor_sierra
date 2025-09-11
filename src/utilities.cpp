@@ -6,6 +6,9 @@
 #include <algorithm>
 #include <array>
 #include <limits>
+#include <system_error>
+
+#include "stb_image_write.h"
 
 namespace robot {
 
@@ -135,6 +138,27 @@ std::wstring make_long_path(const std::wstring &path) {
     return abs;
 }
 #endif
+
+void write_png_cross_platform(const std::filesystem::path &path, int w, int h,
+                              int comp, const void *data, int stride) {
+#ifdef _WIN32
+    auto longPath = make_long_path(path.wstring());
+    auto pathUtf8 = std::filesystem::path{longPath}.u8string();
+    std::string pathUtf8Str(pathUtf8.begin(), pathUtf8.end());
+    if (!stbi_write_png(pathUtf8Str.c_str(), w, h, comp, data, stride)) {
+        std::error_code ec;
+        std::filesystem::remove(std::filesystem::u8path(pathUtf8Str), ec);
+        throw std::runtime_error(std::string("Échec de l'écriture de ") + pathUtf8Str);
+    }
+#else
+    auto pathStr = path.string();
+    if (!stbi_write_png(pathStr.c_str(), w, h, comp, data, stride)) {
+        std::error_code ec;
+        std::filesystem::remove(path, ec);
+        throw std::runtime_error(std::string("Échec de l'écriture de ") + pathStr);
+    }
+#endif
+}
 
 std::vector<std::byte> lzs_decompress(std::span<const std::byte> in, size_t expected_size) {
     if (expected_size > kMaxLzsOutput) {
