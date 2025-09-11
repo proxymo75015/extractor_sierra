@@ -43,6 +43,18 @@ void append_le32(std::vector<std::byte> &out, uint32_t value) {
     }
 }
 
+void write_le16(char *dst, uint16_t value) {
+    dst[0] = static_cast<char>(value & 0xFF);
+    dst[1] = static_cast<char>((value >> 8) & 0xFF);
+}
+
+void write_le32(char *dst, uint32_t value) {
+    dst[0] = static_cast<char>(value & 0xFF);
+    dst[1] = static_cast<char>((value >> 8) & 0xFF);
+    dst[2] = static_cast<char>((value >> 16) & 0xFF);
+    dst[3] = static_cast<char>((value >> 24) & 0xFF);
+}
+
 template <Integral T>
 T read_scalar(std::span<const std::byte> data, bool bigEndian) {
     constexpr size_t size = sizeof(T);
