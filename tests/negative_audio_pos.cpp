@@ -29,7 +29,7 @@ static std::vector<uint8_t> build_header() {
     push16(h, 0);              // skip
     push16(h, 1);              // numFrames
     push16(h, 0);              // paletteSize
-    push16(h, 2);              // primerReservedSize
+    push16(h, 8);              // primerReservedSize
     push16(h, 1);              // xRes
     push16(h, 1);              // yRes
     h.push_back(0);            // hasPalette
@@ -46,9 +46,9 @@ static std::vector<uint8_t> build_header() {
 
 static std::vector<uint8_t> build_primer_header() {
     std::vector<uint8_t> p;
-    push32(p, 2);  // total primer size (unused)
+    push32(p, 8);  // total primer size (unused)
     push16(p, 0);  // compType
-    push32(p, 2);  // even size
+    push32(p, 8);  // even size
     push32(p, 0);  // odd size
     return p;
 }
@@ -62,8 +62,7 @@ TEST_CASE("Negative audio position throws") {
     auto data = build_header();
     auto primer = build_primer_header();
     data.insert(data.end(), primer.begin(), primer.end());
-    data.push_back(0x88); // even primer data
-    data.push_back(0x88);
+    for (int i = 0; i < 8; ++i) data.push_back(0x88); // even primer data
 
     push16(data, 2);   // frame size
     push16(data, 26);  // packet size
