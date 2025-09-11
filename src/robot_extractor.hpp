@@ -108,7 +108,7 @@ private:
   static constexpr size_t kMaxCuePoints = 256;
 
   void readHeader();
-  void parseHeaderFields();
+  void parseHeaderFields(bool bigEndian);
   void readPrimer();
   void readPalette();
   void processPrimerChannel(std::vector<std::byte> &primer, int16_t &predictor,
