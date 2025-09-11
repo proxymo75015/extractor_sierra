@@ -5,6 +5,7 @@
 #include <mutex>
 #include <algorithm>
 #include <array>
+#include <cstddef>
 #include <limits>
 #include <system_error>
 
@@ -159,7 +160,7 @@ std::vector<std::byte> lzs_decompress(std::span<const std::byte> in, size_t expe
     size_t in_pos = 0;
 
     while (in_pos < in.size()) {
-        uint8_t control = static_cast<uint8_t>(in[in_pos++]);
+        uint8_t control = std::to_integer<uint8_t>(in[in_pos++]);
         for (int i = 0; i < 8 && in_pos < in.size(); ++i) {
             if (control & (1 << i)) {
                 if (out_pos >= out.size()) {
@@ -170,8 +171,8 @@ std::vector<std::byte> lzs_decompress(std::span<const std::byte> in, size_t expe
                 if (in_pos + 1 >= in.size()) {
                     throw std::runtime_error("Données d'entrée insuffisantes pour LZS");
                 }
-                uint8_t byte1 = static_cast<uint8_t>(in[in_pos++]);
-                uint8_t byte2 = static_cast<uint8_t>(in[in_pos++]);
+                uint8_t byte1 = std::to_integer<uint8_t>(in[in_pos++]);
+                uint8_t byte2 = std::to_integer<uint8_t>(in[in_pos++]);
                 uint16_t offset = ((byte1 & 0xF0) << 4) | byte2;
                 uint8_t length = (byte1 & 0x0F) + 3;
                 if (offset == 0) {
@@ -219,7 +220,7 @@ std::vector<int16_t> dpcm16_decompress(std::span<const std::byte> in, int16_t &c
 
     int32_t predictor = carry;
     for (auto byte : in) {
-        uint8_t b = static_cast<uint8_t>(byte);
+        uint8_t b = std::to_integer<uint8_t>(byte);
         uint8_t hi = b >> 4;
         uint8_t lo = b & 0x0F;
         for (uint8_t nib : {hi, lo}) {
@@ -236,7 +237,7 @@ std::vector<int16_t> dpcm16_decompress(std::span<const std::byte> in, int16_t &c
 void dpcm16_decompress_last(std::span<const std::byte> in, int16_t &carry) {
     int32_t predictor = carry;
     for (auto byte : in) {
-        uint8_t b = static_cast<uint8_t>(byte);
+        uint8_t b = std::to_integer<uint8_t>(byte);
         uint8_t hi = b >> 4;
         predictor += DPCM_TABLE[hi];
         predictor = std::clamp(predictor, -32768, 32767);
