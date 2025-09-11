@@ -264,8 +264,12 @@ void RobotExtractor::readPrimer() {
 }
 
 void RobotExtractor::readPalette() {
-  StreamExceptionGuard guard(m_fp);  
+  StreamExceptionGuard guard(m_fp);
   if (!m_hasPalette) {
+    if (m_paletteSize != 0)
+      log_warn(m_srcPath,
+               "paletteSize non nul alors que hasPalette==false",
+               m_options);
     m_fp.seekg(m_paletteSize, std::ios::cur);
     return;
   }
