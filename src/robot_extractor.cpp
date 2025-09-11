@@ -218,6 +218,22 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
   }
 }
 
+void RobotExtractor::process_audio_block(std::span<std::byte> block,
+                                         bool isEven) {
+  if (block.size() < 8) {
+    throw std::runtime_error("Bloc audio trop petit");
+  }
+  auto runway = block.first(8);
+  auto audio = block.subspan(8);
+  int16_t &predictor = isEven ? m_audioPredictorEven : m_audioPredictorOdd;
+  dpcm16_decompress_last(runway, predictor);
+  auto samples = dpcm16_decompress(audio, predictor);
+  if (m_extractAudio) {
+    int &audioIndex = isEven ? m_evenAudioIndex : m_oddAudioIndex;
+    writeWav(samples, 11025, audioIndex++, isEven);
+  }
+}
+
 void RobotExtractor::readPalette() {
   StreamExceptionGuard guard(m_fp);
   if (!m_hasPalette) {
@@ -546,32 +562,12 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
           }
           int64_t maxSize = static_cast<int64_t>(audioBlkLen) - 8;
           if (size <= maxSize) {
-            std::vector<std::byte> audio(static_cast<size_t>(size - 8));
-            std::array<std::byte, 8> runway{};
-            m_fp.read(reinterpret_cast<char *>(runway.data()),
-                      checked_streamsize(runway.size()));
-            m_fp.read(reinterpret_cast<char *>(audio.data()),
-                      checked_streamsize(audio.size()));
+            std::vector<std::byte> block(static_cast<size_t>(size));
+            m_fp.read(reinterpret_cast<char *>(block.data()),
+                      checked_streamsize(block.size()));
             bool isEven = (pos % 2) == 0;
             // L'audio peut exister même sans primer, décompresser toujours.
-            if (isEven) {
-              // Décompresser le "runway" pour mettre à jour le prédicteur,
-              // puis ignorer les échantillons produits.
-              dpcm16_decompress_last(std::span(runway), m_audioPredictorEven);
-              auto samples =
-                  dpcm16_decompress(std::span(audio), m_audioPredictorEven);
-              if (m_extractAudio) {
-                writeWav(samples, 11025, m_evenAudioIndex++, true);
-              }
-            } else {
-              // Même logique pour le canal impair.
-              dpcm16_decompress_last(std::span(runway), m_audioPredictorOdd);
-              auto samples =
-                  dpcm16_decompress(std::span(audio), m_audioPredictorOdd);
-              if (m_extractAudio) {
-                writeWav(samples, 11025, m_oddAudioIndex++, false);
-              }
-            }
+            process_audio_block(block, isEven);
             int64_t toSkip = maxSize - size;
             if (toSkip < 0) {
               throw std::runtime_error("Taille audio incohérente");
