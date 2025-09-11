@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cstdint>
 #include <filesystem>
 #include <iomanip>
@@ -230,9 +231,7 @@ void RobotExtractor::process_audio_block(std::span<std::byte> block,
     throw std::runtime_error("Bloc audio trop petit");
   }
   auto runway = block.first(8);
-  if (runway.size() != 8) {
-    throw std::runtime_error("Section runway invalide (8 octets attendus)");
-  }
+  assert(runway.size() == 8);
   auto audio = block.subspan(8);
   if (audio.empty()) {
     throw std::runtime_error("Bloc audio sans données");
