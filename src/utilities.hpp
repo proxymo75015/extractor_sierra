@@ -101,6 +101,11 @@ std::streamsize checked_streamsize(size_t size);
 // Lève std::runtime_error si la lecture est incomplète.
 void read_exact(std::ifstream &f, void *data, size_t size);
 
+// Détecte l'endianness à partir de la signature en tête de fichier.
+// Retourne true si la signature indique un format big-endian.
+// Le flux est repositionné à sa position initiale après lecture.
+bool detect_endianness(std::ifstream &f);
+
 // Ajoute un entier 16 bits en little-endian dans un vecteur de bytes
 void append_le16(std::vector<std::byte> &out, uint16_t value);
 
