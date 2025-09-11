@@ -234,6 +234,9 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
 
 void RobotExtractor::process_audio_block(std::span<std::byte> block,
                                          bool isEven) {
+  if (block.size() != m_audioBlkSize) {
+    throw std::runtime_error("Unexpected audio block size");
+  }
   if (block.size() < 8) {
     throw std::runtime_error("Bloc audio trop petit");
   }
