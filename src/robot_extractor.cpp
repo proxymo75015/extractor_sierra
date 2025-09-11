@@ -222,7 +222,10 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     } else {
       pcm.clear();
     }
-    int &audioIndex = isEven ? m_evenAudioIndex : m_oddAudioIndex;
+    size_t &audioIndex = isEven ? m_evenAudioIndex : m_oddAudioIndex;
+    if (audioIndex == std::numeric_limits<size_t>::max()) {
+      throw std::runtime_error("Audio index overflow");
+    }
     writeWav(pcm, 11025, audioIndex++, isEven);
   } else {
     dpcm16_decompress_last(std::span(primer), predictor);
@@ -244,7 +247,10 @@ void RobotExtractor::process_audio_block(std::span<std::byte> block,
   dpcm16_decompress_last(runway, predictor);
   auto samples = dpcm16_decompress(audio, predictor);
   if (m_extractAudio) {
-    int &audioIndex = isEven ? m_evenAudioIndex : m_oddAudioIndex;
+    size_t &audioIndex = isEven ? m_evenAudioIndex : m_oddAudioIndex;
+    if (audioIndex == std::numeric_limits<size_t>::max()) {
+      throw std::runtime_error("Audio index overflow");
+    }
     writeWav(samples, 11025, audioIndex++, isEven);
   }
 }
@@ -580,7 +586,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
 }
 
 void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
-                              uint32_t sampleRate, int blockIndex,
+                              uint32_t sampleRate, size_t blockIndex,
                               bool isEvenChannel) {
   if (sampleRate == 0)
     sampleRate = 11025;
