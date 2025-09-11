@@ -227,8 +227,8 @@ void RobotExtractor::process_audio_block(std::span<std::byte> block,
     throw std::runtime_error("Section runway invalide (8 octets attendus)");
   }
   auto audio = block.subspan(8);
-  if (audio.size() % 1 != 0) {
-    throw std::runtime_error("Taille audio non multiple de 1 octet");
+  if (audio.empty()) {
+    throw std::runtime_error("Bloc audio sans données");
   }
   int16_t &predictor = isEven ? m_audioPredictorEven : m_audioPredictorOdd;
   dpcm16_decompress_last(runway, predictor);
