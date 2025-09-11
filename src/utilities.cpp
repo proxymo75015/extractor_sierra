@@ -63,24 +63,8 @@ T read_scalar(std::span<const std::byte> data, bool bigEndian) {
                                  std::to_string(size) +
                                  " octets");
     }
-    T value;
-    if constexpr (size == 1) {
-        value = static_cast<T>(std::to_integer<uint8_t>(data[0]));
-    } else {
-        if (bigEndian != (std::endian::native == std::endian::big)) {
-#if defined(__cpp_lib_byteswap) || (__cplusplus >= 202302L)
-            std::memcpy(&value, data.data(), size);
-            value = std::byteswap(value);
-#else
-            std::array<std::byte, size> swapped_bytes;
-            std::reverse_copy(data.begin(), data.begin() + size, swapped_bytes.begin());
-            std::memcpy(&value, swapped_bytes.data(), size);
-#endif
-        } else {
-            std::memcpy(&value, data.data(), size);
-        }
-    }
-    return value;
+    return detail::read_scalar_impl<T>(
+        reinterpret_cast<const uint8_t *>(data.data()), bigEndian);
 }
 
 
