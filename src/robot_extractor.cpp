@@ -652,16 +652,6 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
   uint32_t byte_rate = sampleRate * 2;
 
   std::array<char, 44> header{};
-  auto write_le16 = [](char *dst, uint16_t v) {
-    dst[0] = static_cast<char>(v & 0xFF);
-    dst[1] = static_cast<char>((v >> 8) & 0xFF);
-  };
-  auto write_le32 = [](char *dst, uint32_t v) {
-    dst[0] = static_cast<char>(v & 0xFF);
-    dst[1] = static_cast<char>((v >> 8) & 0xFF);
-    dst[2] = static_cast<char>((v >> 16) & 0xFF);
-    dst[3] = static_cast<char>((v >> 24) & 0xFF);
-  };
 
   header[0] = 'R';
   header[1] = 'I';
