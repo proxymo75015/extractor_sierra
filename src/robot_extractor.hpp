@@ -2,6 +2,7 @@
 
 #include "utilities.hpp"
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
@@ -155,7 +156,7 @@ private:
   void readSizesAndCues();
   bool exportFrame(int frameNo, nlohmann::json &frameJson);
   void writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate,
-                int blockIndex, bool isEvenChannel);
+                size_t blockIndex, bool isEvenChannel);
 
   std::filesystem::path m_srcPath;
   std::filesystem::path m_dstDir;
@@ -194,8 +195,8 @@ private:
   std::vector<std::byte> m_rgbaBuffer;
   int16_t m_audioPredictorEven = 0;
   int16_t m_audioPredictorOdd = 0;
-  int m_evenAudioIndex = 0;
-  int m_oddAudioIndex = 0;
+  size_t m_evenAudioIndex = 0;
+  size_t m_oddAudioIndex = 0;
 };
 
 #ifdef ROBOT_EXTRACTOR_TESTING
