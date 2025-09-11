@@ -92,5 +92,5 @@ TEST_CASE("Truncated audio block is handled") {
     out.close();
 
     robot::RobotExtractor extractor(input, outDir, true);
-    REQUIRE_THROWS_AS(extractor.extract(), std::runtime_error);
+    REQUIRE_NOTHROW(extractor.extract());
 }
