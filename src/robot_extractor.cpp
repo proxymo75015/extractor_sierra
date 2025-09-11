@@ -12,7 +12,6 @@
 #include <sstream>
 #include <stdexcept>
 
-#include "stb_image_write.h"
 #include "utilities.hpp"
 
 namespace robot {
@@ -501,27 +500,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       std::ostringstream oss;
       oss << std::setw(5) << std::setfill('0') << frameNo << "_" << i << ".png";
       auto outPath = m_dstDir / oss.str();
-#ifdef _WIN32
-      auto longPath = make_long_path(outPath.wstring());
-      auto pathUtf8 = std::filesystem::path{longPath}.u8string();
-      std::string pathUtf8Str(pathUtf8.begin(), pathUtf8.end());
-      if (!stbi_write_png(pathUtf8Str.c_str(), w, newH, 4, m_rgbaBuffer.data(),
-                          w * 4)) {
-        std::error_code ec;
-        std::filesystem::remove(std::filesystem::u8path(pathUtf8Str), ec);
-        throw std::runtime_error(std::string("Échec de l'écriture de ") +
-                                 pathUtf8Str);
-      }
-#else
-      auto outPathStr = outPath.string();
-      if (!stbi_write_png(outPathStr.c_str(), w, newH, 4, m_rgbaBuffer.data(),
-                          w * 4)) {
-        std::error_code ec;
-        std::filesystem::remove(outPath, ec);
-        throw std::runtime_error(std::string("Échec de l'écriture de ") +
-                                 outPathStr);
-      }
-#endif
+      write_png_cross_platform(outPath, w, newH, 4, m_rgbaBuffer.data(), w * 4);
       
       nlohmann::json celJson;
       celJson["index"] = i;
