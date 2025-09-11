@@ -59,13 +59,13 @@ bool detect_endianness(std::ifstream &f) {
 
 void append_le16(std::vector<std::byte> &out, uint16_t value) {
     for (int i = 0; i < 2; ++i) {
-        out.push_back(std::byte(value >> (i * 8)));
+        out.push_back(std::byte((value >> (i * 8)) & 0xFF));
     }
 }
 
 void append_le32(std::vector<std::byte> &out, uint32_t value) {
     for (int i = 0; i < 4; ++i) {
-        out.push_back(std::byte(value >> (i * 8)));
+        out.push_back(std::byte((value >> (i * 8)) & 0xFF));
     }
 }
 
