@@ -74,7 +74,16 @@ T read_scalar(std::ifstream &f, bool bigEndian) {
 }
 
 template <Integral T>
-T read_scalar(std::span<const std::byte> data, bool bigEndian);
+inline T read_scalar(std::span<const std::byte> data, bool bigEndian) {
+    constexpr size_t size = sizeof(T);
+    if (data.size() < size) {
+        throw std::runtime_error("Échec de la lecture de " +
+                                 std::to_string(size) +
+                                 " octets");
+    }
+    return detail::read_scalar_impl<T>(
+        reinterpret_cast<const uint8_t *>(data.data()), bigEndian);
+}
 
 class StreamExceptionGuard {
 public:
