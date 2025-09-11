@@ -141,7 +141,14 @@ void RobotExtractor::readPrimer() {
 
     if (m_evenPrimerSize + m_oddPrimerSize !=
         static_cast<std::streamsize>(m_primerReservedSize)) {
-      m_fp.seekg(m_primerPosition + m_primerReservedSize, std::ios::beg);
+      const std::streamoff reserveOff =
+          static_cast<std::streamoff>(m_primerReservedSize);
+      if (m_primerPosition >
+          std::numeric_limits<std::streamoff>::max() - reserveOff) {
+        throw std::runtime_error(
+            "Position de primer audio dépasse std::streamoff::max");
+      }
+      m_fp.seekg(m_primerPosition + reserveOff, std::ios::beg);
       m_evenPrimerSize = 0;
       m_oddPrimerSize = 0;
       m_evenPrimer.clear();
