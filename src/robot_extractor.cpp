@@ -255,11 +255,15 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
 
 void RobotExtractor::process_audio_block(std::span<std::byte> block,
                                          bool isEven) {
-  if (block.size() != m_audioBlkSize) {
-    throw std::runtime_error("Unexpected audio block size");
-  }
   if (block.size() < 8) {
-    throw std::runtime_error("Bloc audio trop petit");
+    throw std::runtime_error("Bloc audio inutilisable");
+  }
+  if (block.size() != m_audioBlkSize) {
+    log_warn(m_srcPath,
+             "Taille de bloc audio inattendue: " +
+                 std::to_string(block.size()) + " (attendu: " +
+                 std::to_string(m_audioBlkSize) + ")",
+             m_options);
   }
   auto runway = block.first(8);
   assert(runway.size() == 8);
@@ -268,7 +272,7 @@ void RobotExtractor::process_audio_block(std::span<std::byte> block,
   dpcm16_decompress_last(runway, predictor);
   if (audio.empty()) {
     return;
-  }  
+  }
   if (m_extractAudio) {
     auto samples = dpcm16_decompress(audio, predictor);
     size_t &audioIndex = isEven ? m_evenAudioIndex : m_oddAudioIndex;
@@ -599,14 +603,13 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             throw std::runtime_error("Taille audio invalide");
           }
           int64_t maxSize = static_cast<int64_t>(audioBlkLen) - 8;
-          if (size != static_cast<int32_t>(m_audioBlkSize) || size > maxSize) {
+          if (size > maxSize) {
             log_error(m_srcPath,
                       "Taille de bloc audio inattendue: " +
                           std::to_string(size) +
-                          " (attendu: " +
-                          std::to_string(m_audioBlkSize) + ")",
+                          " (maximum: " + std::to_string(maxSize) + ")",
                       m_options);
-            // En-tête invalide, ignorer le reste du bloc audio en toute sécurité
+            // Taille incohérente, ignorer le reste du bloc audio
             m_fp.seekg(static_cast<std::streamoff>(maxSize), std::ios::cur);
           } else {
             std::vector<std::byte> block(static_cast<size_t>(size));
