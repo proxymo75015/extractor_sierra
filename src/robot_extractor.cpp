@@ -145,6 +145,12 @@ void RobotExtractor::readPrimer() {
     m_evenPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
     m_oddPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
 
+    if (static_cast<int64_t>(m_evenPrimerSize) +
+            static_cast<int64_t>(m_oddPrimerSize) !=
+        static_cast<int64_t>(m_totalPrimerSize)) {
+      throw std::runtime_error("Tailles de primer audio incohérentes");
+    }
+    
     if (m_totalPrimerSize < 0 ||
         m_totalPrimerSize > static_cast<int32_t>(m_primerReservedSize) ||
         m_evenPrimerSize < 0 || m_oddPrimerSize < 0 ||
