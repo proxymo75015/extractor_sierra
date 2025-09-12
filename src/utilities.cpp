@@ -43,10 +43,11 @@ bool detect_endianness(std::ifstream &f) {
     StreamExceptionGuard guard(f);
     auto start = f.tellg();
     std::array<uint8_t, 2> sigBytes{};
+    // StreamExceptionGuard active les exceptions failbit/badbit, ce qui fait
+    // que `read` lève `std::ios_base::failure` si moins de 2 octets sont
+    // disponibles. Nous nous appuyons sur ce comportement au lieu de
+    // contrôler `gcount` manuellement.    
     f.read(reinterpret_cast<char *>(sigBytes.data()), 2);
-    if (f.gcount() != 2) {
-        throw std::runtime_error("Signature Robot invalide");
-    }
     uint16_t le = static_cast<uint16_t>(sigBytes[0]) |
                    (static_cast<uint16_t>(sigBytes[1]) << 8);
     uint16_t be = static_cast<uint16_t>(sigBytes[0]) << 8 |
