@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <type_traits>
 #include <limits>
+#include <utility>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -137,6 +138,9 @@ void log_error(const std::filesystem::path &path, const std::string &msg,
 #ifdef _WIN32
 std::wstring make_long_path(const std::wstring &path);
 #endif
+
+std::pair<std::filesystem::path, std::string>
+to_long_path(const std::filesystem::path &path);
 
 void write_png_cross_platform(const std::filesystem::path &path, int w, int h,
                               int comp, const void *data, int stride);
