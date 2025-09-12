@@ -26,7 +26,7 @@ inline int validate_cel_dimensions(uint16_t w, uint16_t h, uint8_t scale) {
   }
   if (scale < 1 || scale > 200) {
     throw std::runtime_error("Facteur d'échelle vertical invalide");
-  }  
+  }
   const int sourceHeight = static_cast<int>(h) * scale / 100;
   if (sourceHeight <= 0) {
     throw std::runtime_error("Facteur d'échelle vertical invalide");
@@ -36,8 +36,8 @@ inline int validate_cel_dimensions(uint16_t w, uint16_t h, uint8_t scale) {
 
 // Valide les paramètres d'expansion et retourne la hauteur source calculée.
 inline int validate_expand_params(std::span<std::byte> target,
-                                  std::span<const std::byte> source,
-                                  uint16_t w, uint16_t h, uint8_t scale) {
+                                  std::span<const std::byte> source, uint16_t w,
+                                  uint16_t h, uint8_t scale) {
   const int sourceHeight = validate_cel_dimensions(w, h, scale);
   const size_t wSize = static_cast<size_t>(w);
   if (static_cast<size_t>(sourceHeight) > SIZE_MAX / wSize) {
@@ -103,10 +103,8 @@ inline void expand_down(std::byte *destBase, const std::byte *srcBase,
     if (srcY < 0) {
       throw std::runtime_error("Réduction de cel hors limites");
     }
-    const std::byte *srcPtr =
-        srcBase + static_cast<size_t>(srcY) * rowBytes;
-    std::byte *destPtr =
-        destBase + static_cast<size_t>(destY) * rowBytes;    
+    const std::byte *srcPtr = srcBase + static_cast<size_t>(srcY) * rowBytes;
+    std::byte *destPtr = destBase + static_cast<size_t>(destY) * rowBytes;
     std::memcpy(destPtr, srcPtr, rowBytes);
   }
   if (srcY != 0) {
@@ -115,9 +113,14 @@ inline void expand_down(std::byte *destBase, const std::byte *srcBase,
 }
 } // namespace detail
 
+// Ajuste la hauteur d'une cel en l'agrandissant ou la réduisant.
+// Précondition : target et source ne doivent pas aliasser.
 inline void expand_cel(std::span<std::byte> target,
                        std::span<const std::byte> source, uint16_t w,
                        uint16_t h, uint8_t scale) {
+  if (target.data() == source.data())
+    throw std::runtime_error("target and source must not alias");
+  
   const int sourceHeight =
       detail::validate_expand_params(target, source, w, h, scale);
   
