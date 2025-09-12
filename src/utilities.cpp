@@ -131,25 +131,29 @@ std::wstring make_long_path(const std::wstring &path) {
 }
 #endif
 
+#ifdef _WIN32
+std::pair<std::filesystem::path, std::string>
+to_long_path(const std::filesystem::path &path) {
+    auto longPath = make_long_path(path.wstring());
+    std::filesystem::path fsPath{longPath};
+    auto pathUtf8 = fsPath.u8string();
+    return {fsPath, std::string(pathUtf8.begin(), pathUtf8.end())};
+}
+#else
+std::pair<std::filesystem::path, std::string>
+to_long_path(const std::filesystem::path &path) {
+    return {path, path.string()};
+}
+#endif
+
 void write_png_cross_platform(const std::filesystem::path &path, int w, int h,
                               int comp, const void *data, int stride) {
-#ifdef _WIN32
-    auto longPath = make_long_path(path.wstring());
-    auto pathUtf8 = std::filesystem::path{longPath}.u8string();
-    std::string pathUtf8Str(pathUtf8.begin(), pathUtf8.end());
-    if (!stbi_write_png(pathUtf8Str.c_str(), w, h, comp, data, stride)) {
-        std::error_code ec;
-        std::filesystem::remove(std::filesystem::u8path(pathUtf8Str), ec);
-        throw std::runtime_error(std::string("Échec de l'écriture de ") + pathUtf8Str);
-    }
-#else
-    auto pathStr = path.string();
+    auto [fsPath, pathStr] = to_long_path(path);
     if (!stbi_write_png(pathStr.c_str(), w, h, comp, data, stride)) {
         std::error_code ec;
-        std::filesystem::remove(path, ec);
+        std::filesystem::remove(fsPath, ec);
         throw std::runtime_error(std::string("Échec de l'écriture de ") + pathStr);
     }
-#endif
 }
 
 std::vector<std::byte> lzs_decompress(std::span<const std::byte> in, size_t expected_size) {
