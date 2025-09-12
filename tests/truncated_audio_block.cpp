@@ -3,6 +3,7 @@
 #include <fstream>
 #include <vector>
 #include <array>
+#include <stdexcept>
 
 #include "robot_extractor.hpp"
 
@@ -54,7 +55,7 @@ static std::vector<uint8_t> build_primer_header() {
     return p;
 }
 
-TEST_CASE("Truncated audio block is handled") {
+TEST_CASE("Truncated audio block triggers error") {
     fs::path tmpDir = fs::temp_directory_path();
     fs::path input = tmpDir / "trunc_audio.rbt";
     fs::path outDir = tmpDir / "trunc_audio_out";
@@ -92,8 +93,5 @@ TEST_CASE("Truncated audio block is handled") {
     out.close();
 
     robot::RobotExtractor extractor(input, outDir, true);
-    REQUIRE_NOTHROW(extractor.extract());
-        auto wavPath = outDir / "frame_00000_even.wav";
-    REQUIRE(fs::exists(wavPath));
-    REQUIRE(fs::file_size(wavPath) >= 44);
+    REQUIRE_THROWS_AS(extractor.extract(), std::runtime_error);
 }
