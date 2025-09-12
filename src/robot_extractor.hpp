@@ -91,8 +91,6 @@ inline void expand_down(std::byte *destBase, const std::byte *srcBase,
                         size_t rowBytes, uint16_t h, int sourceHeight) {
   int srcY = sourceHeight;
   int remainder = 0;
-  std::byte *destPtr =
-      destBase + (static_cast<size_t>(h) - 1) * rowBytes;
   for (int destY = static_cast<int>(h) - 1; destY >= 0; --destY) {
     // remainder accumule le numérateur de sourceHeight/h afin de déterminer
     // combien de lignes source sauter.
@@ -105,8 +103,9 @@ inline void expand_down(std::byte *destBase, const std::byte *srcBase,
     }
     const std::byte *srcPtr =
         srcBase + static_cast<size_t>(srcY) * rowBytes;
+    std::byte *destPtr =
+        destBase + static_cast<size_t>(destY) * rowBytes;    
     std::memcpy(destPtr, srcPtr, rowBytes);
-    destPtr -= rowBytes;
   }
   if (srcY != 0) {
     throw std::runtime_error("Réduction de cel incohérente");
