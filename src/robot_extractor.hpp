@@ -163,6 +163,7 @@ private:
   std::filesystem::path m_srcPath;
   std::filesystem::path m_dstDir;
   std::ifstream m_fp;
+  std::uintmax_t m_fileSize;
   bool m_bigEndian = false;
   bool m_extractAudio;
   ExtractorOptions m_options;
