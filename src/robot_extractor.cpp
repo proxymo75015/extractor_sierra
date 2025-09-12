@@ -264,13 +264,13 @@ void RobotExtractor::process_audio_block(std::span<std::byte> block,
   auto runway = block.first(8);
   assert(runway.size() == 8);
   auto audio = block.subspan(8);
-  if (audio.empty()) {
-    throw std::runtime_error("Bloc audio sans données");
-  }
   int16_t &predictor = isEven ? m_audioPredictorEven : m_audioPredictorOdd;
   dpcm16_decompress_last(runway, predictor);
+  if (audio.empty()) {
+    return;
+  }  
   if (m_extractAudio) {
-    auto samples = dpcm16_decompress(audio, predictor);    
+    auto samples = dpcm16_decompress(audio, predictor);
     size_t &audioIndex = isEven ? m_evenAudioIndex : m_oddAudioIndex;
     if (audioIndex == std::numeric_limits<size_t>::max()) {
       throw std::runtime_error("Audio index overflow");
