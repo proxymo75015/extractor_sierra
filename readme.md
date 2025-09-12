@@ -55,8 +55,10 @@ frame_XXXXX_odd.wav: Odd channel
 
 Compatibility
 This tool is designed to be compatible with ScummVM's Robot file format (versions 4, 5, and 6). It handles LZS decompression, DPCM-16 audio decoding, and palette-based RGBA conversion.
+History
+
+Earlier revisions of this project bundled a legacy standalone extractor at `src/old/robot_extractor.old` (version 1.2.8). The file has been removed for clarity, but it can still be accessed through the repository's Git history if needed.
 License
 
 BSD 3-Clause License
-
 
