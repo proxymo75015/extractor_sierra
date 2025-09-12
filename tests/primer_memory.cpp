@@ -6,6 +6,7 @@
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
+using robot::RobotExtractorTester;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -74,17 +75,18 @@ TEST_CASE("readPrimer releases primer buffers") {
     out.close();
 
     robot::RobotExtractor extractor(input, outDir, false);
-    extractor.readHeader();
+    RobotExtractorTester::readHeader(extractor);
 
     for (int i = 0; i < 3; ++i) {
         if (i > 0) {
-            extractor.m_fp.clear();
-            extractor.m_fp.seekg(extractor.m_primerPosition, std::ios::beg);
+            RobotExtractorTester::file(extractor).clear();
+            RobotExtractorTester::file(extractor).seekg(
+                RobotExtractorTester::primerPosition(extractor), std::ios::beg);
         }
-        extractor.readPrimer();
-        REQUIRE(extractor.m_evenPrimer.size() == 0);
-        REQUIRE(extractor.m_evenPrimer.capacity() == 0);
-        REQUIRE(extractor.m_oddPrimer.size() == 0);
-        REQUIRE(extractor.m_oddPrimer.capacity() == 0);
+        RobotExtractorTester::readPrimer(extractor);
+        REQUIRE(RobotExtractorTester::evenPrimer(extractor).size() == 0);
+        REQUIRE(RobotExtractorTester::evenPrimer(extractor).capacity() == 0);
+        REQUIRE(RobotExtractorTester::oddPrimer(extractor).size() == 0);
+        REQUIRE(RobotExtractorTester::oddPrimer(extractor).capacity() == 0);
     }
 }
