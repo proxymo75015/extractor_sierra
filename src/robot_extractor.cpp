@@ -219,10 +219,8 @@ void RobotExtractor::readPrimer() {
                                m_srcPath.string());
     }
   }
-  m_evenPrimer.clear();
-  m_evenPrimer.shrink_to_fit();
-  m_oddPrimer.clear();
-  m_oddPrimer.shrink_to_fit();
+  std::vector<std::byte>().swap(m_evenPrimer);
+  std::vector<std::byte>().swap(m_oddPrimer);
   m_evenPrimerSize = 0;
   m_oddPrimerSize = 0;
 }
