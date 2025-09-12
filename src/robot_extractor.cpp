@@ -115,9 +115,6 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
     throw std::runtime_error("Nombre de cels par frame invalide: " +
                              std::to_string(m_maxCelsPerFrame));
   }
-  for (auto &area : m_maxCelArea) {
-    area = read_scalar<int32_t>(m_fp, m_bigEndian);
-  }
   m_fp.seekg(8, std::ios::cur);
 }
 
