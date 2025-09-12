@@ -188,7 +188,6 @@ private:
   bool m_isHiRes;
   int16_t m_maxSkippablePackets;
   int16_t m_maxCelsPerFrame;
-  std::array<int32_t, 4> m_maxCelArea;
   std::vector<uint32_t> m_frameSizes;
   std::vector<uint32_t> m_packetSizes;
   std::array<int32_t, kMaxCuePoints> m_cueTimes;
