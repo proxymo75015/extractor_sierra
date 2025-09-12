@@ -26,8 +26,8 @@ RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath,
     throw std::runtime_error(std::string("Impossible d'ouvrir ") +
                              srcPath.string());
   }
-}
   m_fileSize = std::filesystem::file_size(srcPath);
+}
 
 void RobotExtractor::readHeader() {
   StreamExceptionGuard guard(m_fp);
