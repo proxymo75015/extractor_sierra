@@ -26,7 +26,12 @@ RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath,
     throw std::runtime_error(std::string("Impossible d'ouvrir ") +
                              srcPath.string());
   }
-  m_fileSize = std::filesystem::file_size(srcPath);
+  std::error_code ec;
+  m_fileSize = std::filesystem::file_size(srcPath, ec);
+  if (ec) {
+    throw std::runtime_error(std::string("Impossible d'obtenir la taille de ") +
+                             srcPath.string() + ": " + ec.message());
+  }
 }
 
 void RobotExtractor::readHeader() {
