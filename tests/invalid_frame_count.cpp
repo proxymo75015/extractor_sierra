@@ -6,6 +6,7 @@
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
+using robot::RobotExtractorTester;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -69,7 +70,7 @@ TEST_CASE("Nombre de frames dépasse la limite") {
     fs::path outDir = tmpDir / "frames_too_many_out";
     fs::create_directories(outDir);
 
-    auto data = build_header(static_cast<uint16_t>(robot::RobotExtractor::kMaxFrames + 1));
+    auto data = build_header(static_cast<uint16_t>(RobotExtractorTester::maxFrames() + 1));
     std::ofstream out(input, std::ios::binary);
     out.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
     out.close();
