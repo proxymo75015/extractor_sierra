@@ -46,7 +46,6 @@ TEST_CASE("Extra data after cels throws") {
     push16(data, 0); // isHiRes
     push16(data, 0); // maxSkippablePackets
     push16(data, 1); // maxCelsPerFrame
-    for (int i = 0; i < 4; ++i) push32(data, 0); // maxCelArea
     for (int i = 0; i < 2; ++i) push32(data, 0); // padding
 
     // Palette
