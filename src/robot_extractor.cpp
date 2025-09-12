@@ -258,16 +258,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   if (block.size() < 8) {
     throw std::runtime_error("Bloc audio inutilisable");
   }
-  const std::size_t expectedSize = static_cast<std::size_t>(m_audioBlkSize) - 8;
-  if (block.size() != expectedSize) {
-    throw std::runtime_error("Taille de bloc audio inattendue: " +
-                             std::to_string(block.size()) +
-                             " (attendu: " +
-                             std::to_string(expectedSize) + ")");
-  }
   auto runway = block.first(8);
-  if (runway.size() != 8)
-    throw std::runtime_error("Runway size must be exactly 8 bytes");
   auto audio = block.subspan(8);
   int16_t &predictor = isEven ? m_audioPredictorEven : m_audioPredictorOdd;
   dpcm16_decompress_last(runway, predictor);
