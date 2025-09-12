@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -266,7 +265,8 @@ void RobotExtractor::process_audio_block(std::span<std::byte> block,
                              std::to_string(m_audioBlkSize) + ")");
   }
   auto runway = block.first(8);
-  assert(runway.size() == 8);
+  if (runway.size() != 8)
+    throw std::runtime_error("Runway size must be exactly 8 bytes");
   auto audio = block.subspan(8);
   int16_t &predictor = isEven ? m_audioPredictorEven : m_audioPredictorOdd;
   dpcm16_decompress_last(runway, predictor);
