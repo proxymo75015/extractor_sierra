@@ -6,6 +6,7 @@
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
+using robot::RobotExtractorTester;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -55,7 +56,7 @@ TEST_CASE("xRes and yRes can be zero") {
     fs::create_directories(outDir);
 
     robot::RobotExtractor extractor(input, outDir, false);
-    REQUIRE_NOTHROW(extractor.readHeader());
-    REQUIRE(extractor.m_xRes == 0);
-    REQUIRE(extractor.m_yRes == 0);
+    REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
+    REQUIRE(RobotExtractorTester::xRes(extractor) == 0);
+    REQUIRE(RobotExtractorTester::yRes(extractor) == 0);
 }
