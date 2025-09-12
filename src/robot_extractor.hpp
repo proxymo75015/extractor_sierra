@@ -14,11 +14,6 @@
 #include <vector>
 
 namespace robot {
-
-#ifdef ROBOT_EXTRACTOR_TESTING
-#define private public
-#endif
-
 namespace detail {
 inline int validate_cel_dimensions(uint16_t w, uint16_t h, uint8_t scale) {
   if (w == 0 || h == 0) {
@@ -147,6 +142,9 @@ public:
   void extract();
 
 private:
+#ifdef ROBOT_EXTRACTOR_TESTING
+  friend struct RobotExtractorTester;
+#endif
   static constexpr uint16_t kRobotSig = 0x16;
   static constexpr uint16_t kMaxFrames = 10000;
   static constexpr size_t kMaxCelPixels = 1024 * 1024;
@@ -209,7 +207,57 @@ private:
 };
 
 #ifdef ROBOT_EXTRACTOR_TESTING
-#undef private
+struct RobotExtractorTester {
+  static std::vector<uint32_t> &frameSizes(RobotExtractor &r) {
+    return r.m_frameSizes;
+  }
+  static std::vector<uint32_t> &packetSizes(RobotExtractor &r) {
+    return r.m_packetSizes;
+  }
+  static std::ifstream &file(RobotExtractor &r) { return r.m_fp; }
+  static std::streamoff &primerPosition(RobotExtractor &r) {
+    return r.m_primerPosition;
+  }
+  static std::vector<std::byte> &evenPrimer(RobotExtractor &r) {
+    return r.m_evenPrimer;
+  }
+  static std::vector<std::byte> &oddPrimer(RobotExtractor &r) {
+    return r.m_oddPrimer;
+  }
+  static bool &hasPalette(RobotExtractor &r) { return r.m_hasPalette; }
+  static bool &bigEndian(RobotExtractor &r) { return r.m_bigEndian; }
+  static int16_t &maxCelsPerFrame(RobotExtractor &r) {
+    return r.m_maxCelsPerFrame;
+  }
+  static std::vector<std::byte> &palette(RobotExtractor &r) {
+    return r.m_palette;
+  }
+  static int16_t &xRes(RobotExtractor &r) { return r.m_xRes; }
+  static int16_t &yRes(RobotExtractor &r) { return r.m_yRes; }
+  static std::vector<std::byte> &rgbaBuffer(RobotExtractor &r) {
+    return r.m_rgbaBuffer;
+  }
+  static constexpr size_t maxCelPixels() { return RobotExtractor::kMaxCelPixels; }
+  static constexpr uint16_t maxAudioBlockSize() {
+    return RobotExtractor::kMaxAudioBlockSize;
+  }
+  static constexpr size_t maxFrameSize() {
+    return RobotExtractor::kMaxFrameSize;
+  }
+  static constexpr uint16_t maxFrames() { return RobotExtractor::kMaxFrames; }
+  static void readHeader(RobotExtractor &r) { r.readHeader(); }
+  static void readPrimer(RobotExtractor &r) { r.readPrimer(); }
+  static void readPalette(RobotExtractor &r) { r.readPalette(); }
+  static bool exportFrame(RobotExtractor &r, int frameNo,
+                          nlohmann::json &frameJson) {
+    return r.exportFrame(frameNo, frameJson);
+  }
+  static void writeWav(RobotExtractor &r, const std::vector<int16_t> &samples,
+                       uint32_t sampleRate, size_t blockIndex,
+                       bool isEvenChannel) {
+    r.writeWav(samples, sampleRate, blockIndex, isEvenChannel);
+  }
+};
 #endif
 
 } // namespace robot
