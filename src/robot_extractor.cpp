@@ -286,11 +286,18 @@ void RobotExtractor::process_audio_block(std::span<std::byte> block,
 
 void RobotExtractor::readPalette() {
   StreamExceptionGuard guard(m_fp);
+  const std::uintmax_t fileSize = std::filesystem::file_size(m_srcPath);  
   if (!m_hasPalette) {
     if (m_paletteSize != 0)
       log_warn(m_srcPath,
                "paletteSize non nul alors que hasPalette==false",
                m_options);
+    std::streamoff curPos = m_fp.tellg();
+    if (curPos < 0 ||
+        static_cast<std::uintmax_t>(curPos) + m_paletteSize > fileSize) {
+      throw std::runtime_error(std::string("Palette hors limites pour ") +
+                               m_srcPath.string());
+    }    
     m_fp.seekg(m_paletteSize, std::ios::cur);
     return;
   }
