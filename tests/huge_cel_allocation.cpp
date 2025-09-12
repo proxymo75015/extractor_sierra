@@ -5,22 +5,23 @@
 #include <limits>
 
 namespace fs = std::filesystem;
+using robot::RobotExtractorTester;
 
 TEST_CASE("Les cels énormes déclenchent une exception d'allocation") {
     fs::path tmp = fs::temp_directory_path() / "dummy.bin";
     std::ofstream(tmp).put('\0');
     robot::RobotExtractor extractor(tmp, fs::temp_directory_path(), false);
-    extractor.m_rgbaBuffer.clear();
+    RobotExtractorTester::rgbaBuffer(extractor).clear();
 
     size_t required = std::numeric_limits<size_t>::max() - 1;
 
     REQUIRE_THROWS([&]() {
-        if (required > robot::RobotExtractor::kMaxCelPixels * 4) {
+        if (required > RobotExtractorTester::maxCelPixels() * 4) {
             throw std::runtime_error("Tampon RGBA dépasse la limite");
-        }        
-        if (required > extractor.m_rgbaBuffer.capacity()) {
-            extractor.m_rgbaBuffer.reserve(required);
         }
-        extractor.m_rgbaBuffer.resize(required);
+        if (required > RobotExtractorTester::rgbaBuffer(extractor).capacity()) {
+            RobotExtractorTester::rgbaBuffer(extractor).reserve(required);
+        }
+        RobotExtractorTester::rgbaBuffer(extractor).resize(required);        
     }());
 }
