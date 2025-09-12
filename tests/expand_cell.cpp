@@ -181,3 +181,19 @@ TEST_CASE("expand_cel traite de grands cels à la réduction") {
   }
   REQUIRE(srcY == 0);
 }
+
+TEST_CASE("expand_cel réduit correctement un cel de hauteur minimale") {
+  const uint16_t w = 2;
+  const uint16_t h = 1;
+  const uint8_t scale = 200; // source deux fois plus haute que la cible
+
+  std::vector<std::byte> source{std::byte{1}, std::byte{2},
+                                std::byte{3}, std::byte{4}};
+
+  std::vector<std::byte> expected{std::byte{1}, std::byte{2}};
+
+  std::vector<std::byte> target(static_cast<size_t>(w) * h);
+  expand_cel(target, source, w, h, scale);
+
+  REQUIRE(target == expected);
+}
