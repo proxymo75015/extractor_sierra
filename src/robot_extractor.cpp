@@ -258,11 +258,12 @@ void RobotExtractor::process_audio_block(std::span<std::byte> block,
   if (block.size() < 8) {
     throw std::runtime_error("Bloc audio inutilisable");
   }
-  if (block.size() != m_audioBlkSize) {
+  const std::size_t expectedSize = static_cast<std::size_t>(m_audioBlkSize) - 8;
+  if (block.size() != expectedSize) {
     throw std::runtime_error("Taille de bloc audio inattendue: " +
                              std::to_string(block.size()) +
                              " (attendu: " +
-                             std::to_string(m_audioBlkSize) + ")");
+                             std::to_string(expectedSize) + ")");
   }
   auto runway = block.first(8);
   if (runway.size() != 8)
