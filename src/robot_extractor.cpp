@@ -641,8 +641,9 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
 void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
                               uint32_t sampleRate, size_t blockIndex,
                               bool isEvenChannel) {
-  if (sampleRate == 0)
-    sampleRate = 11025;
+  if (sampleRate == 0) {
+    throw std::runtime_error("Fréquence d'échantillonnage nulle");
+  }
   if (samples.size() > std::numeric_limits<size_t>::max() / sizeof(int16_t)) {
     throw std::runtime_error("Nombre d'échantillons audio dépasse la limite, "
                              "fichier WAV corrompu potentiel");
