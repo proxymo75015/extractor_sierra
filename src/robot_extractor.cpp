@@ -271,13 +271,15 @@ void RobotExtractor::process_audio_block(std::span<std::byte> block,
   }
   int16_t &predictor = isEven ? m_audioPredictorEven : m_audioPredictorOdd;
   dpcm16_decompress_last(runway, predictor);
-  auto samples = dpcm16_decompress(audio, predictor);
   if (m_extractAudio) {
+    auto samples = dpcm16_decompress(audio, predictor);    
     size_t &audioIndex = isEven ? m_evenAudioIndex : m_oddAudioIndex;
     if (audioIndex == std::numeric_limits<size_t>::max()) {
       throw std::runtime_error("Audio index overflow");
     }
     writeWav(samples, 11025, audioIndex++, isEven);
+  } else {
+    dpcm16_decompress_last(audio, predictor);    
   }
 }
 
