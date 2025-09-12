@@ -6,6 +6,7 @@
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
+using robot::RobotExtractorTester;
 
 TEST_CASE("Frame trop courte") {
     std::vector<uint8_t> data(1, 0);
@@ -20,13 +21,13 @@ TEST_CASE("Frame trop courte") {
     out.close();
 
     robot::RobotExtractor extractor(input, outDir, false);
-    extractor.m_frameSizes = {2};
-    extractor.m_packetSizes = {2};
-    extractor.m_fp.seekg(0, std::ios::beg);
+    RobotExtractorTester::frameSizes(extractor) = {2};
+    RobotExtractorTester::packetSizes(extractor) = {2};
+    RobotExtractorTester::file(extractor).seekg(0, std::ios::beg);
 
     nlohmann::json frameJson;
     try {
-        extractor.exportFrame(0, frameJson);
+        RobotExtractorTester::exportFrame(extractor, 0, frameJson);
         FAIL("Aucune exception levée");
     } catch (const std::runtime_error &e) {
         REQUIRE(std::string(e.what()).find("Lecture incomplète") !=
