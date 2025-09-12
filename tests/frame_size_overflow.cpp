@@ -7,6 +7,7 @@
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
+using robot::RobotExtractorTester;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -51,7 +52,7 @@ TEST_CASE("La taille de frame excessive déclenche une erreur") {
     fs::create_directories(outDir);
 
     auto data = build_header_v6();
-    push32(data, static_cast<uint32_t>(robot::RobotExtractor::kMaxFrameSize + 1));
+    push32(data, static_cast<uint32_t>(RobotExtractorTester::maxFrameSize() + 1));
 
     std::ofstream out(input, std::ios::binary);
     out.write(reinterpret_cast<const char *>(data.data()),
