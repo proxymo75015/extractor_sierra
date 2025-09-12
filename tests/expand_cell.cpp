@@ -126,8 +126,12 @@ TEST_CASE("expand_cel détecte un facteur de réduction incohérent") {
   REQUIRE_THROWS(expand_cel(target, source, w, h, badScale));
 }
 
+#include <algorithm>
+
+using robot::RobotExtractorTester;
+
 TEST_CASE("expand_cel traite de grands cels à l'agrandissement") {
-  const size_t maxPixels = robot::RobotExtractor::kMaxCelPixels;
+  const size_t maxPixels = RobotExtractorTester::maxCelPixels();
   const uint16_t w = 1024;
   const uint16_t h = static_cast<uint16_t>(maxPixels / w);
   REQUIRE(static_cast<size_t>(w) * h == maxPixels);
@@ -155,7 +159,7 @@ TEST_CASE("expand_cel traite de grands cels à l'agrandissement") {
 }
 
 TEST_CASE("expand_cel traite de grands cels à la réduction") {
-  const size_t maxPixels = robot::RobotExtractor::kMaxCelPixels;
+  const size_t maxPixels = RobotExtractorTester::maxCelPixels();
   const uint16_t w = 1024;
   const uint16_t h = static_cast<uint16_t>(maxPixels / w);
   REQUIRE(static_cast<size_t>(w) * h == maxPixels);
