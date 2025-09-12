@@ -114,12 +114,16 @@ inline void expand_down(std::byte *destBase, const std::byte *srcBase,
 } // namespace detail
 
 // Ajuste la hauteur d'une cel en l'agrandissant ou la réduisant.
-// Précondition : target et source ne doivent pas aliasser.
+// Précondition : les plages de target et source ne doivent pas se chevaucher.
 inline void expand_cel(std::span<std::byte> target,
                        std::span<const std::byte> source, uint16_t w,
                        uint16_t h, uint8_t scale) {
-  if (target.data() == source.data())
-    throw std::runtime_error("target and source must not alias");
+  const std::byte *tBegin = target.data();
+  const std::byte *tEnd = tBegin + target.size();
+  const std::byte *sBegin = source.data();
+  const std::byte *sEnd = sBegin + source.size();
+  if (!(tEnd <= sBegin || sEnd <= tBegin))
+    throw std::runtime_error("target and source must not overlap");
   
   const int sourceHeight =
       detail::validate_expand_params(target, source, w, h, scale);
