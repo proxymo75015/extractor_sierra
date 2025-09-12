@@ -531,7 +531,6 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       throw std::runtime_error("Cel corrompu: taille de données incohérente");
     }
 
-    uint16_t newH = h;
     if (verticalScale != 100) {
       std::vector<std::byte> expanded(static_cast<size_t>(w) * h);
       expand_cel(expanded, m_celBuffer, w, h, verticalScale);
@@ -543,11 +542,11 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       size_t row_size = static_cast<size_t>(w) * 4;
       // Vérifie qu'on peut multiplier la hauteur par la taille d'une ligne
       // sans dépasser SIZE_MAX
-      if (row_size != 0 && static_cast<size_t>(newH) > SIZE_MAX / row_size) {
+      if (row_size != 0 && static_cast<size_t>(h) > SIZE_MAX / row_size) {
         throw std::runtime_error(
             "Débordement lors du calcul de la taille du tampon");
       }
-      size_t required = static_cast<size_t>(newH) * row_size;
+      size_t required = static_cast<size_t>(h) * row_size;
       if (required > kMaxCelPixels * 4) {
         throw std::runtime_error("Tampon RGBA dépasse la limite");
       }
@@ -571,7 +570,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       oss << std::setw(5) << std::setfill('0') << frameNo << "_" << i
           << ".png";
       auto outPath = m_dstDir / oss.str();
-      write_png_cross_platform(outPath, w, newH, 4, m_rgbaBuffer.data(),
+      write_png_cross_platform(outPath, w, h, 4, m_rgbaBuffer.data(),
                                w * 4);
     }
 
@@ -580,7 +579,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     celJson["x"] = x;
     celJson["y"] = y;
     celJson["width"] = w;
-    celJson["height"] = newH;
+    celJson["height"] = h;
     celJson["vertical_scale"] = verticalScale;
     if (!m_hasPalette) {
       celJson["palette_required"] = true;
