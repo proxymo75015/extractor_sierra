@@ -6,6 +6,7 @@
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
+using robot::RobotExtractorTester;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -36,17 +37,17 @@ TEST_CASE("Cel with zero width throws") {
   out.close();
 
   robot::RobotExtractor extractor(input, outDir, false);
-  extractor.m_hasPalette = true;
-  extractor.m_bigEndian = false;
-  extractor.m_maxCelsPerFrame = 1;
-  extractor.m_frameSizes = {static_cast<uint32_t>(data.size())};
-  extractor.m_packetSizes = {static_cast<uint32_t>(data.size())};
-  extractor.m_palette.assign(768, std::byte{0});
-  extractor.m_fp.seekg(0, std::ios::beg);
+  RobotExtractorTester::hasPalette(extractor) = true;
+  RobotExtractorTester::bigEndian(extractor) = false;
+  RobotExtractorTester::maxCelsPerFrame(extractor) = 1;
+  RobotExtractorTester::frameSizes(extractor) = {static_cast<uint32_t>(data.size())};
+  RobotExtractorTester::packetSizes(extractor) = {static_cast<uint32_t>(data.size())};
+  RobotExtractorTester::palette(extractor).assign(768, std::byte{0});
+  RobotExtractorTester::file(extractor).seekg(0, std::ios::beg);
 
   nlohmann::json frameJson;
   try {
-    extractor.exportFrame(0, frameJson);
+    RobotExtractorTester::exportFrame(extractor, 0, frameJson);
     FAIL("No exception thrown");
   } catch (const std::runtime_error &e) {
     REQUIRE(std::string(e.what()).find("Dimensions de cel invalides") !=
@@ -78,17 +79,17 @@ TEST_CASE("Cel with zero height throws") {
   out.close();
 
   robot::RobotExtractor extractor(input, outDir, false);
-  extractor.m_hasPalette = true;
-  extractor.m_bigEndian = false;
-  extractor.m_maxCelsPerFrame = 1;
-  extractor.m_frameSizes = {static_cast<uint32_t>(data.size())};
-  extractor.m_packetSizes = {static_cast<uint32_t>(data.size())};
-  extractor.m_palette.assign(768, std::byte{0});
-  extractor.m_fp.seekg(0, std::ios::beg);
+  RobotExtractorTester::hasPalette(extractor) = true;
+  RobotExtractorTester::bigEndian(extractor) = false;
+  RobotExtractorTester::maxCelsPerFrame(extractor) = 1;
+  RobotExtractorTester::frameSizes(extractor) = {static_cast<uint32_t>(data.size())};
+  RobotExtractorTester::packetSizes(extractor) = {static_cast<uint32_t>(data.size())};
+  RobotExtractorTester::palette(extractor).assign(768, std::byte{0});
+  RobotExtractorTester::file(extractor).seekg(0, std::ios::beg);
 
   nlohmann::json frameJson;
   try {
-    extractor.exportFrame(0, frameJson);
+    RobotExtractorTester::exportFrame(extractor, 0, frameJson);
     FAIL("No exception thrown");
   } catch (const std::runtime_error &e) {
     REQUIRE(std::string(e.what()).find("Dimensions de cel invalides") !=
