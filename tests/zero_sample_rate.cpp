@@ -6,6 +6,7 @@
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
+using robot::RobotExtractorTester;
 
 TEST_CASE("Sample rate zero triggers exception") {
     fs::path tmpDir = fs::temp_directory_path();
@@ -19,5 +20,5 @@ TEST_CASE("Sample rate zero triggers exception") {
     robot::RobotExtractor extractor(input, outDir, true);
 
     std::vector<int16_t> samples{0, 1};
-    REQUIRE_THROWS_AS(extractor.writeWav(samples, 0, 0, true), std::runtime_error);
+    REQUIRE_THROWS_AS(RobotExtractorTester::writeWav(extractor, samples, 0, 0, true), std::runtime_error);
 }
