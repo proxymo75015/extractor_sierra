@@ -28,6 +28,7 @@ RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath,
                              srcPath.string());
   }
 }
+  m_fileSize = std::filesystem::file_size(srcPath);
 
 void RobotExtractor::readHeader() {
   StreamExceptionGuard guard(m_fp);
@@ -117,7 +118,7 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
 }
 
 void RobotExtractor::readPrimer() {
-  const std::uintmax_t fileSize = std::filesystem::file_size(m_srcPath);
+  const std::uintmax_t fileSize = m_fileSize;
   if (!m_hasAudio) {
     std::streamoff curPos = m_fp.tellg();
     if (curPos < 0 || static_cast<std::uintmax_t>(curPos) + m_primerReservedSize > fileSize) {
@@ -286,7 +287,7 @@ void RobotExtractor::process_audio_block(std::span<std::byte> block,
 
 void RobotExtractor::readPalette() {
   StreamExceptionGuard guard(m_fp);
-  const std::uintmax_t fileSize = std::filesystem::file_size(m_srcPath);  
+  const std::uintmax_t fileSize = m_fileSize;
   if (!m_hasPalette) {
     if (m_paletteSize != 0)
       log_warn(m_srcPath,
