@@ -79,6 +79,11 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
     throw std::runtime_error("Taille de bloc audio excessive");
   }
   m_primerZeroCompressFlag = read_scalar<int16_t>(m_fp, m_bigEndian);
+  if (m_primerZeroCompressFlag != 0 && m_primerZeroCompressFlag != 1) {
+    throw std::runtime_error(
+        "Flag primerZeroCompress invalide: " +
+        std::to_string(m_primerZeroCompressFlag));
+  }  
   m_fp.seekg(2, std::ios::cur);
   m_numFrames = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (m_numFrames == 0 || m_numFrames > kMaxFrames) {
