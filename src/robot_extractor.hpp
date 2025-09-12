@@ -117,7 +117,11 @@ inline void expand_cel(std::span<std::byte> target,
   const std::byte *tEnd = tBegin + target.size();
   const std::byte *sBegin = source.data();
   const std::byte *sEnd = sBegin + source.size();
-  if (!(tEnd <= sBegin || sEnd <= tBegin))
+  auto tBeginAddr = reinterpret_cast<std::uintptr_t>(tBegin);
+  auto tEndAddr = reinterpret_cast<std::uintptr_t>(tEnd);
+  auto sBeginAddr = reinterpret_cast<std::uintptr_t>(sBegin);
+  auto sEndAddr = reinterpret_cast<std::uintptr_t>(sEnd);
+  if (!(tEndAddr <= sBeginAddr || sEndAddr <= tBeginAddr))
     throw std::runtime_error("target and source must not overlap");
   
   const int sourceHeight =
