@@ -3,6 +3,7 @@
 #include <fstream>
 #include <vector>
 #include <array>
+#include <stdexcept>
 
 #include "robot_extractor.hpp"
 
@@ -54,7 +55,7 @@ static std::vector<uint8_t> build_primer_header() {
     return p;
 }
 
-TEST_CASE("Audio block with runway is handled") {
+TEST_CASE("Audio block with runway triggers error") {
     fs::path tmpDir = fs::temp_directory_path();
     fs::path input = tmpDir / "runway.rbt";
     fs::path outDir = tmpDir / "runway_out";
@@ -92,5 +93,5 @@ TEST_CASE("Audio block with runway is handled") {
     out.close();
 
     robot::RobotExtractor extractor(input, outDir, true);
-    REQUIRE_NOTHROW(extractor.extract());
+    REQUIRE_THROWS_AS(extractor.extract(), std::runtime_error);
 }
