@@ -439,26 +439,16 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       throw std::runtime_error("Cel data exceeds frame buffer");
     }
 
+    const int sourceHeight = detail::validate_cel_dimensions(w, h, verticalScale);    
     size_t pixel_count = static_cast<size_t>(w) * h;
-    if (w == 0 || h == 0 || pixel_count > kMaxCelPixels) {
+    if (pixel_count > kMaxCelPixels) {
       throw std::runtime_error("Dimensions de cel invalides");
     }
-    if (verticalScale < 1) {
-      throw std::runtime_error("Facteur d'échelle vertical invalide");
-    }
-    if (verticalScale > 200) {
-      throw std::runtime_error("Facteur d'échelle vertical invalide");
-    }
-
-    size_t sourceHeight = (static_cast<size_t>(h) * verticalScale) / 100;
-    if (sourceHeight == 0) {
-      throw std::runtime_error("Facteur d'échelle vertical invalide");
-    }
-    if (w != 0 && sourceHeight > SIZE_MAX / w) {
+    if (static_cast<size_t>(sourceHeight) > SIZE_MAX / static_cast<size_t>(w)) {
       throw std::runtime_error(
           "Débordement lors du calcul de la taille de cel");
     }
-    size_t expected = static_cast<size_t>(w) * sourceHeight;
+    size_t expected = static_cast<size_t>(w) * static_cast<size_t>(sourceHeight);
     if (expected > kMaxCelPixels) {
       throw std::runtime_error(
           "Cel décompressé dépasse la taille maximale");
