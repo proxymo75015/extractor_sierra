@@ -688,18 +688,8 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
   wavName << "frame_" << std::setw(5) << std::setfill('0') << blockIndex
           << (isEvenChannel ? "_even" : "_odd") << ".wav";
   auto outPath = m_dstDir / wavName.str();
-  std::string outPathStr;
-#ifdef _WIN32
-  auto longPath = make_long_path(outPath.wstring());
-  auto pathUtf8 = std::filesystem::path{longPath}.u8string();
-  outPathStr.assign(pathUtf8.begin(), pathUtf8.end());
-  std::filesystem::path fsOutPath{longPath};
+  auto [fsOutPath, outPathStr] = to_long_path(outPath);
   std::ofstream wavFile(fsOutPath, std::ios::binary);
-#else
-  outPathStr = outPath.string();
-  std::filesystem::path fsOutPath = outPath;
-  std::ofstream wavFile(fsOutPath, std::ios::binary);
-#endif
   if (!wavFile) {
     throw std::runtime_error("Échec de l'ouverture du fichier WAV: " +
                              outPathStr);
