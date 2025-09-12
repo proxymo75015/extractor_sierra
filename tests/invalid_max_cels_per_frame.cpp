@@ -39,7 +39,6 @@ static std::vector<uint8_t> build_header(int16_t maxCelsPerFrame) {
     push16(h, 0);               // isHiRes
     push16(h, 0);               // maxSkippablePackets
     push16(h, static_cast<uint16_t>(maxCelsPerFrame));
-    for (int i = 0; i < 4; ++i) push32(h, 0); // maxCelArea
     for (int i = 0; i < 2; ++i) push32(h, 0); // padding
     return h;
 }
