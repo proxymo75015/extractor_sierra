@@ -253,7 +253,7 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
   }
 }
 
-void RobotExtractor::process_audio_block(std::span<std::byte> block,
+void RobotExtractor::process_audio_block(std::span<const std::byte> block,
                                          bool isEven) {
   if (block.size() < 8) {
     throw std::runtime_error("Bloc audio inutilisable");
@@ -618,7 +618,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                       checked_streamsize(block.size()));
             bool isEven = (pos % 2) == 0;
             // L'audio peut exister même sans primer, décompresser toujours.
-            process_audio_block(block, isEven);
+            process_audio_block(std::span<const std::byte>(block), isEven);
             int64_t toSkip = maxSize - size;
             if (toSkip < 0) {
               throw std::runtime_error("Taille audio incohérente");
