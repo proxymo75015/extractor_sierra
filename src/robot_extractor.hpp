@@ -194,10 +194,10 @@ private:
   std::array<int32_t, kMaxCuePoints> m_cueTimes;
   std::array<int16_t, kMaxCuePoints> m_cueValues;
   std::vector<std::byte> m_palette;
-  std::streamsize m_evenPrimerSize;
-  std::streamsize m_oddPrimerSize;
-  int32_t m_totalPrimerSize;
-  std::streamoff m_primerPosition;
+  std::streamsize m_evenPrimerSize = 0;
+  std::streamsize m_oddPrimerSize = 0;
+  int32_t m_totalPrimerSize = 0;
+  std::streamoff m_primerPosition = 0;
   std::vector<std::byte> m_evenPrimer;
   std::vector<std::byte> m_oddPrimer;
   std::vector<std::byte> m_frameBuffer;
