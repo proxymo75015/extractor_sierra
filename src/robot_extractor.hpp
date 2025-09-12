@@ -144,6 +144,7 @@ private:
   static constexpr size_t kMaxFrameSize = 10 * 1024 * 1024;
   static constexpr uint16_t kMaxAudioBlockSize = 65535;
   static constexpr size_t kMaxCuePoints = 256;
+  static constexpr size_t kCelHeaderSize = 22;
 
   void readHeader();
   void parseHeaderFields(bool bigEndian);
