@@ -20,23 +20,25 @@ namespace robot {
 #endif
 
 namespace detail {
+inline int validate_cel_dimensions(uint16_t w, uint16_t h, uint8_t scale) {
+  if (w == 0 || h == 0) {
+    throw std::runtime_error("Dimensions de cel invalides");
+  }
+  if (scale < 1 || scale > 200) {
+    throw std::runtime_error("Facteur d'échelle vertical invalide");
+  }  
+  const int sourceHeight = static_cast<int>(h) * scale / 100;
+  if (sourceHeight <= 0) {
+    throw std::runtime_error("Facteur d'échelle vertical invalide");
+  }
+  return sourceHeight;
+}
+
 // Valide les paramètres d'expansion et retourne la hauteur source calculée.
 inline int validate_expand_params(std::span<std::byte> target,
                                   std::span<const std::byte> source,
                                   uint16_t w, uint16_t h, uint8_t scale) {
-  if (scale < 1) {
-    throw std::runtime_error("Scale invalide");
-  }
-  if (scale > 200) {
-    throw std::runtime_error("Scale trop grand");
-  }
-  if (w == 0 || h == 0) {
-    throw std::runtime_error("Dimensions de cel invalides");
-  }
-  const int sourceHeight = static_cast<int>(h) * scale / 100;
-  if (sourceHeight <= 0) {
-    throw std::runtime_error("Hauteur source invalide");
-  }
+  const int sourceHeight = validate_cel_dimensions(w, h, scale);
   const size_t wSize = static_cast<size_t>(w);
   if (static_cast<size_t>(sourceHeight) > SIZE_MAX / wSize) {
     throw std::runtime_error(
