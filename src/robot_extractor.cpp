@@ -267,6 +267,9 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   }
   auto runway = block.first(8);
   auto audio = block.subspan(8);
+  if (audio.size() % 2 != 0) {
+    throw std::runtime_error("Odd-sized audio payload");
+  }  
   int16_t &predictor = isEven ? m_audioPredictorEven : m_audioPredictorOdd;
   dpcm16_decompress_last(runway, predictor);
   if (audio.empty()) {
