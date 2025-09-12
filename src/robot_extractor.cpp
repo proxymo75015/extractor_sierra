@@ -414,10 +414,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
   // Palette size has been validated in readPalette(); assume it is correct
   // here.
   for (int i = 0; i < numCels; ++i) {
-    if (offset + 22 > m_frameBuffer.size()) {
+    if (offset + kCelHeaderSize > m_frameBuffer.size()) {
       throw std::runtime_error("En-tête de cel invalide");
     }
-    auto celHeader = std::span(m_frameBuffer).subspan(offset, 22);
+    auto celHeader = std::span(m_frameBuffer).subspan(offset, kCelHeaderSize);
     uint8_t verticalScale = std::to_integer<uint8_t>(celHeader[1]);
     uint16_t w = read_scalar<uint16_t>(celHeader.subspan(2, 2), m_bigEndian);
     uint16_t h = read_scalar<uint16_t>(celHeader.subspan(4, 2), m_bigEndian);
@@ -427,7 +427,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         read_scalar<uint16_t>(celHeader.subspan(14, 2), m_bigEndian);
     uint16_t numChunks =
         read_scalar<uint16_t>(celHeader.subspan(16, 2), m_bigEndian);
-    offset += 22;
+    offset += kCelHeaderSize;
 
     if (offset + dataSize > m_frameBuffer.size()) {
       throw std::runtime_error("Cel data exceeds frame buffer");
