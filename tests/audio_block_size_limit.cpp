@@ -6,6 +6,7 @@
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
+using robot::RobotExtractorTester;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -22,7 +23,7 @@ TEST_CASE("Audio block size at limit is accepted") {
     push16(data, 0x16);  // signature
     data.insert(data.end(), {'S', 'O', 'L', '\0'});
     push16(data, 5);  // version
-    push16(data, robot::RobotExtractor::kMaxAudioBlockSize);  // audio block size
+    push16(data, RobotExtractorTester::maxAudioBlockSize());  // audio block size
     push16(data, 0);  // primerZeroCompressFlag
     push16(data, 0);  // reserved
     push16(data, 1);  // numFrames
@@ -48,5 +49,5 @@ TEST_CASE("Audio block size at limit is accepted") {
 
     robot::RobotExtractor extractor(input, outDir, true);
 
-    REQUIRE_NOTHROW(extractor.readHeader());
+    REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
 }
