@@ -440,7 +440,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       throw std::runtime_error("Cel data exceeds frame buffer");
     }
 
-    const int sourceHeight = detail::validate_cel_dimensions(w, h, verticalScale);    
+    const int sourceHeight = detail::validate_cel_dimensions(w, h, verticalScale);
+    if (static_cast<size_t>(h) > SIZE_MAX / static_cast<size_t>(w)) {
+      throw std::runtime_error("Multiplication w*h dépasse SIZE_MAX");
+    }
     size_t pixel_count = static_cast<size_t>(w) * h;
     if (pixel_count > kMaxCelPixels) {
       throw std::runtime_error("Dimensions de cel invalides");
