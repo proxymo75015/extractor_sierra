@@ -6,6 +6,7 @@
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
+using robot::RobotExtractorTester;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -56,10 +57,10 @@ TEST_CASE("Palette skip beyond file size throws") {
     }
 
     robot::RobotExtractor extractor(input, outDir, false);
-    REQUIRE_NOTHROW(extractor.readHeader());
-    REQUIRE_NOTHROW(extractor.readPrimer());
+    REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
+    REQUIRE_NOTHROW(RobotExtractorTester::readPrimer(extractor));
     try {
-        extractor.readPalette();
+        RobotExtractorTester::readPalette(extractor);
         FAIL("No exception thrown");
     } catch (const std::runtime_error &e) {
         REQUIRE(std::string(e.what()).find("Palette hors limites") != std::string::npos);
