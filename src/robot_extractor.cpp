@@ -729,12 +729,18 @@ void RobotExtractor::extract() {
   jsonDoc["frames"] = nlohmann::json::array();
   for (int i = 0; i < m_numFrames; ++i) {
     auto pos = m_fp.tellg();
+    std::streamoff posOff = pos;    
     nlohmann::json frameJson;
     if (exportFrame(i, frameJson)) {
       jsonDoc["frames"].push_back(frameJson);
     }
-    m_fp.seekg(pos + static_cast<std::streamoff>(m_packetSizes[i]),
-               std::ios::beg);
+    const auto packetOff = static_cast<std::streamoff>(m_packetSizes[i]);
+    if (posOff >
+        std::numeric_limits<std::streamoff>::max() - packetOff) {
+      throw std::runtime_error(
+          "Position de paquet dépasse std::streamoff::max");
+    }
+    m_fp.seekg(posOff + packetOff, std::ios::beg);
   }
 
   auto tmpPath = m_dstDir / "metadata.json.tmp";
