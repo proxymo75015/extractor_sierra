@@ -1,6 +1,6 @@
 #include "robot_extractor.hpp"
-#include <catch2/catch_test_macros.hpp>
 #include <algorithm>
+#include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <vector>
 
@@ -78,6 +78,16 @@ TEST_CASE("expand_cel vérifie les tailles de tampons") {
   REQUIRE_THROWS(expand_cel(badTarget, goodSource, w, h, scale));
 }
 
+TEST_CASE("expand_cel rejette un tampon source partagé avec la cible") {
+  const uint16_t w = 1;
+  const uint16_t h = 1;
+  const uint8_t scale = 100;
+
+  std::vector<std::byte> buffer(static_cast<size_t>(w) * h);
+
+  REQUIRE_THROWS(expand_cel(buffer, buffer, w, h, scale));
+}
+
 TEST_CASE("expand_cel rejette un scale nul") {
   const uint16_t w = 1;
   const uint16_t h = 1;
@@ -128,8 +138,7 @@ TEST_CASE("expand_cel traite de grands cels à l'agrandissement") {
   for (int y = 0; y < sourceHeight; ++y) {
     const auto offset = static_cast<size_t>(y) * w;
     auto row = source.begin() + static_cast<std::ptrdiff_t>(offset);
-    std::fill_n(row, static_cast<std::size_t>(w),
-                std::byte(y & 0xFF));
+    std::fill_n(row, static_cast<std::size_t>(w), std::byte(y & 0xFF));
   }
 
   std::vector<std::byte> target(static_cast<size_t>(w) * h);
@@ -157,8 +166,7 @@ TEST_CASE("expand_cel traite de grands cels à la réduction") {
   for (int y = 0; y < sourceHeight; ++y) {
     const auto offset = static_cast<size_t>(y) * w;
     auto row = source.begin() + static_cast<std::ptrdiff_t>(offset);
-    std::fill_n(row, static_cast<std::size_t>(w),
-                std::byte(y & 0xFF));
+    std::fill_n(row, static_cast<std::size_t>(w), std::byte(y & 0xFF));
   }
 
   std::vector<std::byte> target(static_cast<size_t>(w) * h);
@@ -187,8 +195,8 @@ TEST_CASE("expand_cel réduit correctement un cel de hauteur minimale") {
   const uint16_t h = 1;
   const uint8_t scale = 200; // source deux fois plus haute que la cible
 
-  std::vector<std::byte> source{std::byte{1}, std::byte{2},
-                                std::byte{3}, std::byte{4}};
+  std::vector<std::byte> source{std::byte{1}, std::byte{2}, std::byte{3},
+                                std::byte{4}};
 
   std::vector<std::byte> expected{std::byte{1}, std::byte{2}};
 
