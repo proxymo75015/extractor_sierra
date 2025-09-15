@@ -135,9 +135,10 @@ void RobotExtractor::readPrimer() {
   }
   StreamExceptionGuard guard(m_fp);
   if (m_primerReservedSize != 0) {
-    m_primerPosition = m_fp.tellg();
-    if (m_primerPosition < 0 ||
-        static_cast<std::uintmax_t>(m_primerPosition) + m_primerReservedSize >
+    std::streamoff primerHeaderPos = m_fp.tellg();
+    m_primerPosition = primerHeaderPos;
+    if (primerHeaderPos < 0 ||
+        static_cast<std::uintmax_t>(primerHeaderPos) + m_primerReservedSize >
             fileSize) {
       throw std::runtime_error("Primer hors limites");
     }
@@ -146,20 +147,12 @@ void RobotExtractor::readPrimer() {
     m_evenPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
     m_oddPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
 
-    if (static_cast<int64_t>(m_evenPrimerSize) +
-            static_cast<int64_t>(m_oddPrimerSize) !=
-        static_cast<int64_t>(m_totalPrimerSize)) {
-      throw std::runtime_error("Tailles de primer audio incohérentes");
-    }
-
     if (m_totalPrimerSize < 0 ||
         m_totalPrimerSize > static_cast<int32_t>(m_primerReservedSize) ||
         m_evenPrimerSize < 0 || m_oddPrimerSize < 0 ||
         m_evenPrimerSize > m_totalPrimerSize ||
         m_oddPrimerSize > m_totalPrimerSize ||
-        m_evenPrimerSize + m_oddPrimerSize > m_totalPrimerSize ||
-        m_evenPrimerSize + m_oddPrimerSize >
-            static_cast<int32_t>(m_primerReservedSize)) {
+        m_evenPrimerSize + m_oddPrimerSize > m_totalPrimerSize) {
       throw std::runtime_error("Tailles de primer audio incohérentes");
     }
 
@@ -190,9 +183,15 @@ void RobotExtractor::readPrimer() {
             m_srcPath.string());
       }
     }
-    const std::streamoff target =
-        m_primerPosition + static_cast<std::streamoff>(m_primerReservedSize);
-    m_fp.seekg(target, std::ios::beg);
+    std::streamoff dataEnd =
+        primerHeaderPos + static_cast<std::streamoff>(m_totalPrimerSize);
+    if (static_cast<int32_t>(m_primerReservedSize) > m_totalPrimerSize) {
+      m_fp.seekg(primerHeaderPos +
+                 static_cast<std::streamoff>(m_primerReservedSize),
+                 std::ios::beg);
+    } else {
+      m_fp.seekg(dataEnd, std::ios::beg);
+    }
   } else if (m_primerZeroCompressFlag) {
     m_evenPrimerSize = 19922;
     m_oddPrimerSize = 21024;
