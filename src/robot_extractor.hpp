@@ -158,6 +158,8 @@ private:
   static constexpr uint16_t kMaxAudioBlockSize = 65535;
   static constexpr size_t kMaxCuePoints = 256;
   static constexpr size_t kCelHeaderSize = 22;
+  static constexpr uint32_t kSampleRate = 11025;
+  static constexpr size_t kAudioRunwayBytes = 8;
 
   void readHeader();
   void parseHeaderFields(bool bigEndian);
