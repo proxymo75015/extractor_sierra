@@ -30,6 +30,7 @@ struct ExtractorOptions {
     bool quiet = false;
     bool force_be = false;
     bool force_le = false;
+    bool debug_index = false;
     int max_x_res = kMaxXRes;
     int max_y_res = kMaxYRes;
 };
