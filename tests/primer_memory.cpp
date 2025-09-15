@@ -80,8 +80,12 @@ TEST_CASE("readPrimer releases primer buffers") {
   for (int i = 0; i < 3; ++i) {
     if (i > 0) {
       RobotExtractorTester::file(extractor).clear();
-      RobotExtractorTester::file(extractor).seekg(
-          RobotExtractorTester::primerPosition(extractor), std::ios::beg);
+      constexpr std::streamoff primerHeaderSize =
+          sizeof(uint32_t) + sizeof(int16_t) + sizeof(uint32_t) +
+          sizeof(uint32_t);
+      std::streamoff headerPos =
+          RobotExtractorTester::primerPosition(extractor) - primerHeaderSize;
+      RobotExtractorTester::file(extractor).seekg(headerPos, std::ios::beg);
     }
     RobotExtractorTester::readPrimer(extractor);
     REQUIRE(RobotExtractorTester::evenPrimer(extractor).size() == 0);
