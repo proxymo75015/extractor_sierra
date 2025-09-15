@@ -151,7 +151,7 @@ void RobotExtractor::readPrimer() {
         static_cast<int64_t>(m_totalPrimerSize)) {
       throw std::runtime_error("Tailles de primer audio incohérentes");
     }
-    
+
     if (m_totalPrimerSize < 0 ||
         m_totalPrimerSize > static_cast<int32_t>(m_primerReservedSize) ||
         m_evenPrimerSize < 0 || m_oddPrimerSize < 0 ||
@@ -162,7 +162,7 @@ void RobotExtractor::readPrimer() {
             static_cast<int32_t>(m_primerReservedSize)) {
       throw std::runtime_error("Tailles de primer audio incohérentes");
     }
-      
+
     if (compType != 0) {
       throw std::runtime_error("Type de compression inconnu: " +
                                std::to_string(compType));
@@ -190,12 +190,9 @@ void RobotExtractor::readPrimer() {
             m_srcPath.string());
       }
     }
-    std::streamsize readSize = m_evenPrimerSize + m_oddPrimerSize;
-    if (readSize < static_cast<std::streamsize>(m_primerReservedSize)) {
-      const std::streamoff target =
-          m_primerPosition + static_cast<std::streamoff>(m_primerReservedSize);
-      m_fp.seekg(target, std::ios::beg);
-    }
+    const std::streamoff target =
+        m_primerPosition + static_cast<std::streamoff>(m_primerReservedSize);
+    m_fp.seekg(target, std::ios::beg);
   } else if (m_primerZeroCompressFlag) {
     m_evenPrimerSize = 19922;
     m_oddPrimerSize = 21024;
@@ -223,6 +220,10 @@ void RobotExtractor::readPrimer() {
           m_srcPath.string());
     }
   }
+  m_evenPrimer.clear();
+  m_evenPrimer.shrink_to_fit();
+  m_oddPrimer.clear();
+  m_oddPrimer.shrink_to_fit();
 }
 
 void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
@@ -296,7 +297,7 @@ void RobotExtractor::readPalette() {
     m_fp.seekg(m_paletteSize, std::ios::cur);
     return;
   }
-  
+
   if (m_paletteSize % 3 != 0) {
     throw std::runtime_error(
         std::string(
