@@ -95,7 +95,7 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
                              std::to_string(m_numFrames));
   }
   m_paletteSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
-  m_primerReservedSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
+  m_primerReservedSize = read_scalar<uint16_t>(m_fp, m_bigEndian); // raw header value
   m_xRes = read_scalar<int16_t>(m_fp, m_bigEndian);
   m_yRes = read_scalar<int16_t>(m_fp, m_bigEndian);
   m_hasPalette = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
@@ -153,9 +153,11 @@ void RobotExtractor::readPrimer() {
     m_evenPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
     m_oddPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
 
-    if (m_totalPrimerSize < 0 ||
-        m_totalPrimerSize > static_cast<int32_t>(m_primerReservedSize) ||
-        m_evenPrimerSize < 0 || m_oddPrimerSize < 0 ||
+    if (static_cast<int32_t>(m_primerReservedSize) < m_totalPrimerSize) {
+      throw std::runtime_error("primerReservedSize < totalPrimerSize");
+    }
+
+    if (m_totalPrimerSize < 0 || m_evenPrimerSize < 0 || m_oddPrimerSize < 0 ||
         m_evenPrimerSize > m_totalPrimerSize ||
         m_oddPrimerSize > m_totalPrimerSize ||
         m_evenPrimerSize + m_oddPrimerSize > m_totalPrimerSize) {
@@ -233,10 +235,14 @@ void RobotExtractor::readPrimer() {
   m_oddPrimer.shrink_to_fit();
   if (m_options.debug_index) {
     log_error(m_srcPath,
+              "readPrimer: totalPrimerSize = " +
+                  std::to_string(m_totalPrimerSize),
+              m_options);    
+    log_error(m_srcPath,
               "readPrimer: position après seekg = " +
                   std::to_string(m_fp.tellg()),
               m_options);
-  }  
+  }
 }
 
 void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
