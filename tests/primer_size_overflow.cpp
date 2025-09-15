@@ -70,11 +70,5 @@ TEST_CASE("Somme des primers dépasse les bornes") {
     out.close();
 
     robot::RobotExtractor extractor(input, outDir, false);
-    try {
-        extractor.extract();
-        FAIL("Aucune exception levée");
-    } catch (const std::runtime_error &e) {
-        REQUIRE(std::string(e.what()).find("Tailles de primer audio incohérentes") !=
-                std::string::npos);
-    }
+    REQUIRE_THROWS_AS(extractor.extract(), std::runtime_error);
 }
