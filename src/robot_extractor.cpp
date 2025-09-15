@@ -131,6 +131,12 @@ void RobotExtractor::readPrimer() {
       throw std::runtime_error("Primer hors limites");
     }
     m_fp.seekg(m_primerReservedSize, std::ios::cur);
+    if (m_options.debug_index) {
+      log_error(m_srcPath,
+                "readPrimer: position après seekg = " +
+                    std::to_string(m_fp.tellg()),
+                m_options);
+    }    
     return;
   }
   StreamExceptionGuard guard(m_fp);
@@ -225,6 +231,12 @@ void RobotExtractor::readPrimer() {
   m_evenPrimer.shrink_to_fit();
   m_oddPrimer.clear();
   m_oddPrimer.shrink_to_fit();
+  if (m_options.debug_index) {
+    log_error(m_srcPath,
+              "readPrimer: position après seekg = " +
+                  std::to_string(m_fp.tellg()),
+              m_options);
+  }  
 }
 
 void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
@@ -329,6 +341,12 @@ void RobotExtractor::readPalette() {
 
 void RobotExtractor::readSizesAndCues() {
   StreamExceptionGuard guard(m_fp);
+  if (m_options.debug_index) {
+    log_error(m_srcPath,
+              "readSizesAndCues: position initiale = " +
+                  std::to_string(m_fp.tellg()),
+              m_options);
+  }  
   m_frameSizes.resize(m_numFrames);
   m_packetSizes.resize(m_numFrames);
   for (auto &size : m_frameSizes) {
