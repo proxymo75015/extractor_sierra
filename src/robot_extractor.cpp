@@ -155,14 +155,7 @@ void RobotExtractor::readPrimer() {
     // Record the start of the primer data, just after the header
     m_primerPosition = m_fp.tellg();
 
-    if (static_cast<int32_t>(m_primerReservedSize) < m_totalPrimerSize) {
-      throw std::runtime_error("primerReservedSize < totalPrimerSize");
-    }
-
-    if (m_totalPrimerSize < 0 || m_evenPrimerSize < 0 || m_oddPrimerSize < 0 ||
-        m_evenPrimerSize > m_totalPrimerSize ||
-        m_oddPrimerSize > m_totalPrimerSize ||
-        m_evenPrimerSize + m_oddPrimerSize > m_totalPrimerSize) {
+    if (m_evenPrimerSize < 0 || m_oddPrimerSize < 0) {
       throw std::runtime_error("Tailles de primer audio incohérentes");
     }
 
@@ -234,10 +227,6 @@ void RobotExtractor::readPrimer() {
   m_oddPrimer.clear();
   m_oddPrimer.shrink_to_fit();
   if (m_options.debug_index) {
-    log_error(m_srcPath,
-              "readPrimer: totalPrimerSize = " +
-                  std::to_string(m_totalPrimerSize),
-              m_options);    
     log_error(m_srcPath,
               "readPrimer: position après seekg = " +
                   std::to_string(m_fp.tellg()),
