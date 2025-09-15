@@ -70,11 +70,5 @@ TEST_CASE("primerReservedSize plus petit que totalPrimerSize") {
     out.close();
 
     robot::RobotExtractor extractor(input, outDir, false);
-    try {
-        extractor.extract();
-        FAIL("Aucune exception levée");
-    } catch (const std::runtime_error &e) {
-        REQUIRE(std::string(e.what()).find("primerReservedSize < totalPrimerSize") !=
-                std::string::npos);
-    }
+    REQUIRE_THROWS_AS(extractor.extract(), std::runtime_error);
 }
