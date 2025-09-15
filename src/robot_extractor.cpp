@@ -8,10 +8,10 @@
 #include <iomanip>
 #include <iostream>
 #include <limits>
-#include <system_error>
 #include <span>
 #include <sstream>
 #include <stdexcept>
+#include <system_error>
 
 #include "utilities.hpp"
 
@@ -39,7 +39,7 @@ void RobotExtractor::readHeader() {
   if (m_options.force_be && m_options.force_le) {
     throw std::runtime_error(
         "Options force_be et force_le mutuellement exclusives");
-  }  
+  }
   if (m_options.force_be) {
     m_bigEndian = true;
   } else if (m_options.force_le) {
@@ -59,7 +59,7 @@ void RobotExtractor::readHeader() {
       m_yRes > m_options.max_y_res) {
     throw std::runtime_error("Résolution invalide: " + std::to_string(m_xRes) +
                              "x" + std::to_string(m_yRes));
-  }  
+  }
 }
 
 void RobotExtractor::parseHeaderFields(bool bigEndian) {
@@ -85,10 +85,9 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   }
   m_primerZeroCompressFlag = read_scalar<int16_t>(m_fp, m_bigEndian);
   if (m_primerZeroCompressFlag != 0 && m_primerZeroCompressFlag != 1) {
-    throw std::runtime_error(
-        "Flag primerZeroCompress invalide: " +
-        std::to_string(m_primerZeroCompressFlag));
-  }  
+    throw std::runtime_error("Flag primerZeroCompress invalide: " +
+                             std::to_string(m_primerZeroCompressFlag));
+  }
   m_fp.seekg(2, std::ios::cur);
   m_numFrames = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (m_numFrames == 0 || m_numFrames > kMaxFrames) {
@@ -127,7 +126,8 @@ void RobotExtractor::readPrimer() {
   const std::uintmax_t fileSize = m_fileSize;
   if (!m_hasAudio) {
     std::streamoff curPos = m_fp.tellg();
-    if (curPos < 0 || static_cast<std::uintmax_t>(curPos) + m_primerReservedSize > fileSize) {
+    if (curPos < 0 ||
+        static_cast<std::uintmax_t>(curPos) + m_primerReservedSize > fileSize) {
       throw std::runtime_error("Primer hors limites");
     }
     m_fp.seekg(m_primerReservedSize, std::ios::cur);
@@ -137,7 +137,8 @@ void RobotExtractor::readPrimer() {
   if (m_primerReservedSize != 0) {
     m_primerPosition = m_fp.tellg();
     if (m_primerPosition < 0 ||
-        static_cast<std::uintmax_t>(m_primerPosition) + m_primerReservedSize > fileSize) {
+        static_cast<std::uintmax_t>(m_primerPosition) + m_primerReservedSize >
+            fileSize) {
       throw std::runtime_error("Primer hors limites");
     }
     m_totalPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
@@ -191,9 +192,9 @@ void RobotExtractor::readPrimer() {
     }
     std::streamsize readSize = m_evenPrimerSize + m_oddPrimerSize;
     if (readSize < static_cast<std::streamsize>(m_primerReservedSize)) {
-      std::streamoff pad = static_cast<std::streamoff>(
-          static_cast<std::streamsize>(m_primerReservedSize) - readSize);
-      m_fp.seekg(pad, std::ios::cur);
+      const std::streamoff target =
+          m_primerPosition + static_cast<std::streamoff>(m_primerReservedSize);
+      m_fp.seekg(target, std::ios::beg);
     }
   } else if (m_primerZeroCompressFlag) {
     m_evenPrimerSize = 19922;
@@ -217,8 +218,9 @@ void RobotExtractor::readPrimer() {
     try {
       processPrimerChannel(m_oddPrimer, m_audioPredictorOdd, false);
     } catch (const std::runtime_error &) {
-      throw std::runtime_error(std::string("Primer audio impair tronqué pour ") +
-                               m_srcPath.string());
+      throw std::runtime_error(
+          std::string("Primer audio impair tronqué pour ") +
+          m_srcPath.string());
     }
   }
 }
@@ -260,7 +262,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   auto audio = block.subspan(8);
   if (audio.size() % 2 != 0) {
     throw std::runtime_error("Odd-sized audio payload");
-  }  
+  }
   int16_t &predictor = isEven ? m_audioPredictorEven : m_audioPredictorOdd;
   dpcm16_decompress_last(runway, predictor);
   if (audio.empty()) {
@@ -274,7 +276,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     }
     writeWav(samples, 11025, audioIndex++, isEven);
   } else {
-    dpcm16_decompress_last(audio, predictor);    
+    dpcm16_decompress_last(audio, predictor);
   }
 }
 
@@ -283,15 +285,14 @@ void RobotExtractor::readPalette() {
   const std::uintmax_t fileSize = m_fileSize;
   if (!m_hasPalette) {
     if (m_paletteSize != 0)
-      log_warn(m_srcPath,
-               "paletteSize non nul alors que hasPalette==false",
+      log_warn(m_srcPath, "paletteSize non nul alors que hasPalette==false",
                m_options);
     std::streamoff curPos = m_fp.tellg();
     if (curPos < 0 ||
         static_cast<std::uintmax_t>(curPos) + m_paletteSize > fileSize) {
       throw std::runtime_error(std::string("Palette hors limites pour ") +
                                m_srcPath.string());
-    }    
+    }
     m_fp.seekg(m_paletteSize, std::ios::cur);
     return;
   }
@@ -365,8 +366,9 @@ void RobotExtractor::readSizesAndCues() {
     if (m_packetSizes[i] < m_frameSizes[i]) {
       throw std::runtime_error("Packet size < frame size");
     }
-    uint64_t maxSize64 = static_cast<uint64_t>(m_frameSizes[i]) +
-                        (m_hasAudio ? static_cast<uint64_t>(m_audioBlkSize) : 0);
+    uint64_t maxSize64 =
+        static_cast<uint64_t>(m_frameSizes[i]) +
+        (m_hasAudio ? static_cast<uint64_t>(m_audioBlkSize) : 0);
     if (maxSize64 > UINT32_MAX) {
       throw std::runtime_error(
           "Frame size + audio block size exceeds UINT32_MAX");
@@ -438,7 +440,8 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       throw std::runtime_error("Cel data exceeds frame buffer");
     }
 
-    const int sourceHeight = detail::validate_cel_dimensions(w, h, verticalScale);
+    const int sourceHeight =
+        detail::validate_cel_dimensions(w, h, verticalScale);
     if (static_cast<size_t>(h) > SIZE_MAX / static_cast<size_t>(w)) {
       throw std::runtime_error("Multiplication w*h dépasse SIZE_MAX");
     }
@@ -450,10 +453,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       throw std::runtime_error(
           "Débordement lors du calcul de la taille de cel");
     }
-    size_t expected = static_cast<size_t>(w) * static_cast<size_t>(sourceHeight);
+    size_t expected =
+        static_cast<size_t>(w) * static_cast<size_t>(sourceHeight);
     if (expected > kMaxCelPixels) {
-      throw std::runtime_error(
-          "Cel décompressé dépasse la taille maximale");
+      throw std::runtime_error("Cel décompressé dépasse la taille maximale");
     }
     m_celBuffer.clear();
     m_celBuffer.reserve(expected);
@@ -483,7 +486,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
           throw std::runtime_error("Données de chunk insuffisantes");
         }
         cel_offset += compSz;
-        continue;        
+        continue;
       }
       if (cel_offset + compSz > m_frameBuffer.size()) {
         throw std::runtime_error("Données de chunk insuffisantes");
@@ -552,11 +555,9 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       }
 
       std::ostringstream oss;
-      oss << std::setw(5) << std::setfill('0') << frameNo << "_" << i
-          << ".png";
+      oss << std::setw(5) << std::setfill('0') << frameNo << "_" << i << ".png";
       auto outPath = m_dstDir / oss.str();
-      write_png_cross_platform(outPath, w, h, 4, m_rgbaBuffer.data(),
-                               w * 4);
+      write_png_cross_platform(outPath, w, h, 4, m_rgbaBuffer.data(), w * 4);
     }
 
     nlohmann::json celJson;
@@ -601,11 +602,11 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
           }
           int64_t maxSize = static_cast<int64_t>(audioBlkLen) - 8;
           if (size > maxSize) {
-            log_error(m_srcPath,
-                      "Taille de bloc audio inattendue: " +
-                          std::to_string(size) +
-                          " (maximum: " + std::to_string(maxSize) + ")",
-                      m_options);
+            log_error(
+                m_srcPath,
+                "Taille de bloc audio inattendue: " + std::to_string(size) +
+                    " (maximum: " + std::to_string(maxSize) + ")",
+                m_options);
             // Taille incohérente, ignorer le reste du bloc audio
             m_fp.seekg(static_cast<std::streamoff>(maxSize), std::ios::cur);
           } else {
@@ -666,13 +667,13 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
   header[13] = 'm';
   header[14] = 't';
   header[15] = ' ';
-  write_le32(header.data() + 16, 16);    // fmt chunk size
-  write_le16(header.data() + 20, 1);      // PCM
-  write_le16(header.data() + 22, 1);      // Mono
+  write_le32(header.data() + 16, 16); // fmt chunk size
+  write_le16(header.data() + 20, 1);  // PCM
+  write_le16(header.data() + 22, 1);  // Mono
   write_le32(header.data() + 24, sampleRate);
   write_le32(header.data() + 28, byte_rate);
-  write_le16(header.data() + 32, 2);      // Block align
-  write_le16(header.data() + 34, 16);     // Bits per sample
+  write_le16(header.data() + 32, 2);  // Block align
+  write_le16(header.data() + 34, 16); // Bits per sample
   header[36] = 'd';
   header[37] = 'a';
   header[38] = 't';
@@ -720,14 +721,13 @@ void RobotExtractor::extract() {
   jsonDoc["frames"] = nlohmann::json::array();
   for (int i = 0; i < m_numFrames; ++i) {
     auto pos = m_fp.tellg();
-    std::streamoff posOff = pos;    
+    std::streamoff posOff = pos;
     nlohmann::json frameJson;
     if (exportFrame(i, frameJson)) {
       jsonDoc["frames"].push_back(frameJson);
     }
     const auto packetOff = static_cast<std::streamoff>(m_packetSizes[i]);
-    if (posOff >
-        std::numeric_limits<std::streamoff>::max() - packetOff) {
+    if (posOff > std::numeric_limits<std::streamoff>::max() - packetOff) {
       throw std::runtime_error(
           "Position de paquet dépasse std::streamoff::max");
     }
@@ -736,7 +736,7 @@ void RobotExtractor::extract() {
 
   auto tmpPath = m_dstDir / "metadata.json.tmp";
   std::string tmpPathStr = tmpPath.string();
-    struct TempFileGuard {
+  struct TempFileGuard {
     std::filesystem::path path;
     bool active{true};
     ~TempFileGuard() noexcept {
@@ -773,20 +773,21 @@ void RobotExtractor::extract() {
   std::error_code ec;
   std::filesystem::rename(tmpPath, finalPath, ec);
   if (ec) {
-    std::filesystem::copy_file(tmpPath, finalPath,
-                               std::filesystem::copy_options::overwrite_existing,
-                               ec);
+    std::filesystem::copy_file(
+        tmpPath, finalPath, std::filesystem::copy_options::overwrite_existing,
+        ec);
     if (ec) {
       throw std::runtime_error("Échec de la copie de " + tmpPathStr + " vers " +
                                finalPath.string() + ": " + ec.message());
     }
     std::filesystem::remove(tmpPath, ec);
     if (ec) {
-      throw std::runtime_error("Échec de la suppression du fichier temporaire " +
-                               tmpPathStr + ": " + ec.message());
+      throw std::runtime_error(
+          "Échec de la suppression du fichier temporaire " + tmpPathStr + ": " +
+          ec.message());
     }
   }
-  guard.release();  
+  guard.release();
 }
 
 } // namespace robot
