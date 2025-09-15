@@ -364,6 +364,13 @@ void RobotExtractor::readSizesAndCues() {
   }
   for (size_t i = 0; i < m_frameSizes.size(); ++i) {
     if (m_packetSizes[i] < m_frameSizes[i]) {
+      if (m_options.debug_index) {
+        log_error(m_srcPath,
+                  "Packet size < frame size (i=" + std::to_string(i) +
+                      ", frame=" + std::to_string(m_frameSizes[i]) +
+                      ", packet=" + std::to_string(m_packetSizes[i]) + ")",
+                  m_options);
+      }      
       throw std::runtime_error(
           "Packet size < frame size (frame " + std::to_string(i) +
           ": packet=" + std::to_string(m_packetSizes[i]) +
@@ -373,11 +380,27 @@ void RobotExtractor::readSizesAndCues() {
         static_cast<uint64_t>(m_frameSizes[i]) +
         (m_hasAudio ? static_cast<uint64_t>(m_audioBlkSize) : 0);
     if (maxSize64 > UINT32_MAX) {
+      if (m_options.debug_index) {
+        log_error(m_srcPath,
+                  "Frame size + audio block size exceeds UINT32_MAX (i=" +
+                      std::to_string(i) + ", frame=" +
+                      std::to_string(m_frameSizes[i]) + ", packet=" +
+                      std::to_string(m_packetSizes[i]) + ")",
+                  m_options);
+      }      
       throw std::runtime_error(
           "Frame size + audio block size exceeds UINT32_MAX");
     }
     uint32_t maxSize = static_cast<uint32_t>(maxSize64);
     if (m_packetSizes[i] > maxSize) {
+      if (m_options.debug_index) {
+        log_error(m_srcPath,
+                  "Packet size > frame size + audio block size (i=" +
+                      std::to_string(i) + ", frame=" +
+                      std::to_string(m_frameSizes[i]) + ", packet=" +
+                      std::to_string(m_packetSizes[i]) + ")",
+                  m_options);
+      }      
       throw std::runtime_error("Packet size > frame size + audio block size");
     }
   }
@@ -815,6 +838,9 @@ int main(int argc, char *argv[]) {
     } else if (arg == "--force-le") {
       options.force_le = true;
       known = true;
+    } else if (arg == "--debug-index") {
+      options.debug_index = true;
+      known = true;      
     }
     if (!known)
       files.push_back(arg);
@@ -826,8 +852,8 @@ int main(int argc, char *argv[]) {
   }
   if (files.size() != 2) {
     std::cerr << "Usage: " << argv[0]
-              << " [--audio] [--quiet] [--force-be | --force-le] <input.rbt> "
-                 "<output_dir>\n";
+              << " [--audio] [--quiet] [--force-be | --force-le]"
+                 " [--debug-index] <input.rbt> <output_dir>\n";
     return 1;
   }
   try {
