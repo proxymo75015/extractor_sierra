@@ -141,6 +141,7 @@ void RobotExtractor::readPrimer() {
   }
   StreamExceptionGuard guard(m_fp);
   if (m_primerReservedSize != 0) {
+    // Memorize the start of the primer header before reading its fields    
     std::streamoff primerHeaderPos = m_fp.tellg();
     if (primerHeaderPos < 0 ||
         static_cast<std::uintmax_t>(primerHeaderPos) + m_primerReservedSize >
@@ -151,7 +152,8 @@ void RobotExtractor::readPrimer() {
     int16_t compType = read_scalar<int16_t>(m_fp, m_bigEndian);
     m_evenPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
     m_oddPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
-    m_primerPosition = m_fp.tellg();    
+    // Record the start of the primer data, just after the header
+    m_primerPosition = m_fp.tellg();
 
     if (static_cast<int32_t>(m_primerReservedSize) < m_totalPrimerSize) {
       throw std::runtime_error("primerReservedSize < totalPrimerSize");
@@ -191,11 +193,9 @@ void RobotExtractor::readPrimer() {
             m_srcPath.string());
       }
     }
-    const std::streamoff target =
-        primerHeaderPos +
-        static_cast<std::streamoff>(m_primerReservedSize);
-
-    m_fp.seekg(target, std::ios::beg);
+    m_fp.seekg(primerHeaderPos +
+                   static_cast<std::streamoff>(m_primerReservedSize),
+               std::ios::beg);
     if (m_options.debug_index) {
       log_error(m_srcPath,
                 "readPrimer: position après seekg = " +
