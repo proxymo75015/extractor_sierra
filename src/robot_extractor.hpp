@@ -14,6 +14,12 @@
 #include <vector>
 
 namespace robot {
+
+inline bool rangesOverlap(const std::byte *aBegin, const std::byte *aEnd,
+                          const std::byte *bBegin, const std::byte *bEnd) {
+  return !(aEnd <= bBegin || bEnd <= aBegin);
+}
+
 namespace detail {
 inline int validate_cel_dimensions(uint16_t w, uint16_t h, uint8_t scale) {
   if (w == 0 || h == 0) {
@@ -117,11 +123,7 @@ inline void expand_cel(std::span<std::byte> target,
   const std::byte *tEnd = tBegin + target.size();
   const std::byte *sBegin = source.data();
   const std::byte *sEnd = sBegin + source.size();
-  auto tBeginAddr = reinterpret_cast<std::uintptr_t>(tBegin);
-  auto tEndAddr = reinterpret_cast<std::uintptr_t>(tEnd);
-  auto sBeginAddr = reinterpret_cast<std::uintptr_t>(sBegin);
-  auto sEndAddr = reinterpret_cast<std::uintptr_t>(sEnd);
-  if (!(tEndAddr <= sBeginAddr || sEndAddr <= tBeginAddr))
+  if (rangesOverlap(tBegin, tEnd, sBegin, sEnd))
     throw std::runtime_error("target and source must not overlap");
   
   const int sourceHeight =
