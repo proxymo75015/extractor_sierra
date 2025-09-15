@@ -42,24 +42,26 @@ void read_exact(std::ifstream &f, void *data, size_t size) {
 bool detect_endianness(std::ifstream &f) {
     StreamExceptionGuard guard(f);
     auto start = f.tellg();
-    std::array<uint8_t, 2> sigBytes{};
-    // StreamExceptionGuard active les exceptions failbit/badbit, ce qui fait
-    // que `read` lève `std::ios_base::failure` si moins de 2 octets sont
-    // disponibles. Nous nous appuyons sur ce comportement au lieu de
-    // contrôler `gcount` manuellement.    
-    f.read(reinterpret_cast<char *>(sigBytes.data()), 2);
-    uint16_t le = static_cast<uint16_t>(sigBytes[0]) |
-                   (static_cast<uint16_t>(sigBytes[1]) << 8);
-    uint16_t be = static_cast<uint16_t>(sigBytes[0]) << 8 |
-                   static_cast<uint16_t>(sigBytes[1]);
+    // La détection d'endianess s'effectue sur le champ de version situé à
+    // l'offset 6. On lit ce champ sans interprétation, puis on tente de
+    // l'interpréter en little et big endian.
+    f.seekg(start + static_cast<std::streamoff>(6));
+    std::array<uint8_t, 2> verBytes{};
+    f.read(reinterpret_cast<char *>(verBytes.data()), 2);
+    uint16_t le = static_cast<uint16_t>(verBytes[0]) |
+                  (static_cast<uint16_t>(verBytes[1]) << 8);
+    uint16_t be = static_cast<uint16_t>(verBytes[0]) << 8 |
+                  static_cast<uint16_t>(verBytes[1]);
     f.seekg(start);
-    if (le == 0x16 || le == 0x3d) {
+    // Versions valides: 4 à 6. On choisit l'interprétation qui tombe dans
+    // cette plage.
+    if (le >= 4 && le <= 6) {
         return false;
     }
-    if (be == 0x16 || be == 0x3d) {
+    if (be >= 4 && be <= 6) {
         return true;
     }
-    throw std::runtime_error("Signature Robot invalide");
+    throw std::runtime_error("Version Robot invalide");
 }
 
 void append_le16(std::vector<std::byte> &out, uint16_t value) {
