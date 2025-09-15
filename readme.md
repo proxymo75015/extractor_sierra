@@ -28,7 +28,7 @@ cmake --build build
 
 
 Usage
-./robot_extractor [--audio] [--quiet] [--force-be | --force-le] <input.rbt> <output_dir>
+./robot_extractor [--audio] [--quiet] [--force-be | --force-le] [--debug-index] <input.rbt> <output_dir>
 
 Options
 
@@ -36,6 +36,7 @@ Options
 --quiet: Suppress console output␊
 --force-be: Force big-endian byte order. Cannot be used with --force-le
 --force-le: Force little-endian byte order. Cannot be used with --force-be
+--debug-index: Log index and size inconsistencies when reading packets
 
 Output
 
@@ -61,4 +62,5 @@ Earlier revisions of this project bundled a legacy standalone extractor at `src/
 License
 
 BSD 3-Clause License
+
 
