@@ -100,7 +100,7 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_yRes = read_scalar<int16_t>(m_fp, m_bigEndian);
   m_hasPalette = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
   m_hasAudio = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
-  if (m_hasAudio && m_audioBlkSize < 8) {
+  if (m_hasAudio && m_audioBlkSize < kAudioRunwayBytes) {
     throw std::runtime_error("Taille de bloc audio invalide");
   }
   m_fp.seekg(2, std::ios::cur);
@@ -225,11 +225,10 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
   if (primer.empty()) {
     return;
   }
-  if (primer.size() < 8) {
+  if (primer.size() < kAudioRunwayBytes) {
     throw std::runtime_error("Primer audio tronqué");
   }
-  constexpr size_t kRunwayBytes = 8;
-  const size_t runwaySamples = kRunwayBytes * 2; // 8 bytes => 16 samples
+  const size_t runwaySamples = kAudioRunwayBytes * 2; // kAudioRunwayBytes bytes => 16 samples
   if (m_extractAudio) {
     auto pcm = dpcm16_decompress(std::span(primer), predictor);
     if (pcm.size() >= runwaySamples) {
@@ -242,7 +241,7 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     if (audioIndex == std::numeric_limits<size_t>::max()) {
       throw std::runtime_error("Audio index overflow");
     }
-    writeWav(pcm, 11025, audioIndex++, isEven);
+    writeWav(pcm, kSampleRate, audioIndex++, isEven);
   } else {
     dpcm16_decompress_last(std::span(primer), predictor);
   }
@@ -250,11 +249,11 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
 
 void RobotExtractor::process_audio_block(std::span<const std::byte> block,
                                          bool isEven) {
-  if (block.size() < 8) {
+  if (block.size() < kAudioRunwayBytes) {
     throw std::runtime_error("Bloc audio inutilisable");
   }
-  auto runway = block.first(8);
-  auto audio = block.subspan(8);
+  auto runway = block.first(kAudioRunwayBytes);
+  auto audio = block.subspan(kAudioRunwayBytes);
   if (audio.size() % 2 != 0) {
     throw std::runtime_error("Odd-sized audio payload");
   }
@@ -269,7 +268,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     if (audioIndex == std::numeric_limits<size_t>::max()) {
       throw std::runtime_error("Audio index overflow");
     }
-    writeWav(samples, 11025, audioIndex++, isEven);
+    writeWav(samples, kSampleRate, audioIndex++, isEven);
   } else {
     dpcm16_decompress_last(audio, predictor);
   }
@@ -604,7 +603,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
   if (m_hasAudio) {
     if (m_packetSizes[frameNo] > m_frameSizes[frameNo]) {
       uint32_t audioBlkLen = m_packetSizes[frameNo] - m_frameSizes[frameNo];
-      if (audioBlkLen < 8) {
+      if (audioBlkLen < kAudioRunwayBytes) {
         m_fp.seekg(static_cast<std::streamoff>(audioBlkLen), std::ios::cur);
       } else {
         int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
@@ -617,11 +616,11 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         } else {
           int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
           // "size" représente le nombre d'octets suivant ce champ, incluant
-          // les 8 octets de "runway" mais excluant l'en-tête "pos" + "size".
-          if (size < 8) {
+          // les kAudioRunwayBytes octets de "runway" mais excluant l'en-tête "pos" + "size".
+          if (size < kAudioRunwayBytes) {
             throw std::runtime_error("Taille audio invalide");
           }
-          int64_t maxSize = static_cast<int64_t>(audioBlkLen) - 8;
+          int64_t maxSize = static_cast<int64_t>(audioBlkLen) - kAudioRunwayBytes;
           if (size > maxSize) {
             log_error(
                 m_srcPath,
