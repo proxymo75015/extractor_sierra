@@ -183,15 +183,10 @@ void RobotExtractor::readPrimer() {
             m_srcPath.string());
       }
     }
-    std::streamoff dataEnd =
-        primerHeaderPos + static_cast<std::streamoff>(m_totalPrimerSize);
-    if (static_cast<int32_t>(m_primerReservedSize) > m_totalPrimerSize) {
-      m_fp.seekg(primerHeaderPos +
-                 static_cast<std::streamoff>(m_primerReservedSize),
-                 std::ios::beg);
-    } else {
-      m_fp.seekg(dataEnd, std::ios::beg);
-    }
+    const std::streamoff target =
+        primerHeaderPos +
+        static_cast<std::streamoff>(m_primerReservedSize);
+    m_fp.seekg(target, std::ios::beg);
   } else if (m_primerZeroCompressFlag) {
     m_evenPrimerSize = 19922;
     m_oddPrimerSize = 21024;
