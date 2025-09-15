@@ -167,44 +167,33 @@ void RobotExtractor::readPrimer() {
                                std::to_string(compType));
     }
 
-    if (m_evenPrimerSize + m_oddPrimerSize !=
-        static_cast<std::streamsize>(m_primerReservedSize)) {
-      const std::streamoff reserveOff =
-          static_cast<std::streamoff>(m_primerReservedSize);
-      if (m_primerPosition >
-          std::numeric_limits<std::streamoff>::max() - reserveOff) {
+    m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
+    m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
+    if (m_evenPrimerSize > 0) {
+      try {
+        read_exact(m_fp, m_evenPrimer.data(),
+                   static_cast<size_t>(m_evenPrimerSize));
+      } catch (const std::runtime_error &) {
         throw std::runtime_error(
-            "Position de primer audio dépasse std::streamoff::max");
+            std::string("Primer audio pair tronqué pour ") +
+            m_srcPath.string());
       }
-      m_fp.seekg(m_primerPosition + reserveOff, std::ios::beg);
-      m_evenPrimerSize = 0;
-      m_oddPrimerSize = 0;
-      m_evenPrimer.clear();
-      m_oddPrimer.clear();
-      // Les données audio seront traitées sans primer.
-    } else {
-      m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
-      m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
-      if (m_evenPrimerSize > 0) {
-        try {
-          read_exact(m_fp, m_evenPrimer.data(),
-                     static_cast<size_t>(m_evenPrimerSize));
-        } catch (const std::runtime_error &) {
-          throw std::runtime_error(
-              std::string("Primer audio pair tronqué pour ") +
-              m_srcPath.string());
-        }
+    }
+    if (m_oddPrimerSize > 0) {
+      try {
+        read_exact(m_fp, m_oddPrimer.data(),
+                   static_cast<size_t>(m_oddPrimerSize));
+      } catch (const std::runtime_error &) {
+        throw std::runtime_error(
+            std::string("Primer audio impair tronqué pour ") +
+            m_srcPath.string());
       }
-      if (m_oddPrimerSize > 0) {
-        try {
-          read_exact(m_fp, m_oddPrimer.data(),
-                     static_cast<size_t>(m_oddPrimerSize));
-        } catch (const std::runtime_error &) {
-          throw std::runtime_error(
-              std::string("Primer audio impair tronqué pour ") +
-              m_srcPath.string());
-        }
-      }
+    }
+    std::streamsize readSize = m_evenPrimerSize + m_oddPrimerSize;
+    if (readSize < static_cast<std::streamsize>(m_primerReservedSize)) {
+      std::streamoff pad = static_cast<std::streamoff>(
+          static_cast<std::streamsize>(m_primerReservedSize) - readSize);
+      m_fp.seekg(pad, std::ios::cur);
     }
   } else if (m_primerZeroCompressFlag) {
     m_evenPrimerSize = 19922;
@@ -232,10 +221,6 @@ void RobotExtractor::readPrimer() {
                                m_srcPath.string());
     }
   }
-  std::vector<std::byte>().swap(m_evenPrimer);
-  std::vector<std::byte>().swap(m_oddPrimer);
-  m_evenPrimerSize = 0;
-  m_oddPrimerSize = 0;
 }
 
 void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
