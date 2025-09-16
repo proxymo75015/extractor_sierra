@@ -200,6 +200,7 @@ private:
   std::array<int16_t, kMaxCuePoints> m_cueValues;
   std::vector<std::byte> m_palette;
   std::streamoff m_postHeaderPos = 0;
+  std::streamoff m_postPrimerPos = 0;
   std::streamsize m_evenPrimerSize = 0;
   std::streamsize m_oddPrimerSize = 0;
   int32_t m_totalPrimerSize = 0;
