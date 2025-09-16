@@ -6,6 +6,7 @@
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
+using robot::RobotExtractorTester;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -44,7 +45,7 @@ static std::vector<uint8_t> build_header(int16_t maxCelsPerFrame) {
     return h;
 }
 
-TEST_CASE("Max cels per frame hors bornes") {
+TEST_CASE("Max cels per frame supérieur à la limite est désormais accepté") {
     fs::path tmpDir = fs::temp_directory_path();
     fs::path input = tmpDir / "max_cels_bad.rbt";
     fs::path outDir = tmpDir / "max_cels_bad_out";
@@ -57,10 +58,6 @@ TEST_CASE("Max cels per frame hors bornes") {
     out.close();
 
     robot::RobotExtractor extractor(input, outDir, false);
-    try {
-        extractor.extract();
-        FAIL("Aucune exception levée");
-    } catch (const std::runtime_error &e) {
-        REQUIRE(std::string(e.what()).find("cels par frame") != std::string::npos);
-    }
+    REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
+    REQUIRE(RobotExtractorTester::maxCelsPerFrame(extractor) == 11);
 }
