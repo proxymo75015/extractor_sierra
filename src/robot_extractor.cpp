@@ -137,6 +137,7 @@ void RobotExtractor::readPrimer() {
       throw std::runtime_error("Primer hors limites");
     }
     m_fp.seekg(m_primerReservedSize, std::ios::cur);
+    m_postPrimerPos = m_fp.tellg();    
     if (m_options.debug_index) {
       log_error(m_srcPath,
                 "readPrimer: position après seekg = " +
@@ -170,6 +171,14 @@ void RobotExtractor::readPrimer() {
                                std::to_string(compType));
     }
 
+    const uint64_t primerSizesSum =
+        static_cast<uint64_t>(m_evenPrimerSize) +
+        static_cast<uint64_t>(m_oddPrimerSize);
+    const bool primerSizesMatchReserved =
+        primerSizesSum == static_cast<uint64_t>(m_primerReservedSize);
+    const std::streamoff reservedEnd =
+        primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
+    
     m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
     m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
     if (m_evenPrimerSize > 0) {
@@ -192,9 +201,10 @@ void RobotExtractor::readPrimer() {
             m_srcPath.string());
       }
     }
-    m_fp.seekg(primerHeaderPos +
-                   static_cast<std::streamoff>(m_primerReservedSize),
-               std::ios::beg);
+    if (!primerSizesMatchReserved) {
+      m_fp.seekg(reservedEnd, std::ios::beg);
+    }
+    m_postPrimerPos = m_fp.tellg();
     if (m_options.debug_index) {
       log_error(m_srcPath,
                 "readPrimer: position après seekg = " +
@@ -206,6 +216,7 @@ void RobotExtractor::readPrimer() {
     m_oddPrimerSize = 21024;
     m_evenPrimer.assign(static_cast<size_t>(m_evenPrimerSize), std::byte{0});
     m_oddPrimer.assign(static_cast<size_t>(m_oddPrimerSize), std::byte{0});
+    m_postPrimerPos = m_fp.tellg();    
   } else {
     throw std::runtime_error("Flags de primer audio corrompus");
   }
@@ -350,8 +361,7 @@ void RobotExtractor::readSizesAndCues() {
   }
 
   const std::streamoff expectedPos =
-      m_postHeaderPos + static_cast<std::streamoff>(m_primerReservedSize) +
-      static_cast<std::streamoff>(m_paletteSize);
+      m_postPrimerPos + static_cast<std::streamoff>(m_paletteSize);
   std::streamoff pos = m_fp.tellg();
   if (pos != expectedPos) {
     throw std::runtime_error("Misaligned stream before index tables: actual " +
