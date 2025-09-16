@@ -45,7 +45,7 @@ static std::vector<uint8_t> build_header(uint16_t paletteSize) {
     return h;
 }
 
-TEST_CASE("Palette size not divisible by 3 throws") {
+TEST_CASE("Palette size not divisible by 3 is accepted") {
     fs::path tmpDir = fs::temp_directory_path();
     fs::path input = tmpDir / "palette_bad.rbt";
     fs::path outDir = tmpDir / "palette_bad_out";
@@ -59,12 +59,10 @@ TEST_CASE("Palette size not divisible by 3 throws") {
     out.close();
 
     robot::RobotExtractor extractor(input, outDir, false);
-    try {
-        extractor.extract();
-        FAIL("Aucune exception levée");
-    } catch (const std::runtime_error &e) {
-        REQUIRE(std::string(e.what()).find("non multiple de 3") != std::string::npos);
-    }
+    REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
+    REQUIRE_NOTHROW(RobotExtractorTester::readPrimer(extractor));
+    REQUIRE_NOTHROW(RobotExtractorTester::readPalette(extractor));
+    REQUIRE(RobotExtractorTester::palette(extractor).size() == 770);
 }
 
 TEST_CASE("Palette smaller than 768 bytes is accepted") {
