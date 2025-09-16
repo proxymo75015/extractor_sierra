@@ -83,18 +83,32 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   }
   m_audioBlkSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (m_audioBlkSize > kMaxAudioBlockSize) {
-    throw std::runtime_error("Taille de bloc audio excessive");
+    log_warn(m_srcPath,
+             "Taille de bloc audio inattendue dans l'en-tête: " +
+                 std::to_string(m_audioBlkSize) +
+                 " (maximum recommandé " +
+                 std::to_string(kMaxAudioBlockSize) + ")",
+             m_options);
+    m_audioBlkSize = kMaxAudioBlockSize;
   }
   m_primerZeroCompressFlag = read_scalar<int16_t>(m_fp, m_bigEndian);
   if (m_primerZeroCompressFlag != 0 && m_primerZeroCompressFlag != 1) {
-    throw std::runtime_error("Flag primerZeroCompress invalide: " +
-                             std::to_string(m_primerZeroCompressFlag));
+    log_warn(m_srcPath,
+             "Valeur primerZeroCompress inattendue: " +
+                 std::to_string(m_primerZeroCompressFlag),
+             m_options);
   }
   m_fp.seekg(2, std::ios::cur);
   m_numFrames = read_scalar<uint16_t>(m_fp, m_bigEndian);
-  if (m_numFrames == 0 || m_numFrames > kMaxFrames) {
-    throw std::runtime_error("Nombre de frames invalide: " +
-                             std::to_string(m_numFrames));
+  if (m_numFrames == 0) {
+    log_warn(m_srcPath,
+             "Nombre de frames nul indiqué dans l'en-tête", m_options);
+  } else if (m_numFrames > kMaxFrames) {
+    log_warn(m_srcPath,
+             "Nombre de frames élevé dans l'en-tête: " +
+                 std::to_string(m_numFrames) + " (limite conseillée " +
+                 std::to_string(kMaxFrames) + ")",
+             m_options);
   }
   m_paletteSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
   m_primerReservedSize = read_scalar<uint16_t>(m_fp, m_bigEndian); // raw header value
@@ -103,13 +117,26 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_hasPalette = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
   m_hasAudio = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
   if (m_hasAudio && m_audioBlkSize < kAudioRunwayBytes) {
-    throw std::runtime_error("Taille de bloc audio invalide");
+    log_warn(m_srcPath,
+             "Taille de bloc audio trop petite: " +
+                 std::to_string(m_audioBlkSize) + " (minimum " +
+                 std::to_string(kAudioRunwayBytes) + ")",
+             m_options);
+    m_audioBlkSize = kAudioRunwayBytes;
   }
   m_fp.seekg(2, std::ios::cur);
   m_frameRate = read_scalar<int16_t>(m_fp, m_bigEndian);
-  if (m_frameRate <= 0 || m_frameRate > 120) {
-    throw std::runtime_error("Fréquence d'image invalide: " +
-                             std::to_string(m_frameRate));
+  if (m_frameRate <= 0) {
+    log_warn(m_srcPath,
+             "Fréquence d'image non positive dans l'en-tête: " +
+                 std::to_string(m_frameRate) + ", utilisation de 1",
+             m_options);
+    m_frameRate = 1;
+  } else if (m_frameRate > 120) {
+    log_warn(m_srcPath,
+             "Fréquence d'image élevée dans l'en-tête: " +
+                 std::to_string(m_frameRate),
+             m_options);
   }
   m_isHiRes = read_scalar<int16_t>(m_fp, m_bigEndian) != 0;
   m_maxSkippablePackets = read_scalar<int16_t>(m_fp, m_bigEndian);
@@ -117,9 +144,17 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   if (m_version == 4) {
     m_maxCelsPerFrame = 1;
   }
-  if (m_maxCelsPerFrame < 1 || m_maxCelsPerFrame > 10) {
-    throw std::runtime_error("Nombre de cels par frame invalide: " +
-                             std::to_string(m_maxCelsPerFrame));
+  if (m_maxCelsPerFrame < 1) {
+    log_warn(m_srcPath,
+             "Nombre de cels par frame non positif: " +
+                 std::to_string(m_maxCelsPerFrame) + ", utilisation de 1",
+             m_options);
+    m_maxCelsPerFrame = 1;
+  } else if (m_maxCelsPerFrame > 10) {
+    log_warn(m_srcPath,
+             "Nombre de cels par frame élevé: " +
+                 std::to_string(m_maxCelsPerFrame),
+             m_options);
   }
   // Champs supplémentaires de 32 bits présents dans le nouveau format.
   for (int i = 0; i < 4; ++i) {
