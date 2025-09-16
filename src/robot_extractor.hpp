@@ -197,7 +197,7 @@ private:
   std::vector<uint32_t> m_frameSizes;
   std::vector<uint32_t> m_packetSizes;
   std::array<int32_t, kMaxCuePoints> m_cueTimes;
-  std::array<int16_t, kMaxCuePoints> m_cueValues;
+  std::array<uint16_t, kMaxCuePoints> m_cueValues;
   std::vector<std::byte> m_palette;
   std::streamoff m_postHeaderPos = 0;
   std::streamoff m_postPrimerPos = 0;
