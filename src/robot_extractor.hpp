@@ -262,6 +262,7 @@ struct RobotExtractorTester {
   static void readHeader(RobotExtractor &r) { r.readHeader(); }
   static void readPrimer(RobotExtractor &r) { r.readPrimer(); }
   static void readPalette(RobotExtractor &r) { r.readPalette(); }
+  static void readSizesAndCues(RobotExtractor &r) { r.readSizesAndCues(); }
   static bool exportFrame(RobotExtractor &r, int frameNo,
                           nlohmann::json &frameJson) {
     return r.exportFrame(frameNo, frameJson);
