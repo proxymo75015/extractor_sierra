@@ -45,7 +45,7 @@ static std::vector<uint8_t> build_header(uint16_t numFrames) {
     return h;
 }
 
-TEST_CASE("Nombre de frames nul") {
+TEST_CASE("Nombre de frames nul n'interrompt plus la lecture de l'en-tête") {
     fs::path tmpDir = fs::temp_directory_path();
     fs::path input = tmpDir / "frames_zero.rbt";
     fs::path outDir = tmpDir / "frames_zero_out";
@@ -57,15 +57,11 @@ TEST_CASE("Nombre de frames nul") {
     out.close();
 
     robot::RobotExtractor extractor(input, outDir, false);
-    try {
-        extractor.extract();
-        FAIL("Aucune exception levée");
-    } catch (const std::runtime_error &e) {
-        REQUIRE(std::string(e.what()).find("frames") != std::string::npos);
-    }
+    REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
+    REQUIRE(RobotExtractorTester::numFrames(extractor) == 0);
 }
 
-TEST_CASE("Nombre de frames dépasse la limite") {
+TEST_CASE("Nombre de frames au-delà de la limite conseillée est toléré") {
     fs::path tmpDir = fs::temp_directory_path();
     fs::path input = tmpDir / "frames_too_many.rbt";
     fs::path outDir = tmpDir / "frames_too_many_out";
@@ -77,10 +73,7 @@ TEST_CASE("Nombre de frames dépasse la limite") {
     out.close();
 
     robot::RobotExtractor extractor(input, outDir, false);
-    try {
-        extractor.extract();
-        FAIL("Aucune exception levée");
-    } catch (const std::runtime_error &e) {
-        REQUIRE(std::string(e.what()).find("frames") != std::string::npos);
-    }
+    REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
+    REQUIRE(RobotExtractorTester::numFrames(extractor) ==
+            static_cast<uint16_t>(RobotExtractorTester::maxFrames() + 1));
 }
