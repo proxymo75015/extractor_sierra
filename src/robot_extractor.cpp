@@ -470,17 +470,14 @@ void RobotExtractor::readSizesAndCues() {
   }
   for (size_t i = 0; i < m_frameSizes.size(); ++i) {
     if (m_packetSizes[i] < m_frameSizes[i]) {
-      ExtractorOptions debugOpt = m_options;
-      debugOpt.debug_index = true;
-      log_error(m_srcPath,
-                "Packet size < frame size (i=" + std::to_string(i) +
-                    ", frame=" + std::to_string(m_frameSizes[i]) +
-                    ", packet=" + std::to_string(m_packetSizes[i]) + ")",
-                debugOpt);
-      throw std::runtime_error(
-          "Packet size < frame size (frame " + std::to_string(i) +
-          ": packet=" + std::to_string(m_packetSizes[i]) +
-          ", frame=" + std::to_string(m_frameSizes[i]) + ")");
+      log_warn(m_srcPath,
+               "Packet size < frame size (i=" + std::to_string(i) +
+                   ", frame=" + std::to_string(m_frameSizes[i]) +
+                   ", packet=" + std::to_string(m_packetSizes[i]) +
+                   ") - ajustement à la taille de frame",
+               m_options);
+      m_packetSizes[i] = m_frameSizes[i];
+      continue;
     }
     uint64_t maxSize64 =
         static_cast<uint64_t>(m_frameSizes[i]) +
@@ -499,15 +496,12 @@ void RobotExtractor::readSizesAndCues() {
     }
     uint32_t maxSize = static_cast<uint32_t>(maxSize64);
     if (m_packetSizes[i] > maxSize) {
-      if (m_options.debug_index) {
-        log_error(m_srcPath,
-                  "Packet size > frame size + audio block size (i=" +
-                      std::to_string(i) + ", frame=" +
-                      std::to_string(m_frameSizes[i]) + ", packet=" +
-                      std::to_string(m_packetSizes[i]) + ")",
-                  m_options);
-      }      
-      throw std::runtime_error("Packet size > frame size + audio block size");
+      log_warn(m_srcPath,
+               "Packet size > frame size + audio block size (i=" +
+                   std::to_string(i) + ", frame=" +
+                   std::to_string(m_frameSizes[i]) + ", packet=" +
+                   std::to_string(m_packetSizes[i]) + ")",
+               m_options);
     }
   }
   for (auto &time : m_cueTimes) {
