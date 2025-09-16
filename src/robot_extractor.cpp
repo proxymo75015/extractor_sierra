@@ -394,9 +394,16 @@ void RobotExtractor::readSizesAndCues() {
       m_postPrimerPos + static_cast<std::streamoff>(m_paletteSize);
   std::streamoff pos = m_fp.tellg();
   if (pos != expectedPos) {
-    throw std::runtime_error("Misaligned stream before index tables: actual " +
-                             std::to_string(pos) + " expected " +
-                             std::to_string(expectedPos));
+    log_warn(m_srcPath,
+             "Flux désaligné avant les tables d'index: position actuelle " +
+                 std::to_string(pos) + ", repositionnement à " +
+                 std::to_string(expectedPos),
+             m_options);
+    m_fp.seekg(expectedPos, std::ios::beg);
+    if (!m_fp) {
+      throw std::runtime_error(
+          "Échec du repositionnement avant les tables d'index");
+    }
   }
 
   m_frameSizes.resize(m_numFrames);
