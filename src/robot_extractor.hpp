@@ -242,6 +242,7 @@ struct RobotExtractorTester {
   static int16_t &maxCelsPerFrame(RobotExtractor &r) {
     return r.m_maxCelsPerFrame;
   }
+  static uint16_t &numFrames(RobotExtractor &r) { return r.m_numFrames; }
   static std::vector<std::byte> &palette(RobotExtractor &r) {
     return r.m_palette;
   }
