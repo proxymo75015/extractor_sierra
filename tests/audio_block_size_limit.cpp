@@ -13,6 +13,13 @@ static void push16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x >> 8));
 }
 
+static void push32(std::vector<uint8_t> &v, uint32_t x) {
+    v.push_back(static_cast<uint8_t>(x & 0xFF));
+    v.push_back(static_cast<uint8_t>((x >> 8) & 0xFF));
+    v.push_back(static_cast<uint8_t>((x >> 16) & 0xFF));
+    v.push_back(static_cast<uint8_t>((x >> 24) & 0xFF));
+}
+
 TEST_CASE("Audio block size at limit is accepted") {
     fs::path tmpDir = fs::temp_directory_path();
     fs::path input = tmpDir / "audio_block_limit.rbt";
@@ -38,9 +45,8 @@ TEST_CASE("Audio block size at limit is accepted") {
     push16(data, 0);  // isHiRes
     push16(data, 0);  // maxSkippablePackets
     push16(data, 1);  // maxCelsPerFrame
-    for (int i = 0; i < 8; ++i) {
-        data.push_back(0);  // seekg(8)
-    }
+    for (int i = 0; i < 4; ++i) push32(data, 0);  // champs supplémentaires
+    for (int i = 0; i < 2; ++i) push32(data, 0);  // zone réservée
 
     std::ofstream out(input, std::ios::binary);
     out.write(reinterpret_cast<const char *>(data.data()),
