@@ -50,6 +50,8 @@ void RobotExtractor::readHeader() {
 
   parseHeaderFields(m_bigEndian);
 
+  m_postHeaderPos = m_fp.tellg();
+  
   if (m_version < 4 || m_version > 6) {
     throw std::runtime_error("Version Robot non supportée: " +
                              std::to_string(m_version));
@@ -341,40 +343,86 @@ void RobotExtractor::readSizesAndCues() {
               "readSizesAndCues: position initiale = " +
                   std::to_string(m_fp.tellg()),
               m_options);
-  }  
+  }
+
+  const std::streamoff expectedPos =
+      m_postHeaderPos + static_cast<std::streamoff>(m_primerReservedSize) +
+      static_cast<std::streamoff>(m_paletteSize);
+  std::streamoff pos = m_fp.tellg();
+  if (pos != expectedPos) {
+    throw std::runtime_error("Misaligned stream before index tables: actual " +
+                             std::to_string(pos) + " expected " +
+                             std::to_string(expectedPos));
+  }
+
   m_frameSizes.resize(m_numFrames);
   m_packetSizes.resize(m_numFrames);
-  for (auto &size : m_frameSizes) {
-    uint32_t tmp;
-    if (m_version >= 6) {
+  constexpr size_t kDebugCount = 5;
+  switch (m_version) {
+  case 6:
+    for (size_t i = 0; i < m_numFrames; ++i) {
       int32_t tmpSigned = read_scalar<int32_t>(m_fp, m_bigEndian);
       if (tmpSigned < 0) {
         throw std::runtime_error("Taille de frame négative");
       }
-      tmp = static_cast<uint32_t>(tmpSigned);
-    } else {
-      tmp = read_scalar<uint16_t>(m_fp, m_bigEndian);
+      uint32_t tmp = static_cast<uint32_t>(tmpSigned);
+      if (tmp < 2) {
+        throw std::runtime_error("Frame size too small");
+      }
+      if (tmp > kMaxFrameSize) {
+        throw std::runtime_error("Taille de frame excessive");
+      }
+      m_frameSizes[i] = tmp;
+      if (m_options.debug_index && i < kDebugCount) {
+        log_error(m_srcPath,
+                  "frameSizes[" + std::to_string(i) + "] = " +
+                      std::to_string(tmp),
+                  m_options);
+      }
     }
-    if (tmp < 2) {
-      throw std::runtime_error("Frame size too small");
-    }
-    if (tmp > kMaxFrameSize) {
-      throw std::runtime_error("Taille de frame excessive");
-    }
-    size = tmp;
-  }
-  for (auto &size : m_packetSizes) {
-    uint32_t tmp;
-    if (m_version >= 6) {
+    for (size_t i = 0; i < m_numFrames; ++i) {
       int32_t tmpSigned = read_scalar<int32_t>(m_fp, m_bigEndian);
       if (tmpSigned < 0) {
         throw std::runtime_error("Taille de paquet négative");
       }
-      tmp = static_cast<uint32_t>(tmpSigned);
-    } else {
-      tmp = read_scalar<uint16_t>(m_fp, m_bigEndian);
+      uint32_t tmp = static_cast<uint32_t>(tmpSigned);
+      m_packetSizes[i] = tmp;
+      if (m_options.debug_index && i < kDebugCount) {
+        log_error(m_srcPath,
+                  "packetSizes[" + std::to_string(i) + "] = " +
+                      std::to_string(tmp),
+                  m_options);
+      }
     }
-    size = tmp;
+    break;
+  default:
+    for (size_t i = 0; i < m_numFrames; ++i) {
+      uint16_t tmp = read_scalar<uint16_t>(m_fp, m_bigEndian);
+      if (tmp < 2) {
+        throw std::runtime_error("Frame size too small");
+      }
+      if (tmp > kMaxFrameSize) {
+        throw std::runtime_error("Taille de frame excessive");
+      }
+      m_frameSizes[i] = tmp;
+      if (m_options.debug_index && i < kDebugCount) {
+        log_error(m_srcPath,
+                  "frameSizes[" + std::to_string(i) + "] = " +
+                      std::to_string(tmp),
+                  m_options);
+      }
+    }
+    for (size_t i = 0; i < m_numFrames; ++i) {
+      uint16_t tmp = read_scalar<uint16_t>(m_fp, m_bigEndian);
+      m_packetSizes[i] = tmp;
+      if (m_options.debug_index && i < kDebugCount) {
+        log_error(m_srcPath,
+                  "packetSizes[" + std::to_string(i) + "] = " +
+                      std::to_string(tmp),
+                  m_options);
+      }
+    }
+    break;
   }
   for (size_t i = 0; i < m_frameSizes.size(); ++i) {
     if (m_packetSizes[i] < m_frameSizes[i]) {
@@ -424,8 +472,8 @@ void RobotExtractor::readSizesAndCues() {
   for (auto &value : m_cueValues) {
     value = read_scalar<int16_t>(m_fp, m_bigEndian);
   }
-  std::streamoff pos = m_fp.tellg();
-  std::streamoff bytesRemaining = pos % 2048;
+  std::streamoff posAfter = m_fp.tellg();
+  std::streamoff bytesRemaining = posAfter % 2048;
   if (bytesRemaining != 0) {
     m_fp.seekg(2048 - bytesRemaining, std::ios::cur);
   }
