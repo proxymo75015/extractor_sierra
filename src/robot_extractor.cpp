@@ -364,14 +364,6 @@ void RobotExtractor::readPalette() {
     return;
   }
 
-  if (m_paletteSize % 3 != 0) {
-    throw std::runtime_error(
-        std::string(
-            "Taille de palette non multiple de 3 dans l'en-tête pour ") +
-        m_srcPath.string() + ": " + std::to_string(m_paletteSize) +
-        " octets");
-  }
-
   m_palette.resize(m_paletteSize);
   try {
     read_exact(m_fp, m_palette.data(), static_cast<size_t>(m_paletteSize));
@@ -557,8 +549,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                  std::to_string(frameNo),
              m_options);
   }
-  // Palette size has been validated in readPalette(); assume it is correct
-  // here.
+  // Palette data has been loaded in readPalette(); consume it as-is here.
   for (int i = 0; i < numCels; ++i) {
     if (offset + kCelHeaderSize > m_frameBuffer.size()) {
       throw std::runtime_error("En-tête de cel invalide");
