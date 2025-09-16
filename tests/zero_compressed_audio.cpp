@@ -34,7 +34,7 @@ static std::vector<uint8_t> build_header() {
   push16(h, 0);   // skip
   push16(h, 1);   // numFrames
   push16(h, 0);   // paletteSize
-  push16(h, 22);  // primerReservedSize (14 header + 8 data)
+  push16(h, 8);   // primerReservedSize matches even primer size
   push16(h, 1);   // xRes
   push16(h, 1);   // yRes
   h.push_back(0); // hasPalette
