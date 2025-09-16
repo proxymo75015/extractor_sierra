@@ -688,6 +688,8 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       if (audioBlkLen < kAudioRunwayBytes) {
         m_fp.seekg(static_cast<std::streamoff>(audioBlkLen), std::ios::cur);
       } else {
+        const int64_t expectedAudioBlockSize =
+            static_cast<int64_t>(m_audioBlkSize) - 8;        
         int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
         if (pos < 0) {
           throw std::runtime_error("Position audio invalide");
@@ -697,32 +699,47 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                      std::ios::cur);
         } else {
           int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
-          // "size" représente le nombre d'octets suivant ce champ, incluant
-          // les kAudioRunwayBytes octets de "runway" mais excluant l'en-tête "pos" + "size".
-          if (size < kAudioRunwayBytes) {
+          if (size < 0) {
             throw std::runtime_error("Taille audio invalide");
           }
-          int64_t maxSize = static_cast<int64_t>(audioBlkLen) - kAudioRunwayBytes;
-          if (size > maxSize) {
-            log_error(
-                m_srcPath,
-                "Taille de bloc audio inattendue: " + std::to_string(size) +
-                    " (maximum: " + std::to_string(maxSize) + ")",
-                m_options);
-            // Taille incohérente, ignorer le reste du bloc audio
-            m_fp.seekg(static_cast<std::streamoff>(maxSize), std::ios::cur);
+          if (size > expectedAudioBlockSize) {
+            log_error(m_srcPath,
+                      "Taille de bloc audio inattendue: " +
+                          std::to_string(size) + " (attendu: " +
+                          std::to_string(expectedAudioBlockSize) + ")",
+                      m_options);
+            int64_t audioDataAvailable = static_cast<int64_t>(audioBlkLen) - 8;
+            if (audioDataAvailable > 0) {
+              m_fp.seekg(static_cast<std::streamoff>(audioDataAvailable),
+                         std::ios::cur);
+            }
           } else {
-            std::vector<std::byte> block(static_cast<size_t>(size));
-            m_fp.read(reinterpret_cast<char *>(block.data()),
-                      checked_streamsize(block.size()));
+            std::vector<std::byte> block;
+            if (size == expectedAudioBlockSize) {
+              block.resize(static_cast<size_t>(expectedAudioBlockSize));
+              m_fp.read(reinterpret_cast<char *>(block.data()),
+                        checked_streamsize(block.size()));
+            } else {
+              block.resize(kAudioRunwayBytes + static_cast<size_t>(size));
+              std::fill_n(block.begin(),
+                          std::min<size_t>(kAudioRunwayBytes, block.size()),
+                          std::byte{0});
+              if (size > 0) {
+                m_fp.read(
+                    reinterpret_cast<char *>(block.data() + kAudioRunwayBytes),
+                    checked_streamsize(static_cast<size_t>(size)));
+              }
+            }
             bool isEven = (pos % 2) == 0;
             // L'audio peut exister même sans primer, décompresser toujours.
             process_audio_block(std::span<const std::byte>(block), isEven);
-            int64_t toSkip = maxSize - size;
+            int64_t toSkip = expectedAudioBlockSize - size;
             if (toSkip < 0) {
               throw std::runtime_error("Taille audio incohérente");
             }
-            m_fp.seekg(static_cast<std::streamoff>(toSkip), std::ios::cur);
+            if (toSkip > 0) {
+              m_fp.seekg(static_cast<std::streamoff>(toSkip), std::ios::cur);
+            }
           }
         }
       }
