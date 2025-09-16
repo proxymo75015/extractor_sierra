@@ -174,11 +174,21 @@ void RobotExtractor::readPrimer() {
     const uint64_t primerSizesSum =
         static_cast<uint64_t>(m_evenPrimerSize) +
         static_cast<uint64_t>(m_oddPrimerSize);
-    const bool primerSizesMatchReserved =
-        primerSizesSum == static_cast<uint64_t>(m_primerReservedSize);
     const std::streamoff reservedEnd =
         primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
-    
+
+    if (primerSizesSum != static_cast<uint64_t>(m_primerReservedSize)) {
+      m_fp.seekg(reservedEnd, std::ios::beg);
+      m_postPrimerPos = m_fp.tellg();
+      if (m_options.debug_index) {
+        log_error(m_srcPath,
+                  "readPrimer: position après seekg = " +
+                      std::to_string(m_fp.tellg()),
+                  m_options);
+      }
+      return;
+    }
+
     m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
     m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
     if (m_evenPrimerSize > 0) {
@@ -200,9 +210,6 @@ void RobotExtractor::readPrimer() {
             std::string("Primer audio impair tronqué pour ") +
             m_srcPath.string());
       }
-    }
-    if (!primerSizesMatchReserved) {
-      m_fp.seekg(reservedEnd, std::ios::beg);
     }
     m_postPrimerPos = m_fp.tellg();
     if (m_options.debug_index) {
