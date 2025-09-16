@@ -42,8 +42,10 @@ static std::vector<uint8_t> build_header(uint16_t primerSize) {
   push16(h, 0);          // isHiRes
   push16(h, 0);          // maxSkippablePackets
   push16(h, 1);          // maxCelsPerFrame
+  for (int i = 0; i < 4; ++i)
+    push32(h, 0); // champs supplémentaires  
   for (int i = 0; i < 2; ++i)
-    push32(h, 0); // padding
+    push32(h, 0); // zone réservée
   return h;
 }
 
