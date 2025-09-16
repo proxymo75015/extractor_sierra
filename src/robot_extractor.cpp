@@ -334,19 +334,7 @@ void RobotExtractor::readPalette() {
         std::string(
             "Taille de palette non multiple de 3 dans l'en-tête pour ") +
         m_srcPath.string() + ": " + std::to_string(m_paletteSize) +
-        " octets (maximum 1200)");
-  }
-  if (m_paletteSize > 1200) {
-    throw std::runtime_error(
-        std::string("Taille de palette excessive dans l'en-tête pour ") +
-        m_srcPath.string() + ": " + std::to_string(m_paletteSize) +
-        " octets (maximum 1200)");
-  }
-  if (m_paletteSize < 768) {
-    throw std::runtime_error(
-        std::string("Taille de palette insuffisante dans l'en-tête pour ") +
-        m_srcPath.string() + ": " + std::to_string(m_paletteSize) +
-        " octets (768 requis, multiple de 3, maximum 1200)");
+        " octets");
   }
 
   m_palette.resize(m_paletteSize);
