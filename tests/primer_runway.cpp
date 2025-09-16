@@ -63,7 +63,8 @@ TEST_CASE("Primer WAV excludes runway samples") {
   fs::path outDir = tmpDir / "primer_runway_out";
   fs::create_directories(outDir);
 
-  auto data = build_header(24); // 14 header + 10 data
+  constexpr uint16_t primerReserved = 10; // matches even primer size
+  auto data = build_header(primerReserved);
   auto primer = build_primer_header(10, 10, 0);
   data.insert(data.end(), primer.begin(), primer.end());
   for (int i = 0; i < 8; ++i)
