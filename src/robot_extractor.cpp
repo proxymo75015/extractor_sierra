@@ -526,11 +526,17 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
   read_exact(m_fp, m_frameBuffer.data(), m_frameBuffer.size());
   uint16_t numCels = read_scalar<uint16_t>(
       std::span(m_frameBuffer).subspan(0, 2), m_bigEndian);
-  if (numCels > m_maxCelsPerFrame) {
+  if (numCels > static_cast<uint16_t>(m_maxCelsPerFrame)) {
     log_warn(m_srcPath,
-             "Nombre de cels excessif dans la frame " + std::to_string(frameNo),
+             "Nombre de cels excessif dans la frame " + std::to_string(frameNo) +
+                 " (" + std::to_string(numCels) + " > " +
+                 std::to_string(m_maxCelsPerFrame) + ")",
              m_options);
-    return false;
+    if (numCels > static_cast<uint16_t>(std::numeric_limits<int16_t>::max())) {
+      m_maxCelsPerFrame = std::numeric_limits<int16_t>::max();
+    } else {
+      m_maxCelsPerFrame = static_cast<int16_t>(numCels);
+    }
   }
 
   frameJson["frame"] = frameNo;
