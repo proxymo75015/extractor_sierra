@@ -199,6 +199,7 @@ private:
   std::array<int32_t, kMaxCuePoints> m_cueTimes;
   std::array<int16_t, kMaxCuePoints> m_cueValues;
   std::vector<std::byte> m_palette;
+  std::streamoff m_postHeaderPos = 0;
   std::streamsize m_evenPrimerSize = 0;
   std::streamsize m_oddPrimerSize = 0;
   int32_t m_totalPrimerSize = 0;
@@ -225,6 +226,9 @@ struct RobotExtractorTester {
   static std::ifstream &file(RobotExtractor &r) { return r.m_fp; }
   static std::streamoff &primerPosition(RobotExtractor &r) {
     return r.m_primerPosition;
+  }
+  static std::streamoff &postHeaderPos(RobotExtractor &r) {
+    return r.m_postHeaderPos;
   }
   static std::vector<std::byte> &evenPrimer(RobotExtractor &r) {
     return r.m_evenPrimer;
