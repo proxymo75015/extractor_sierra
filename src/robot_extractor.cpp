@@ -484,7 +484,7 @@ void RobotExtractor::readSizesAndCues() {
     time = read_scalar<int32_t>(m_fp, m_bigEndian);
   }
   for (auto &value : m_cueValues) {
-    value = read_scalar<int16_t>(m_fp, m_bigEndian);
+    value = read_scalar<uint16_t>(m_fp, m_bigEndian);
   }
   std::streamoff posAfter = m_fp.tellg();
   std::streamoff bytesRemaining = posAfter % 2048;
