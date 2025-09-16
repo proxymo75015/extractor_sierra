@@ -39,8 +39,10 @@ static std::vector<uint8_t> build_header() {
   push16(h, 0);   // isHiRes
   push16(h, 0);   // maxSkippablePackets
   push16(h, 1);   // maxCelsPerFrame
+  for (int i = 0; i < 4; ++i)
+    push32(h, 0); // champs supplémentaires  
   for (int i = 0; i < 2; ++i)
-    push32(h, 0); // padding
+    push32(h, 0); // zone réservée
   return h;
 }
 
@@ -73,7 +75,7 @@ TEST_CASE("Negative audio position throws") {
   for (int i = 0; i < 256; ++i)
     push16(data, 0); // cue values
 
-   data.resize(((data.size() + 2047) / 2048) * 2048,
+  data.resize(((data.size() + 2047) / 2048) * 2048,
               0); // pad to 2048-byte boundary
 
   // Frame data (numCels = 0)
