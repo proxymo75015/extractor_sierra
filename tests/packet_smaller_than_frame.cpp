@@ -45,25 +45,78 @@ static std::vector<uint8_t> build_header() {
     return h;
 }
 
-TEST_CASE("Packet size smaller than frame size throws") {
+TEST_CASE("Inconsistent packet sizes do not abort extraction") {
     fs::path tmpDir = fs::temp_directory_path();
-    fs::path input = tmpDir / "packet_small.rbt";
-    fs::path outDir = tmpDir / "packet_small_out";
-    fs::create_directories(outDir);
 
-    auto data = build_header();
-    push16(data, 10); // frame size
-    push16(data, 5);  // packet size < frame size
+    SECTION("packet size smaller than frame size is adjusted") {
+        fs::path input = tmpDir / "packet_small_inconsistent.rbt";
+        fs::path outDir = tmpDir / "packet_small_inconsistent_out";
+        fs::create_directories(outDir);
 
-    std::ofstream out(input, std::ios::binary);
-    out.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
-    out.close();
+        auto data = build_header();
+        push16(data, 2); // frame size
+        push16(data, 1); // packet size < frame size
+        for (int i = 0; i < 256; ++i)
+            push32(data, 0); // cue times
+        for (int i = 0; i < 256; ++i)
+            push16(data, 0); // cue values
 
-    robot::RobotExtractor extractor(input, outDir, false);
-    try {
-        extractor.extract();
-        FAIL("No exception thrown");
-    } catch (const std::runtime_error &e) {
-        REQUIRE(std::string(e.what()).find("Packet size < frame size") != std::string::npos);
+        data.resize(((data.size() + 2047) / 2048) * 2048, 0);
+        // Frame data: numCels = 0
+        data.push_back(0);
+        data.push_back(0);
+
+        std::ofstream out(input, std::ios::binary);
+        out.write(reinterpret_cast<const char *>(data.data()),
+                  static_cast<std::streamsize>(data.size()));
+        out.close();
+
+        robot::RobotExtractor extractor(input, outDir, false);
+        REQUIRE_NOTHROW(extractor.extract());
+
+        const auto &frames = robot::RobotExtractorTester::frameSizes(extractor);
+        REQUIRE(frames.size() == 1);
+        REQUIRE(frames[0] == 2);
+
+        const auto &packets = robot::RobotExtractorTester::packetSizes(extractor);
+        REQUIRE(packets.size() == 1);
+        REQUIRE(packets[0] == 2);
+    }
+
+    SECTION("packet size larger than frame size is tolerated") {
+        fs::path input = tmpDir / "packet_large_inconsistent.rbt";
+        fs::path outDir = tmpDir / "packet_large_inconsistent_out";
+        fs::create_directories(outDir);
+
+        auto data = build_header();
+        push16(data, 2); // frame size
+        push16(data, 6); // packet size > frame size
+        for (int i = 0; i < 256; ++i)
+            push32(data, 0); // cue times
+        for (int i = 0; i < 256; ++i)
+            push16(data, 0); // cue values
+
+        data.resize(((data.size() + 2047) / 2048) * 2048, 0);
+        // Frame data: numCels = 0
+        data.push_back(0);
+        data.push_back(0);
+        // Extra bytes to match the declared packet size
+        data.insert(data.end(), 4, 0);
+
+        std::ofstream out(input, std::ios::binary);
+        out.write(reinterpret_cast<const char *>(data.data()),
+                  static_cast<std::streamsize>(data.size()));
+        out.close();
+
+        robot::RobotExtractor extractor(input, outDir, false);
+        REQUIRE_NOTHROW(extractor.extract());
+
+        const auto &frames = robot::RobotExtractorTester::frameSizes(extractor);
+        REQUIRE(frames.size() == 1);
+        REQUIRE(frames[0] == 2);
+
+        const auto &packets = robot::RobotExtractorTester::packetSizes(extractor);
+        REQUIRE(packets.size() == 1);
+        REQUIRE(packets[0] == 6);
     }
 }
