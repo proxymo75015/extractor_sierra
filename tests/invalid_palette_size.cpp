@@ -6,6 +6,7 @@
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
+using robot::RobotExtractorTester;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -64,4 +65,26 @@ TEST_CASE("Palette size not divisible by 3 throws") {
     } catch (const std::runtime_error &e) {
         REQUIRE(std::string(e.what()).find("non multiple de 3") != std::string::npos);
     }
+}
+
+TEST_CASE("Palette smaller than 768 bytes is accepted") {
+    fs::path tmpDir = fs::temp_directory_path();
+    fs::path input = tmpDir / "palette_small.rbt";
+    fs::path outDir = tmpDir / "palette_small_out";
+    fs::create_directories(outDir);
+
+    constexpr uint16_t paletteSize = 600;
+    auto data = build_header(paletteSize);
+    data.insert(data.end(), paletteSize, 0);
+
+    {
+        std::ofstream out(input, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+    }
+
+    robot::RobotExtractor extractor(input, outDir, false);
+    REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
+    REQUIRE_NOTHROW(RobotExtractorTester::readPrimer(extractor));
+    REQUIRE_NOTHROW(RobotExtractorTester::readPalette(extractor));
+    REQUIRE(RobotExtractorTester::palette(extractor).size() == paletteSize);
 }
