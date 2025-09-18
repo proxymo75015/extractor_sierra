@@ -776,14 +776,14 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
               m_fp.read(reinterpret_cast<char *>(block.data()),
                         checked_streamsize(block.size()));
             } else {
-              block.resize(kAudioRunwayBytes + static_cast<size_t>(size));
-              std::fill_n(block.begin(),
-                          std::min<size_t>(kAudioRunwayBytes, block.size()),
-                          std::byte{0});
+              const size_t expectedSize =
+                  expectedAudioBlockSize > 0
+                      ? static_cast<size_t>(expectedAudioBlockSize)
+                      : size_t{0};
+              block.assign(expectedSize, std::byte{0});
               if (size > 0) {
-                m_fp.read(
-                    reinterpret_cast<char *>(block.data() + kAudioRunwayBytes),
-                    checked_streamsize(static_cast<size_t>(size)));
+                m_fp.read(reinterpret_cast<char *>(block.data()),
+                          checked_streamsize(static_cast<size_t>(size)));
               }
             }
             // Les canaux audio sont déterminés par la parité de la position :
