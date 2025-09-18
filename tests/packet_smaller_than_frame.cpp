@@ -83,7 +83,7 @@ TEST_CASE("Inconsistent packet sizes do not abort extraction") {
         REQUIRE(packets[0] == 2);
     }
 
-    SECTION("packet size larger than frame size is tolerated") {
+    SECTION("packet size larger than frame size triggers an error") {
         fs::path input = tmpDir / "packet_large_inconsistent.rbt";
         fs::path outDir = tmpDir / "packet_large_inconsistent_out";
         fs::create_directories(outDir);
@@ -109,14 +109,6 @@ TEST_CASE("Inconsistent packet sizes do not abort extraction") {
         out.close();
 
         robot::RobotExtractor extractor(input, outDir, false);
-        REQUIRE_NOTHROW(extractor.extract());
-
-        const auto &frames = robot::RobotExtractorTester::frameSizes(extractor);
-        REQUIRE(frames.size() == 1);
-        REQUIRE(frames[0] == 2);
-
-        const auto &packets = robot::RobotExtractorTester::packetSizes(extractor);
-        REQUIRE(packets.size() == 1);
-        REQUIRE(packets[0] == 6);
+        REQUIRE_THROWS_AS(extractor.extract(), std::runtime_error);
     }
 }
