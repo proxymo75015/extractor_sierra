@@ -197,10 +197,34 @@ void RobotExtractor::readPrimer() {
     // Record the start of the primer data, just after the header
     m_primerPosition = m_fp.tellg();
 
+    constexpr std::int64_t primerHeaderSize =
+        static_cast<std::int64_t>(sizeof(int32_t) + sizeof(int16_t) +
+                                  2 * sizeof(int32_t));
+
+    if (m_totalPrimerSize < 0) {
+      throw std::runtime_error("totalPrimerSize négatif dans le primer audio");
+    }
+
+    if (static_cast<std::int64_t>(m_totalPrimerSize) >
+        static_cast<std::int64_t>(m_primerReservedSize)) {
+      throw std::runtime_error(
+          "totalPrimerSize dépasse primerReservedSize dans le primer audio");
+    }
+    
     if (m_evenPrimerSize < 0 || m_oddPrimerSize < 0) {
       throw std::runtime_error("Tailles de primer audio incohérentes");
     }
 
+    const std::int64_t expectedTotal =
+        primerHeaderSize + static_cast<std::int64_t>(m_evenPrimerSize) +
+        static_cast<std::int64_t>(m_oddPrimerSize);
+    if (expectedTotal != static_cast<std::int64_t>(m_totalPrimerSize)) {
+      throw std::runtime_error(
+          "totalPrimerSize incohérent: attendu " +
+          std::to_string(static_cast<long long>(expectedTotal)) +
+          ", lu " + std::to_string(static_cast<long long>(m_totalPrimerSize)));
+    }
+    
     if (compType != 0) {
       throw std::runtime_error("Type de compression inconnu: " +
                                std::to_string(compType));
@@ -209,10 +233,12 @@ void RobotExtractor::readPrimer() {
     const uint64_t primerSizesSum =
         static_cast<uint64_t>(m_evenPrimerSize) +
         static_cast<uint64_t>(m_oddPrimerSize);
+    const std::uint64_t reservedDataSize = static_cast<std::uint64_t>(
+        static_cast<std::int64_t>(m_primerReservedSize) - primerHeaderSize);    
     const std::streamoff reservedEnd =
         primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
 
-    if (primerSizesSum != static_cast<uint64_t>(m_primerReservedSize)) {
+    if (primerSizesSum != reservedDataSize) {
       m_fp.seekg(reservedEnd, std::ios::beg);
       m_postPrimerPos = m_fp.tellg();
       if (m_options.debug_index) {
