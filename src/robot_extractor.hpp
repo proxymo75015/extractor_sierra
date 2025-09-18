@@ -242,6 +242,12 @@ struct RobotExtractorTester {
   static std::vector<std::byte> &oddPrimer(RobotExtractor &r) {
     return r.m_oddPrimer;
   }
+  static std::streamsize &evenPrimerSize(RobotExtractor &r) {
+    return r.m_evenPrimerSize;
+  }
+  static std::streamsize &oddPrimerSize(RobotExtractor &r) {
+    return r.m_oddPrimerSize;
+  }
   static bool &hasPalette(RobotExtractor &r) { return r.m_hasPalette; }
   static bool &bigEndian(RobotExtractor &r) { return r.m_bigEndian; }
   static int16_t &maxCelsPerFrame(RobotExtractor &r) {
