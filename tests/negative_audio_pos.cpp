@@ -32,7 +32,7 @@ static std::vector<uint8_t> build_header() {
   push16(h, 0);   // skip
   push16(h, 1);   // numFrames
   push16(h, 0);   // paletteSize
-  push32(p, static_cast<uint32_t>(kPrimerHeaderSize + 8));
+  push16(h, static_cast<uint16_t>(kPrimerHeaderSize + 8));
   push16(h, 1);   // xRes
   push16(h, 1);   // yRes
   h.push_back(0); // hasPalette
@@ -51,7 +51,7 @@ static std::vector<uint8_t> build_header() {
 
 static std::vector<uint8_t> build_primer_header() {
   std::vector<uint8_t> p;
-  push16(h, static_cast<uint16_t>(kPrimerHeaderSize + 8));
+  push32(p, kPrimerHeaderSize + 8);
   push16(p, 0); // compType
   push32(p, 8); // even size
   push32(p, 0); // odd size
