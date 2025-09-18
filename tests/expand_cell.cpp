@@ -35,8 +35,24 @@ TEST_CASE("expand_cel gère les ratios non entiers") {
                                 std::byte{4}, std::byte{5}, std::byte{6}};
 
   std::vector<std::byte> expected{
-      std::byte{1}, std::byte{2}, std::byte{1}, std::byte{2}, std::byte{3},
-      std::byte{4}, std::byte{3}, std::byte{4}, std::byte{5}, std::byte{6}};
+      std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4}, std::byte{3},
+      std::byte{4}, std::byte{5}, std::byte{6}, std::byte{5}, std::byte{6}};
+
+  std::vector<std::byte> target(static_cast<size_t>(w) * h);
+  expand_cel(target, source, w, h, scale);
+
+  REQUIRE(target == expected);
+}
+
+TEST_CASE("expand_cel reproduit la distribution Robot pour scale 40") {
+  const uint16_t w = 1;
+  const uint16_t h = 5;
+  const uint8_t scale = 40; // hauteur source = 2 lignes
+
+  std::vector<std::byte> source{std::byte{0x10}, std::byte{0x20}};
+
+  std::vector<std::byte> expected{std::byte{0x10}, std::byte{0x10}, std::byte{0x20},
+                                  std::byte{0x20}, std::byte{0x20}};
 
   std::vector<std::byte> target(static_cast<size_t>(w) * h);
   expand_cel(target, source, w, h, scale);
