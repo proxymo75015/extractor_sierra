@@ -787,17 +787,48 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                 m_fp.read(reinterpret_cast<char *>(truncated.data()),
                           checked_streamsize(truncated.size()));
               }
-              block.assign(kAudioRunwayBytes, std::byte{0});
-              if (!truncated.empty()) {
-                block.insert(block.end(), truncated.begin(), truncated.end());
-                payloadBytes = truncated.size();
+              const size_t expectedSize =
+                  expectedAudioBlockSize > 0
+                      ? static_cast<size_t>(expectedAudioBlockSize)
+                      : size_t{0};
+              const size_t blockCapacity =
+                  std::max(expectedSize, static_cast<size_t>(kAudioRunwayBytes));
+              block.assign(blockCapacity, std::byte{0});
+              const size_t runwayCapacity =
+                  std::min(blockCapacity, static_cast<size_t>(kAudioRunwayBytes));
+              const size_t runwayToCopy =
+                  std::min(truncated.size(), runwayCapacity);
+              if (runwayToCopy > 0) {
+                std::copy_n(truncated.begin(),
+                            static_cast<std::ptrdiff_t>(runwayToCopy),
+                            block.begin());
+              }
+              if (blockCapacity > static_cast<size_t>(kAudioRunwayBytes) &&
+                  truncated.size() > static_cast<size_t>(kAudioRunwayBytes)) {
+                const size_t payloadCapacity =
+                    blockCapacity - static_cast<size_t>(kAudioRunwayBytes);
+                const size_t payloadAvailable =
+                    truncated.size() - static_cast<size_t>(kAudioRunwayBytes);
+                const size_t payloadToCopy =
+                    std::min(payloadCapacity, payloadAvailable);
+                if (payloadToCopy > 0) {
+                  auto src = truncated.begin() +
+                             static_cast<std::ptrdiff_t>(kAudioRunwayBytes);
+                  auto dst = block.begin() +
+                             static_cast<std::ptrdiff_t>(kAudioRunwayBytes);
+                  std::copy_n(src, static_cast<std::ptrdiff_t>(payloadToCopy),
+                              dst);
+                  payloadBytes = payloadToCopy;
+                }
               }
             }
             // Les canaux audio sont déterminés par la parité de la position :
             // valeur paire = canal pair.
             bool isEven = (pos & 0x1) == 0;
             // L'audio peut exister même sans primer, décompresser toujours.
-            size_t bytesToDecode = block.size();
+            const size_t minimumDecode =
+                std::min(block.size(), static_cast<size_t>(kAudioRunwayBytes));
+            size_t bytesToDecode = minimumDecode;
             if (payloadBytes > 0) {
               size_t wanted = static_cast<size_t>(kAudioRunwayBytes) + payloadBytes;
               bytesToDecode = std::min(block.size(), wanted);
