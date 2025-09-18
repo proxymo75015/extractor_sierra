@@ -8,6 +8,9 @@
 
 namespace fs = std::filesystem;
 
+constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
+                                       2 * sizeof(uint32_t);
+
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
   v.push_back(static_cast<uint8_t>(x >> 8));
@@ -63,9 +66,10 @@ TEST_CASE("Primer WAV excludes runway samples") {
   fs::path outDir = tmpDir / "primer_runway_out";
   fs::create_directories(outDir);
 
-  constexpr uint16_t primerReserved = 10; // matches even primer size
+  constexpr uint16_t primerReserved =
+      static_cast<uint16_t>(kPrimerHeaderSize + 10);
   auto data = build_header(primerReserved);
-  auto primer = build_primer_header(10, 10, 0);
+  auto primer = build_primer_header(kPrimerHeaderSize + 10, 10, 0);
   data.insert(data.end(), primer.begin(), primer.end());
   for (int i = 0; i < 8; ++i)
     data.push_back(static_cast<uint8_t>(i));
