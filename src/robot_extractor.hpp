@@ -65,27 +65,31 @@ inline int validate_expand_params(std::span<std::byte> target,
 // Agrandit une image lorsque la source est plus petite que la cible.
 inline void expand_up(std::byte *destBase, const std::byte *srcBase,
                       size_t rowBytes, uint16_t h, int sourceHeight) {
-  int destY = static_cast<int>(h);
+  const std::byte *srcPtr = srcBase;
+  std::byte *destPtr = destBase;
+  std::byte *const destEnd = destBase + static_cast<size_t>(h) * rowBytes;
   int remainder = 0;
-  std::byte *destPtr = destBase + static_cast<size_t>(h) * rowBytes;
-  for (int srcY = sourceHeight - 1; srcY >= 0; --srcY) {
+
+  for (int srcY = 0; srcY < sourceHeight; ++srcY) {
     // remainder accumule le numérateur de h/sourceHeight afin de savoir
     // quand répéter une ligne source supplémentaire.
-    remainder += h;
+    remainder += static_cast<int>(h);
     int repeat = remainder / sourceHeight;
     remainder %= sourceHeight;
-    const std::byte *srcPtr = srcBase + static_cast<size_t>(srcY) * rowBytes;
+
     // Répéter la ligne source autant de fois que nécessaire dans la cible.
     for (int i = 0; i < repeat; ++i) {
-      destPtr -= rowBytes;
-      --destY;
-      if (destY < 0) {
+      if (destPtr >= destEnd) {
         throw std::runtime_error("Expansion de cel hors limites");
       }
       std::memcpy(destPtr, srcPtr, rowBytes);
+      destPtr += rowBytes;
     }
+
+    srcPtr += rowBytes;
   }
-  if (destY != 0) {
+
+  if (destPtr != destEnd) {
     throw std::runtime_error("Expansion de cel incohérente");
   }
 }
