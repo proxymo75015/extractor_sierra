@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
+#include <string>
 #include <vector>
 
 #include "robot_extractor.hpp"
@@ -13,20 +14,21 @@ static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x >> 8));
 }
 
-TEST_CASE("Vertical scale of zero throws") {
+static void expect_invalid_vertical_scale(uint8_t verticalScale,
+                                          const std::string &caseName) {
   std::vector<uint8_t> data;
   data.reserve(2 + 22);
   push16(data, 1); // numCels
 
   std::vector<uint8_t> celHeader(22, 0);
-  celHeader[1] = 0; // verticalScale invalide
+  celHeader[1] = verticalScale; // verticalScale invalide
   celHeader[2] = 1; // width
   celHeader[4] = 1; // height
   data.insert(data.end(), celHeader.begin(), celHeader.end());
 
   fs::path tmpDir = fs::temp_directory_path();
-  fs::path input = tmpDir / "invalid_vertical_scale.bin";
-  fs::path outDir = tmpDir / "invalid_vertical_scale_out";
+  fs::path input = tmpDir / (caseName + ".bin");
+  fs::path outDir = tmpDir / (caseName + "_out");
   fs::create_directories(outDir);
 
   std::ofstream out(input, std::ios::binary);
@@ -48,47 +50,21 @@ TEST_CASE("Vertical scale of zero throws") {
     RobotExtractorTester::exportFrame(extractor, 0, frameJson);
     FAIL("No exception thrown");
   } catch (const std::runtime_error &e) {
-    REQUIRE(std::string(e.what()).find("Facteur d'échelle vertical invalide") !=
+    const std::string message = e.what();
+    REQUIRE(message.find(
+                "Facteur d'échelle vertical invalide (valeur attendue entre 1 et 100)") !=
             std::string::npos);
   }
 }
 
-TEST_CASE("Vertical scale above 200 throws") {
-  std::vector<uint8_t> data;
-  data.reserve(2 + 22);
-  push16(data, 1); // numCels
+TEST_CASE("Vertical scale of zero throws") {
+  expect_invalid_vertical_scale(0, "invalid_vertical_scale_zero");
+}
 
-  std::vector<uint8_t> celHeader(22, 0);
-  celHeader[1] = 201; // verticalScale invalide (>200)
-  celHeader[2] = 1;   // width
-  celHeader[4] = 1;   // height
-  data.insert(data.end(), celHeader.begin(), celHeader.end());
+TEST_CASE("Vertical scale above 100 throws") {
+  expect_invalid_vertical_scale(101, "invalid_vertical_scale_above_limit");
+}
 
-  fs::path tmpDir = fs::temp_directory_path();
-  fs::path input = tmpDir / "invalid_vertical_scale_high.bin";
-  fs::path outDir = tmpDir / "invalid_vertical_scale_high_out";
-  fs::create_directories(outDir);
-
-  std::ofstream out(input, std::ios::binary);
-  out.write(reinterpret_cast<const char *>(data.data()),
-            static_cast<std::streamsize>(data.size()));
-  out.close();
-
-  robot::RobotExtractor extractor(input, outDir, false);
-  RobotExtractorTester::hasPalette(extractor) = true;
-  RobotExtractorTester::bigEndian(extractor) = false;
-  RobotExtractorTester::maxCelsPerFrame(extractor) = 1;
-  RobotExtractorTester::frameSizes(extractor) = {static_cast<uint32_t>(data.size())};
-  RobotExtractorTester::packetSizes(extractor) = {static_cast<uint32_t>(data.size())};
-  RobotExtractorTester::palette(extractor).assign(768, std::byte{0});
-  RobotExtractorTester::file(extractor).seekg(0, std::ios::beg);
-
-  nlohmann::json frameJson;
-  try {
-    RobotExtractorTester::exportFrame(extractor, 0, frameJson);
-    FAIL("No exception thrown");
-  } catch (const std::runtime_error &e) {
-    REQUIRE(std::string(e.what()).find("Facteur d'échelle vertical invalide") !=
-            std::string::npos);
-  }
+TEST_CASE("Vertical scale far above limit still throws") {
+  expect_invalid_vertical_scale(200, "invalid_vertical_scale_high");
 }
