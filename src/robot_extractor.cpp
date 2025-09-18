@@ -234,20 +234,17 @@ void RobotExtractor::readPrimer() {
         static_cast<uint64_t>(m_evenPrimerSize) +
         static_cast<uint64_t>(m_oddPrimerSize);
     const std::uint64_t reservedDataSize = static_cast<std::uint64_t>(
-        static_cast<std::int64_t>(m_primerReservedSize) - primerHeaderSize);    
+        static_cast<std::int64_t>(m_primerReservedSize) - primerHeaderSize);
     const std::streamoff reservedEnd =
         primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
 
-    if (primerSizesSum != reservedDataSize) {
-      m_fp.seekg(reservedEnd, std::ios::beg);
-      m_postPrimerPos = m_fp.tellg();
-      if (m_options.debug_index) {
-        log_error(m_srcPath,
-                  "readPrimer: position après seekg = " +
-                      std::to_string(m_fp.tellg()),
-                  m_options);
-      }
-      return;
+    if (primerSizesSum > reservedDataSize) {
+      throw std::runtime_error(
+          "Tailles de primer dépassent l'espace réservé");
+    }
+    if (primerSizesSum < reservedDataSize && m_options.debug_index) {
+      log_error(m_srcPath,
+                "readPrimer: primer plus petit que primerReservedSize", m_options);
     }
 
     m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
@@ -272,6 +269,7 @@ void RobotExtractor::readPrimer() {
             m_srcPath.string());
       }
     }
+    m_fp.seekg(reservedEnd, std::ios::beg);    
     m_postPrimerPos = m_fp.tellg();
     if (m_options.debug_index) {
       log_error(m_srcPath,
