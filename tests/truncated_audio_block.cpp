@@ -1,8 +1,11 @@
+#include <algorithm>
 #include <array>
+#include <cstdint>
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "robot_extractor.hpp"
@@ -11,6 +14,48 @@ namespace fs = std::filesystem;
 
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
+
+static constexpr std::array<int16_t, 16> kDpcmTable = {
+    -0x0c0, -0x080, -0x040, -0x020, -0x010, -0x008, -0x004, -0x002,
+    0x002,  0x004,  0x008,  0x010,  0x020,  0x040,  0x080,  0x0c0,
+};
+
+static int16_t clamp_predictor(int32_t value) {
+  return static_cast<int16_t>(
+      std::clamp(value, static_cast<int32_t>(-32768),
+                 static_cast<int32_t>(32767)));
+}
+
+static void dpcm16_decompress_last_bytes(const std::vector<uint8_t> &bytes,
+                                         int16_t &predictor) {
+  int32_t value = predictor;
+  for (uint8_t b : bytes) {
+    uint8_t hi = b >> 4;
+    value = clamp_predictor(value + kDpcmTable[hi]);
+    predictor = static_cast<int16_t>(value);
+    uint8_t lo = static_cast<uint8_t>(b & 0x0F);
+    value = clamp_predictor(value + kDpcmTable[lo]);
+    predictor = static_cast<int16_t>(value);
+  }
+}
+
+static std::vector<int16_t> dpcm16_decompress_bytes(
+    const std::vector<uint8_t> &bytes, int16_t &predictor) {
+  std::vector<int16_t> out;
+  out.reserve(bytes.size() * 2);
+  int32_t value = predictor;
+  for (uint8_t b : bytes) {
+    uint8_t hi = b >> 4;
+    value = clamp_predictor(value + kDpcmTable[hi]);
+    predictor = static_cast<int16_t>(value);
+    out.push_back(predictor);
+    uint8_t lo = static_cast<uint8_t>(b & 0x0F);
+    value = clamp_predictor(value + kDpcmTable[lo]);
+    predictor = static_cast<int16_t>(value);
+    out.push_back(predictor);
+  }
+  return out;
+}
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -64,6 +109,9 @@ TEST_CASE("Truncated audio block triggers error") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "trunc_audio.rbt";
   fs::path outDir = tmpDir / "trunc_audio_out";
+  if (fs::exists(outDir)) {
+    fs::remove_all(outDir);
+  }  
   fs::create_directories(outDir);
 
   auto data = build_header();
@@ -104,4 +152,61 @@ TEST_CASE("Truncated audio block triggers error") {
 
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
+
+  fs::path wavPath;
+  std::string bestName;
+  for (const auto &entry : fs::directory_iterator(outDir)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    auto name = entry.path().filename().string();
+    if (name.rfind("frame_", 0) != 0 ||
+        name.find("_even.wav") == std::string::npos) {
+      continue;
+    }
+    if (wavPath.empty() || name > bestName) {
+      wavPath = entry.path();
+      bestName = name;
+    }
+  }
+  REQUIRE(!wavPath.empty());
+
+  std::ifstream wav(wavPath, std::ios::binary);
+  REQUIRE(wav);
+  wav.seekg(40, std::ios::beg);
+  std::array<unsigned char, 4> dataSizeBytes{};
+  wav.read(reinterpret_cast<char *>(dataSizeBytes.data()),
+           static_cast<std::streamsize>(dataSizeBytes.size()));
+  REQUIRE(wav);
+  uint32_t dataBytes = static_cast<uint32_t>(dataSizeBytes[0]) |
+                       (static_cast<uint32_t>(dataSizeBytes[1]) << 8) |
+                       (static_cast<uint32_t>(dataSizeBytes[2]) << 16) |
+                       (static_cast<uint32_t>(dataSizeBytes[3]) << 24);
+  REQUIRE(dataBytes % 2 == 0);
+  wav.seekg(44, std::ios::beg);
+  std::vector<uint8_t> audioData(dataBytes);
+  if (!audioData.empty()) {
+    wav.read(reinterpret_cast<char *>(audioData.data()),
+             static_cast<std::streamsize>(audioData.size()));
+    REQUIRE(wav.gcount() == static_cast<std::streamsize>(audioData.size()));
+  }
+
+  std::vector<int16_t> actualSamples;
+  actualSamples.reserve(audioData.size() / 2);
+  for (size_t i = 0; i + 1 < audioData.size(); i += 2) {
+    uint16_t lo = audioData[i];
+    uint16_t hi = static_cast<uint16_t>(audioData[i + 1]) << 8;
+    actualSamples.push_back(static_cast<int16_t>(lo | hi));
+  }
+
+  int16_t predictor = 0;
+  std::vector<uint8_t> primerBytes(8, 0x88);
+  auto primerSamples = dpcm16_decompress_bytes(primerBytes, predictor);
+  REQUIRE(primerSamples.size() == 16);
+  std::vector<uint8_t> runwayBytes = {0, 1, 2, 3, 4, 5, 6, 7};
+  dpcm16_decompress_last_bytes(runwayBytes, predictor);
+  std::vector<uint8_t> payloadBytes = {0x88, 0x77};
+  auto expectedSamples = dpcm16_decompress_bytes(payloadBytes, predictor);
+
+  REQUIRE(actualSamples == expectedSamples);  
 }
