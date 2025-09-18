@@ -521,12 +521,14 @@ void RobotExtractor::readSizesAndCues() {
     }
     uint32_t maxSize = static_cast<uint32_t>(maxSize64);
     if (m_packetSizes[i] > maxSize) {
-      log_warn(m_srcPath,
-               "Packet size > frame size + audio block size (i=" +
-                   std::to_string(i) + ", frame=" +
-                   std::to_string(m_frameSizes[i]) + ", packet=" +
-                   std::to_string(m_packetSizes[i]) + ")",
-               m_options);
+      std::string message =
+          "Packet size > frame size + audio block size (i=" +
+          std::to_string(i) + ", frame=" + std::to_string(m_frameSizes[i]) +
+          ", packet=" + std::to_string(m_packetSizes[i]) + ", max=" +
+          std::to_string(maxSize) + ")";
+      log_error(m_srcPath, message, m_options);
+      throw std::runtime_error(
+          "Packet size exceeds frame size + audio block size");
     }
   }
   for (auto &time : m_cueTimes) {
