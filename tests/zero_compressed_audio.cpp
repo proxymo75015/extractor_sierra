@@ -89,7 +89,7 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
   data.push_back(0); // numCels low byte
   data.push_back(0); // numCels high byte
 
-  push32(data, 2); // pos (even)
+  push32(data, 2); // pos -> bit 1 défini => canal impair
   push32(data, 2); // size: audio payload only (runway omitted)
   std::array<uint8_t, 2> audioPayload{0x10, 0x32};
   data.insert(data.end(), audioPayload.begin(), audioPayload.end());
@@ -104,10 +104,10 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
-  auto wavEven = outDir / "frame_00001_even.wav";
-  REQUIRE(fs::exists(wavEven));
+  auto wavOdd = outDir / "frame_00000_odd.wav";
+  REQUIRE(fs::exists(wavOdd));
 
-  std::ifstream wavFile(wavEven, std::ios::binary);
+  std::ifstream wavFile(wavOdd, std::ios::binary);
   REQUIRE(wavFile.is_open());
 
   std::array<char, 44> header{};
@@ -133,10 +133,6 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
   }
 
   int16_t predictor = 0;
-  std::array<std::byte, 8> primerBytes{};
-  primerBytes.fill(std::byte{0x88});
-  (void)robot::dpcm16_decompress(std::span(primerBytes), predictor);
-
   std::array<std::byte, 8> zeroRunway{};
   robot::dpcm16_decompress_last(std::span(zeroRunway), predictor);
 
