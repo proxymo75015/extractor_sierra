@@ -89,7 +89,7 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
   data.push_back(0); // numCels low byte
   data.push_back(0); // numCels high byte
 
-  push32(data, 2); // pos -> bit 1 défini => canal impair
+  push32(data, 1); // position impaire => canal impair
   push32(data, 2); // size: audio payload only (runway omitted)
   std::array<uint8_t, 2> audioPayload{0x10, 0x32};
   data.insert(data.end(), audioPayload.begin(), audioPayload.end());
