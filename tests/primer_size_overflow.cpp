@@ -7,6 +7,9 @@
 
 namespace fs = std::filesystem;
 
+constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
+                                       2 * sizeof(uint32_t);
+
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x & 0xFF));
     v.push_back(static_cast<uint8_t>(x >> 8));
@@ -61,8 +64,11 @@ TEST_CASE("Somme des primers dépasse les bornes") {
     fs::path outDir = tmpDir / "overflow_primer_out";
     fs::create_directories(outDir);
 
-    auto data = build_header(8);
-    auto primer = build_primer_header(8, 4, 5); // 4 + 5 > 8
+    const uint32_t evenSize = 4;
+    const uint32_t oddSize = 5;
+    const uint32_t total = kPrimerHeaderSize + evenSize + oddSize;
+    auto data = build_header(static_cast<uint16_t>(kPrimerHeaderSize + 8));
+    auto primer = build_primer_header(total, evenSize, oddSize);
     data.insert(data.end(), primer.begin(), primer.end());
 
     std::ofstream out(input, std::ios::binary);
