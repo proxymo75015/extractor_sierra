@@ -43,22 +43,17 @@ TEST_CASE("expand_cel gère les ratios non entiers") {
 
   REQUIRE(target == expected);
 }
-TEST_CASE("expand_cel réduit les lignes lorsque le scale est supérieur à 100") {
+TEST_CASE("expand_cel rejette un scale supérieur à 100") {
   const uint16_t w = 2;
   const uint16_t h = 2;
-  const uint8_t scale = 200; // source deux fois plus haute
+  const uint8_t scale = 101; // invalide
 
   std::vector<std::byte> source{std::byte{1}, std::byte{2}, std::byte{3},
                                 std::byte{4}, std::byte{5}, std::byte{6},
-                                std::byte{7}, std::byte{8}}; // hauteur source 4
-
-  std::vector<std::byte> expected{std::byte{1}, std::byte{2}, std::byte{5},
-                                  std::byte{6}}; // lignes 0 et 2 conservées
+                                std::byte{7}, std::byte{8}};
 
   std::vector<std::byte> target(static_cast<size_t>(w) * h);
-  expand_cel(target, source, w, h, scale);
-
-  REQUIRE(target == expected);
+  REQUIRE_THROWS(expand_cel(target, source, w, h, scale));
 }
 
 TEST_CASE("expand_cel vérifie les tailles de tampons") {
@@ -99,7 +94,7 @@ TEST_CASE("expand_cel rejette un scale nul") {
 TEST_CASE("expand_cel rejette un scale trop grand") {
   const uint16_t w = 1;
   const uint16_t h = 1;
-  const uint8_t scale = 201;
+  const uint8_t scale = 150;
   std::vector<std::byte> target(1);
   std::vector<std::byte> source(1);
 
@@ -158,12 +153,12 @@ TEST_CASE("expand_cel traite de grands cels à l'agrandissement") {
   }
 }
 
-TEST_CASE("expand_cel traite de grands cels à la réduction") {
+TEST_CASE("expand_cel traite de grands cels sans réduction") {
   const size_t maxPixels = RobotExtractorTester::maxCelPixels();
   const uint16_t w = 1024;
   const uint16_t h = static_cast<uint16_t>(maxPixels / w);
   REQUIRE(static_cast<size_t>(w) * h == maxPixels);
-  const uint8_t scale = 150;
+  const uint8_t scale = 100;
 
   const int sourceHeight = static_cast<int>(h) * scale / 100;
   std::vector<std::byte> source(static_cast<size_t>(w) * sourceHeight);
@@ -175,37 +170,18 @@ TEST_CASE("expand_cel traite de grands cels à la réduction") {
 
   std::vector<std::byte> target(static_cast<size_t>(w) * h);
   expand_cel(target, source, w, h, scale);
-
-  int srcY = sourceHeight;
-  int remainder = 0;
-  for (int destY = static_cast<int>(h) - 1; destY >= 0; --destY) {
-    remainder += sourceHeight;
-    int step = remainder / static_cast<int>(h);
-    remainder %= static_cast<int>(h);
-    srcY -= step;
-    REQUIRE(srcY >= 0);
-    std::byte expected = std::byte(srcY & 0xFF);
-    const auto offset = static_cast<size_t>(destY) * w;
-    auto row = target.begin() + static_cast<std::ptrdiff_t>(offset);
-    bool ok = std::all_of(row, row + static_cast<std::ptrdiff_t>(w),
-                          [expected](std::byte b) { return b == expected; });
-    REQUIRE(ok);
-  }
-  REQUIRE(srcY == 0);
+  REQUIRE(target == source);
 }
 
-TEST_CASE("expand_cel réduit correctement un cel de hauteur minimale") {
+TEST_CASE("expand_cel gère correctement un cel de hauteur minimale sans réduction") {
   const uint16_t w = 2;
   const uint16_t h = 1;
-  const uint8_t scale = 200; // source deux fois plus haute que la cible
+  const uint8_t scale = 100; // aucune réduction
 
-  std::vector<std::byte> source{std::byte{1}, std::byte{2}, std::byte{3},
-                                std::byte{4}};
-
-  std::vector<std::byte> expected{std::byte{1}, std::byte{2}};
+  std::vector<std::byte> source{std::byte{1}, std::byte{2}};
 
   std::vector<std::byte> target(static_cast<size_t>(w) * h);
   expand_cel(target, source, w, h, scale);
 
-  REQUIRE(target == expected);
+  REQUIRE(target == source);
 }
