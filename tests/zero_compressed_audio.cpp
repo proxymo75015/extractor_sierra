@@ -68,6 +68,9 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "zero_compressed_audio.rbt";
   fs::path outDir = tmpDir / "zero_compressed_audio_out";
+  if (fs::exists(outDir)) {
+    fs::remove_all(outDir);
+  }  
   fs::create_directories(outDir);
 
   auto data = build_header();
@@ -89,12 +92,15 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
   data.push_back(0); // numCels low byte
   data.push_back(0); // numCels high byte
 
+  constexpr int kRunwayBytes = 8;  
   push32(data, 1); // position impaire => canal impair
-  push32(data, 2); // size: audio payload only (runway omitted)
+  push32(data, 10); // taille tronquée : 8 octets de runway + 2 octets de payload
   std::array<uint8_t, 2> audioPayload{0x10, 0x32};
+  for (int i = 0; i < kRunwayBytes; ++i)
+    data.push_back(0); // runway zéro  
   data.insert(data.end(), audioPayload.begin(), audioPayload.end());
-  for (int i = 0; i < 14; ++i)
-    data.push_back(0); // padding to expected block size
+  for (int i = 0; i < 6; ++i)
+    data.push_back(0); // padding pour atteindre la taille attendue
 
   std::ofstream out(input, std::ios::binary);
   out.write(reinterpret_cast<const char *>(data.data()),
