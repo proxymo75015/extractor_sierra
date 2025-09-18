@@ -30,7 +30,7 @@ static std::vector<uint8_t> build_header() {
   push16(h, 24);  // audio block size
   push16(h, 0);   // primerZeroCompressFlag
   push16(h, 0);   // skip
-  push16(h, 2);   // numFrames
+  push16(h, 3);   // numFrames
   push16(h, 0);   // paletteSize
   push16(h, static_cast<uint16_t>(kPrimerHeaderSize));
   push16(h, 1);   // xRes
@@ -58,7 +58,7 @@ static std::vector<uint8_t> build_primer_header() {
   return p;
 }
 
-TEST_CASE("Audio blocks at pos 2 and 6 use the odd channel") {
+TEST_CASE("Audio blocks are routed according to parity") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "odd_channel_route.rbt";
   fs::path outDir = tmpDir / "odd_channel_route_out";
@@ -68,9 +68,11 @@ TEST_CASE("Audio blocks at pos 2 and 6 use the odd channel") {
   auto primer = build_primer_header();
   data.insert(data.end(), primer.begin(), primer.end());
 
-  // Frame sizes (2 frames) and packet sizes including audio blocks
+  // Frame sizes (3 frames) and packet sizes including audio blocks
   push16(data, 2);
   push16(data, 2);
+  push16(data, 2);
+  push16(data, 26);
   push16(data, 26);
   push16(data, 26);
 
@@ -85,7 +87,7 @@ TEST_CASE("Audio blocks at pos 2 and 6 use the odd channel") {
   // Frame 0: numCels = 0
   data.push_back(0);
   data.push_back(0);
-  push32(data, 2);  // pos routes to odd channel when using bit 1
+  push32(data, 1);  // position impaire -> canal odd
   push32(data, 10); // compressed data size
   for (int i = 0; i < 10; ++i)
     data.push_back(static_cast<uint8_t>(i));
@@ -95,13 +97,23 @@ TEST_CASE("Audio blocks at pos 2 and 6 use the odd channel") {
   // Frame 1: numCels = 0
   data.push_back(0);
   data.push_back(0);
-  push32(data, 6);  // second block must also use odd channel
+  push32(data, 5);  // position impaire -> canal odd
   push32(data, 10); // compressed data size
   for (int i = 0; i < 10; ++i)
     data.push_back(static_cast<uint8_t>(0x20 + i));
   for (int i = 0; i < 6; ++i)
     data.push_back(0);
 
+  // Frame 2: numCels = 0
+  data.push_back(0);
+  data.push_back(0);
+  push32(data, 4);  // position paire -> canal even
+  push32(data, 10); // compressed data size
+  for (int i = 0; i < 10; ++i)
+    data.push_back(static_cast<uint8_t>(0x40 + i));
+  for (int i = 0; i < 6; ++i)
+    data.push_back(0);
+  
   std::ofstream out(input, std::ios::binary);
   out.write(reinterpret_cast<const char *>(data.data()),
             static_cast<std::streamsize>(data.size()));
@@ -112,9 +124,15 @@ TEST_CASE("Audio blocks at pos 2 and 6 use the odd channel") {
 
   auto odd0 = outDir / "frame_00000_odd.wav";
   auto odd1 = outDir / "frame_00001_odd.wav";
+  auto odd2 = outDir / "frame_00002_odd.wav";
   auto even0 = outDir / "frame_00000_even.wav";
+  auto even1 = outDir / "frame_00001_even.wav";
+  auto even2 = outDir / "frame_00002_even.wav";  
 
   REQUIRE(fs::exists(odd0));
   REQUIRE(fs::exists(odd1));
-  REQUIRE_FALSE(fs::exists(even0));
+  REQUIRE(fs::exists(even0));
+  REQUIRE_FALSE(fs::exists(even1));
+  REQUIRE_FALSE(fs::exists(even2));
+  REQUIRE_FALSE(fs::exists(odd2));
 }
