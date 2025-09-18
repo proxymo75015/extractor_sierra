@@ -786,7 +786,9 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                     checked_streamsize(static_cast<size_t>(size)));
               }
             }
-            bool isEven = (pos % 2) == 0;
+            // Les canaux audio sont déterminés par le bit 1 de la position
+            // (comme dans ScummVM) : bit désactivé = canal pair.
+            bool isEven = (pos & 0x2) == 0;
             // L'audio peut exister même sans primer, décompresser toujours.
             process_audio_block(std::span<const std::byte>(block), isEven);
             int64_t toSkip = expectedAudioBlockSize - size;
