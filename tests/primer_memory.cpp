@@ -8,6 +8,9 @@
 namespace fs = std::filesystem;
 using robot::RobotExtractorTester;
 
+constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
+                                       2 * sizeof(uint32_t);
+
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
   v.push_back(static_cast<uint8_t>(x >> 8));
@@ -63,13 +66,13 @@ TEST_CASE("readPrimer releases primer buffers") {
   fs::path outDir = tmpDir / "primer_memory_out";
   fs::create_directories(outDir);
 
-  uint32_t evenSize = 10000;
-  uint32_t oddSize = 10000;
-  uint32_t total = evenSize + oddSize;
-  auto data = build_header(static_cast<uint16_t>(total + 14));
+  const uint32_t evenSize = 10000;
+  const uint32_t oddSize = 10000;
+  const uint32_t total = kPrimerHeaderSize + evenSize + oddSize;
+  auto data = build_header(static_cast<uint16_t>(total));
   auto primer = build_primer_header(total, evenSize, oddSize);
   data.insert(data.end(), primer.begin(), primer.end());
-  data.resize(data.size() + total, 0); // primer data
+  data.resize(data.size() + static_cast<size_t>(evenSize + oddSize), 0);
 
   std::ofstream out(input, std::ios::binary);
   out.write(reinterpret_cast<const char *>(data.data()),
