@@ -32,7 +32,7 @@ static std::vector<uint8_t> build_header() {
   push16(h, 0);   // skip
   push16(h, 1);   // numFrames
   push16(h, 0);   // paletteSize
-  push16(h, static_cast<uint16_t>(kPrimerHeaderSize + 8));
+  push32(p, static_cast<uint32_t>(kPrimerHeaderSize + 8));
   push16(h, 1);   // xRes
   push16(h, 1);   // yRes
   h.push_back(0); // hasPalette
@@ -104,6 +104,7 @@ TEST_CASE("Negative audio position throws") {
     extractor.extract();
     FAIL("Aucune exception levée");
   } catch (const std::runtime_error &e) {
+    INFO(e.what());    
     REQUIRE(std::string(e.what()).find("Position audio invalide") !=
             std::string::npos);
   }
