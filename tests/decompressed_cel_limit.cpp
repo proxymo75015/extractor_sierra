@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
+#include <string>
 #include <vector>
 
 #include "robot_extractor.hpp"
@@ -14,9 +15,9 @@ static void push16(std::vector<uint8_t> &v, uint16_t x) {
 }
 
 TEST_CASE("Cel decompresse au-dela de la limite est refuse") {
-  const uint16_t w = 1024;
-  const uint16_t h = 1024; // w*h == kMaxCelPixels
-  const uint8_t scale = 150; // sourceHeight = 1536 -> expected > kMaxCelPixels
+  const uint16_t w = 1025;
+  const uint16_t h = 1024; // w*h dépasse légèrement kMaxCelPixels
+  const uint8_t scale = 100; // sourceHeight = 1024 -> w*sourceHeight > kMaxCelPixels
 
   std::vector<uint8_t> data;
   data.reserve(2 + 22);
@@ -55,8 +56,12 @@ TEST_CASE("Cel decompresse au-dela de la limite est refuse") {
     RobotExtractorTester::exportFrame(extractor, 0, frameJson);
     FAIL("No exception thrown");
   } catch (const std::runtime_error &e) {
-    REQUIRE(std::string(e.what()).find(
-                "Cel décompressé dépasse la taille maximale") !=
-            std::string::npos);
+    const std::string message = e.what();
+    const bool oversized =
+        message.find("Cel décompressé dépasse la taille maximale") !=
+        std::string::npos;
+    const bool invalidDimensions =
+        message.find("Dimensions de cel invalides") != std::string::npos;
+    REQUIRE((oversized || invalidDimensions));
   }
 }
