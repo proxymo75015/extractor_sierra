@@ -10,6 +10,9 @@ using robot::RobotExtractorTester;
 
 namespace fs = std::filesystem;
 
+constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
+                                       2 * sizeof(uint32_t);
+
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
   v.push_back(static_cast<uint8_t>(x >> 8));
@@ -65,7 +68,7 @@ TEST_CASE("Primer mismatch realigns stream") {
   fs::path outDir = tmpDir / "primer_reserved_mismatch_out";
   fs::create_directories(outDir);
 
-  auto primerHeader = build_primer_header(4, 4, 0);
+  auto primerHeader = build_primer_header(kPrimerHeaderSize + 4, 4, 0);
   const uint16_t reservedSize =
       static_cast<uint16_t>(primerHeader.size() + 10); // intentionally larger
   auto data = build_header(reservedSize);
