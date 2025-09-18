@@ -911,8 +911,18 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
   }
   try {
     wavFile.write(header.data(), checked_streamsize(header.size()));
-    wavFile.write(reinterpret_cast<const char *>(samples.data()),
-                  checked_streamsize(data_size));
+
+    std::vector<char> serializedSamples(data_size);
+    char *dst = serializedSamples.data();
+    for (int16_t sample : samples) {
+      write_le16(dst, static_cast<uint16_t>(sample));
+      dst += sizeof(uint16_t);
+    }
+
+    if (!serializedSamples.empty()) {
+      wavFile.write(serializedSamples.data(),
+                    checked_streamsize(serializedSamples.size()));
+    }
     wavFile.flush();
     if (!wavFile) {
       throw std::runtime_error("Échec de l'écriture du fichier WAV: " +
