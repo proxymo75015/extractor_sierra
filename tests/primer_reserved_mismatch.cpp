@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -62,19 +63,33 @@ build_primer_header(uint32_t total, uint32_t evenSize, uint32_t oddSize) {
   return p;
 }
 
-TEST_CASE("Primer mismatch realigns stream") {
+TEST_CASE("Primer mismatch realigns stream and preserves primer data") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "primer_reserved_mismatch.rbt";
   fs::path outDir = tmpDir / "primer_reserved_mismatch_out";
+  fs::remove_all(outDir);
   fs::create_directories(outDir);
 
-  auto primerHeader = build_primer_header(kPrimerHeaderSize + 4, 4, 0);
+  constexpr uint32_t kEvenPrimerSize = 12;
+  constexpr uint32_t kOddPrimerSize = 12;
+  const uint32_t totalPrimerSize =
+      kPrimerHeaderSize + kEvenPrimerSize + kOddPrimerSize;
+  auto primerHeader =
+      build_primer_header(totalPrimerSize, kEvenPrimerSize, kOddPrimerSize);
   const uint16_t reservedSize =
-      static_cast<uint16_t>(primerHeader.size() + 10); // intentionally larger
+      static_cast<uint16_t>(primerHeader.size() + kEvenPrimerSize +
+                            kOddPrimerSize + 10); // intentionally larger
   auto data = build_header(reservedSize);
   data.insert(data.end(), primerHeader.begin(), primerHeader.end());
-  const size_t fillerSize =
-      static_cast<size_t>(reservedSize) - primerHeader.size();
+  const std::array<uint8_t, kEvenPrimerSize> evenPrimerBytes{
+      0x10, 0x32, 0x54, 0x76, 0x98, 0xBA, 0xDC, 0xFE, 0x12, 0x34, 0x56, 0x78};
+  data.insert(data.end(), evenPrimerBytes.begin(), evenPrimerBytes.end());
+  const std::array<uint8_t, kOddPrimerSize> oddPrimerBytes{
+      0xFF, 0xEE, 0xDD, 0xCC, 0xBB, 0xAA, 0x99, 0x88, 0x77, 0x66, 0x55, 0x44};
+  data.insert(data.end(), oddPrimerBytes.begin(), oddPrimerBytes.end());
+  const size_t fillerSize = static_cast<size_t>(reservedSize) -
+                            primerHeader.size() - evenPrimerBytes.size() -
+                            oddPrimerBytes.size();
   data.insert(data.end(), fillerSize, 0xAB); // filler primer bytes
   data.push_back(0xCC); // sentinel after reserved area
   data.push_back(0xDD);
@@ -84,7 +99,7 @@ TEST_CASE("Primer mismatch realigns stream") {
             static_cast<std::streamsize>(data.size()));
   out.close();
 
-  RobotExtractor extractor(input, outDir, false);
+  RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
   auto &file = RobotExtractorTester::file(extractor);
   const std::streamoff primerHeaderPos = file.tellg();
@@ -94,6 +109,18 @@ TEST_CASE("Primer mismatch realigns stream") {
   const std::streamoff expectedPos =
       primerHeaderPos + static_cast<std::streamoff>(reservedSize);
   REQUIRE(file.tellg() == expectedPos);
+  
+  REQUIRE(RobotExtractorTester::evenPrimerSize(extractor) ==
+          static_cast<std::streamsize>(kEvenPrimerSize));
+  REQUIRE(RobotExtractorTester::oddPrimerSize(extractor) ==
+          static_cast<std::streamsize>(kOddPrimerSize));
+
+  fs::path evenWav = outDir / "frame_00000_even.wav";
+  fs::path oddWav = outDir / "frame_00000_odd.wav";
+  REQUIRE(fs::exists(evenWav));
+  REQUIRE(fs::exists(oddWav));
+  REQUIRE(fs::file_size(evenWav) == 60);
+  REQUIRE(fs::file_size(oddWav) == 60);
 
   int nextByte = file.peek();
   REQUIRE(nextByte == 0xCC);
