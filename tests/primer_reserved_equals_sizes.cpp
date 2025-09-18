@@ -10,6 +10,9 @@ using robot::RobotExtractorTester;
 
 namespace fs = std::filesystem;
 
+constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
+                                       2 * sizeof(uint32_t);
+
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
   v.push_back(static_cast<uint8_t>(x >> 8));
@@ -65,8 +68,9 @@ TEST_CASE("Primer reserved size matches channel sizes") {
   fs::path outDir = tmpDir / "primer_equal_sizes_out";
   fs::create_directories(outDir);
 
-  auto data = build_header(8); // header claims 8 bytes reserved
-  auto primer = build_primer_header(8, 8, 0);
+  auto data =
+      build_header(static_cast<uint16_t>(kPrimerHeaderSize + 8));
+  auto primer = build_primer_header(kPrimerHeaderSize + 8, 8, 0);
   data.insert(data.end(), primer.begin(), primer.end());
   data.insert(data.end(), 8, 0); // even primer data
 
