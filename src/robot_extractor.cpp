@@ -769,26 +769,40 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             }
           } else {
             std::vector<std::byte> block;
+            size_t payloadBytes = 0;            
             if (size == expectedAudioBlockSize) {
               block.resize(static_cast<size_t>(expectedAudioBlockSize));
-              m_fp.read(reinterpret_cast<char *>(block.data()),
-                        checked_streamsize(block.size()));
-            } else {
-              const size_t expectedSize =
-                  expectedAudioBlockSize > 0
-                      ? static_cast<size_t>(expectedAudioBlockSize)
-                      : size_t{0};
-              block.assign(expectedSize, std::byte{0});
-              if (size > 0) {
+              if (!block.empty()) {
                 m_fp.read(reinterpret_cast<char *>(block.data()),
-                          checked_streamsize(static_cast<size_t>(size)));
+                          checked_streamsize(block.size()));
+              }
+              if (block.size() > kAudioRunwayBytes) {
+                payloadBytes = block.size() - kAudioRunwayBytes;
+              }
+            } else {
+              const size_t bytesToRead =
+                  size > 0 ? static_cast<size_t>(size) : size_t{0};
+              std::vector<std::byte> truncated(bytesToRead);
+              if (!truncated.empty()) {
+                m_fp.read(reinterpret_cast<char *>(truncated.data()),
+                          checked_streamsize(truncated.size()));
+              }
+              block.assign(kAudioRunwayBytes, std::byte{0});
+              if (!truncated.empty()) {
+                block.insert(block.end(), truncated.begin(), truncated.end());
+                payloadBytes = truncated.size();
               }
             }
             // Les canaux audio sont déterminés par la parité de la position :
             // valeur paire = canal pair.
             bool isEven = (pos & 0x1) == 0;
             // L'audio peut exister même sans primer, décompresser toujours.
-            process_audio_block(std::span<const std::byte>(block), isEven);
+            size_t bytesToDecode = block.size();
+            if (payloadBytes > 0) {
+              size_t wanted = static_cast<size_t>(kAudioRunwayBytes) + payloadBytes;
+              bytesToDecode = std::min(block.size(), wanted);
+            }
+            process_audio_block(std::span(block).first(bytesToDecode), isEven);
             int64_t toSkip = expectedAudioBlockSize - size;
             if (toSkip < 0) {
               throw std::runtime_error("Taille audio incohérente");
