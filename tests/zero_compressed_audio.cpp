@@ -12,6 +12,9 @@
 
 namespace fs = std::filesystem;
 
+constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
+                                       2 * sizeof(uint32_t);
+
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
   v.push_back(static_cast<uint8_t>(x >> 8));
@@ -34,7 +37,8 @@ static std::vector<uint8_t> build_header() {
   push16(h, 0);   // skip
   push16(h, 1);   // numFrames
   push16(h, 0);   // paletteSize
-  push16(h, 8);   // primerReservedSize matches even primer size
+  push16(h, static_cast<uint16_t>(kPrimerHeaderSize + 8));
+  // primerReservedSize includes header and data
   push16(h, 1);   // xRes
   push16(h, 1);   // yRes
   h.push_back(0); // hasPalette
@@ -53,7 +57,7 @@ static std::vector<uint8_t> build_header() {
 
 static std::vector<uint8_t> build_primer_header() {
   std::vector<uint8_t> p;
-  push32(p, 8); // total primer size (unused)
+  push32(p, kPrimerHeaderSize + 8);
   push16(p, 0); // compType
   push32(p, 8); // even size
   push32(p, 0); // odd size
