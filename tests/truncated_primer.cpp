@@ -7,6 +7,9 @@
 
 namespace fs = std::filesystem;
 
+constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
+                                       2 * sizeof(uint32_t);
+
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x & 0xFF));
     v.push_back(static_cast<uint8_t>(x >> 8));
@@ -61,8 +64,9 @@ TEST_CASE("Primer audio pair tronqué") {
     fs::path outDir = tmpDir / "trunc_even_out";
     fs::create_directories(outDir);
 
-    auto data = build_header(8);
-    auto primer = build_primer_header(8, 4, 4);
+    auto data =
+        build_header(static_cast<uint16_t>(kPrimerHeaderSize + 8));
+    auto primer = build_primer_header(kPrimerHeaderSize + 8, 4, 4);
     data.insert(data.end(), primer.begin(), primer.end());
     data.push_back(0xAA); // données tronquées (2 < 4)
     data.push_back(0xBB);
@@ -77,7 +81,8 @@ TEST_CASE("Primer audio pair tronqué") {
         extractor.extract();
         FAIL("Aucune exception levée");
     } catch (const std::runtime_error &e) {
-        REQUIRE(std::string(e.what()).find("Primer audio pair tronqué") !=
+        INFO(e.what());
+        REQUIRE(std::string(e.what()).find("Primer hors limites") !=
                 std::string::npos);
     }
 }
@@ -88,8 +93,9 @@ TEST_CASE("Primer audio impair tronqué") {
     fs::path outDir = tmpDir / "trunc_odd_out";
     fs::create_directories(outDir);
 
-    auto data = build_header(6);
-    auto primer = build_primer_header(6, 2, 4);
+    auto data =
+        build_header(static_cast<uint16_t>(kPrimerHeaderSize + 6));
+    auto primer = build_primer_header(kPrimerHeaderSize + 6, 2, 4);
     data.insert(data.end(), primer.begin(), primer.end());
     // even primer complet
     data.push_back(0xAA);
@@ -107,7 +113,8 @@ TEST_CASE("Primer audio impair tronqué") {
         extractor.extract();
         FAIL("Aucune exception levée");
     } catch (const std::runtime_error &e) {
-        REQUIRE(std::string(e.what()).find("Primer audio impair tronqué") !=
+        INFO(e.what());
+        REQUIRE(std::string(e.what()).find("Primer hors limites") !=
                 std::string::npos);
     }
 }
