@@ -743,16 +743,16 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         m_fp.seekg(static_cast<std::streamoff>(audioBlkLen), std::ios::cur);
       } else {
         const int64_t expectedAudioBlockSize =
-            static_cast<int64_t>(m_audioBlkSize) - 8;        
+            static_cast<int64_t>(m_audioBlkSize) - 8;
+        int64_t consumed = 0;
         int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
+        consumed += 4;
         if (pos < 0) {
           throw std::runtime_error("Position audio invalide");
         }
-        if (pos == 0) {
-          m_fp.seekg(static_cast<std::streamoff>(audioBlkLen - 4),
-                     std::ios::cur);
-        } else {
+        if (pos != 0) {
           int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
+          consumed += 4;
           if (size < 0) {
             throw std::runtime_error("Taille audio invalide");
           }
@@ -762,20 +762,17 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                           std::to_string(size) + " (attendu: " +
                           std::to_string(expectedAudioBlockSize) + ")",
                       m_options);
-            int64_t audioDataAvailable = static_cast<int64_t>(audioBlkLen) - 8;
-            if (audioDataAvailable > 0) {
-              m_fp.seekg(static_cast<std::streamoff>(audioDataAvailable),
-                         std::ios::cur);
             }
           } else {
             std::vector<std::byte> block;
-            size_t payloadBytes = 0;            
+            size_t payloadBytes = 0;
             if (size == expectedAudioBlockSize) {
               block.resize(static_cast<size_t>(expectedAudioBlockSize));
               if (!block.empty()) {
                 m_fp.read(reinterpret_cast<char *>(block.data()),
                           checked_streamsize(block.size()));
               }
+              consumed += static_cast<int64_t>(block.size());              
               if (block.size() > kAudioRunwayBytes) {
                 payloadBytes = block.size() - kAudioRunwayBytes;
               }
@@ -787,6 +784,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                 m_fp.read(reinterpret_cast<char *>(truncated.data()),
                           checked_streamsize(truncated.size()));
               }
+              consumed += static_cast<int64_t>(bytesToRead);              
               const size_t expectedSize =
                   expectedAudioBlockSize > 0
                       ? static_cast<size_t>(expectedAudioBlockSize)
@@ -834,15 +832,16 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
               bytesToDecode = std::min(block.size(), wanted);
             }
             process_audio_block(std::span(block).first(bytesToDecode), isEven);
-            int64_t toSkip = expectedAudioBlockSize - size;
-            if (toSkip < 0) {
-              throw std::runtime_error("Taille audio incohérente");
-            }
-            if (toSkip > 0) {
-              m_fp.seekg(static_cast<std::streamoff>(toSkip), std::ios::cur);
-            }
           }
         }
+        int64_t remainingBytes = static_cast<int64_t>(audioBlkLen) - consumed;
+        if (remainingBytes < 0) {
+          throw std::runtime_error(
+              "Bloc audio consommé au-delà de sa taille déclarée");
+        }
+        if (remainingBytes > 0) {
+          m_fp.seekg(static_cast<std::streamoff>(remainingBytes), std::ios::cur);
+        }      
       }
     }
   }
