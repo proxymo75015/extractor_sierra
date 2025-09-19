@@ -815,22 +815,32 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                 expectedAudioBlockSize > 0
                     ? static_cast<size_t>(expectedAudioBlockSize)
                     : size_t{0};
+            const size_t truncatedSize = truncated.size();            
             const size_t blockCapacity =
-                std::max(expectedSize, static_cast<size_t>(kAudioRunwayBytes));
+                std::max({expectedSize, static_cast<size_t>(kAudioRunwayBytes),
+                          truncatedSize});
             block.assign(blockCapacity, std::byte{0});
             const size_t runwayBytes =
                 std::min(blockCapacity, static_cast<size_t>(kAudioRunwayBytes));
-            if (blockCapacity > runwayBytes && !truncated.empty()) {
+            size_t runwayCopied = 0;
+            if (runwayBytes > 0 && truncatedSize >= runwayBytes) {
+              runwayCopied = runwayBytes;
+              std::copy_n(truncated.begin(),
+                          static_cast<std::ptrdiff_t>(runwayCopied),
+                          block.begin());
+            }
+            if (blockCapacity > runwayBytes && truncatedSize > runwayCopied) {
               const size_t payloadCapacity = blockCapacity - runwayBytes;
-              const size_t payloadToCopy =
-                  std::min(payloadCapacity, truncated.size());
-              if (payloadToCopy > 0) {
-                auto src = truncated.begin();
-                auto dst = block.begin() +
-                           static_cast<std::ptrdiff_t>(runwayBytes);
-                std::copy_n(src, static_cast<std::ptrdiff_t>(payloadToCopy),
-                            dst);
+              const size_t payloadToCopy = truncatedSize - runwayCopied;
+              if (payloadToCopy > payloadCapacity) {
+                throw std::runtime_error(
+                    "Audio block payload exceeds allocated capacity");
               }
+              auto src = truncated.begin() +
+                         static_cast<std::ptrdiff_t>(runwayCopied);
+              auto dst = block.begin() +
+                         static_cast<std::ptrdiff_t>(runwayBytes);
+              std::copy_n(src, static_cast<std::ptrdiff_t>(payloadToCopy), dst);
             }
           }
           // Les canaux audio sont déterminés par la parité de la position :
