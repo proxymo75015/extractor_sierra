@@ -808,28 +808,16 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             const size_t blockCapacity =
                 std::max(expectedSize, static_cast<size_t>(kAudioRunwayBytes));
             block.assign(blockCapacity, std::byte{0});
-            const size_t runwayCapacity =
+            const size_t runwayBytes =
                 std::min(blockCapacity, static_cast<size_t>(kAudioRunwayBytes));
-            const size_t runwayToCopy =
-                std::min(truncated.size(), runwayCapacity);
-            if (runwayToCopy > 0) {
-              std::copy_n(truncated.begin(),
-                          static_cast<std::ptrdiff_t>(runwayToCopy),
-                          block.begin());
-            }
-            if (blockCapacity > static_cast<size_t>(kAudioRunwayBytes) &&
-                truncated.size() > static_cast<size_t>(kAudioRunwayBytes)) {
-              const size_t payloadCapacity =
-                  blockCapacity - static_cast<size_t>(kAudioRunwayBytes);
-              const size_t payloadAvailable =
-                  truncated.size() - static_cast<size_t>(kAudioRunwayBytes);
+            if (blockCapacity > runwayBytes && !truncated.empty()) {
+              const size_t payloadCapacity = blockCapacity - runwayBytes;
               const size_t payloadToCopy =
-                  std::min(payloadCapacity, payloadAvailable);
+                  std::min(payloadCapacity, truncated.size());
               if (payloadToCopy > 0) {
-                auto src = truncated.begin() +
-                           static_cast<std::ptrdiff_t>(kAudioRunwayBytes);
+                auto src = truncated.begin();
                 auto dst = block.begin() +
-                           static_cast<std::ptrdiff_t>(kAudioRunwayBytes);
+                           static_cast<std::ptrdiff_t>(runwayBytes);
                 std::copy_n(src, static_cast<std::ptrdiff_t>(payloadToCopy),
                             dst);
                 payloadBytes = payloadToCopy;
