@@ -752,8 +752,9 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         if (pos < 0) {
           throw std::runtime_error("Position audio invalide");
         }
+        int32_t size = 0;        
         if (pos != 0) {
-          int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
+          size = read_scalar<int32_t>(m_fp, m_bigEndian);
           consumed += 4;
           if (size < 0) {
             throw std::runtime_error("Taille audio invalide");
@@ -764,77 +765,76 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                           std::to_string(size) + " (attendu: " +
                           std::to_string(expectedAudioBlockSize) + ")",
                       m_options);
+          }
+        } else {
+          std::vector<std::byte> block;
+          size_t payloadBytes = 0;
+          if (size == expectedAudioBlockSize) {
+            block.resize(static_cast<size_t>(expectedAudioBlockSize));
+            if (!block.empty()) {
+              m_fp.read(reinterpret_cast<char *>(block.data()),
+                        checked_streamsize(block.size()));
+            }
+            consumed += static_cast<int64_t>(block.size());
+            if (block.size() > kAudioRunwayBytes) {
+              payloadBytes = block.size() - kAudioRunwayBytes;            
             }
           } else {
-            std::vector<std::byte> block;
-            size_t payloadBytes = 0;
-            if (size == expectedAudioBlockSize) {
-              block.resize(static_cast<size_t>(expectedAudioBlockSize));
-              if (!block.empty()) {
-                m_fp.read(reinterpret_cast<char *>(block.data()),
-                          checked_streamsize(block.size()));
-              }
-              consumed += static_cast<int64_t>(block.size());              
-              if (block.size() > kAudioRunwayBytes) {
-                payloadBytes = block.size() - kAudioRunwayBytes;
-              }
-            } else {
-              const size_t bytesToRead =
-                  size > 0 ? static_cast<size_t>(size) : size_t{0};
-              std::vector<std::byte> truncated(bytesToRead);
-              if (!truncated.empty()) {
-                m_fp.read(reinterpret_cast<char *>(truncated.data()),
-                          checked_streamsize(truncated.size()));
-              }
-              consumed += static_cast<int64_t>(bytesToRead);              
-              const size_t expectedSize =
-                  expectedAudioBlockSize > 0
-                      ? static_cast<size_t>(expectedAudioBlockSize)
-                      : size_t{0};
-              const size_t blockCapacity =
-                  std::max(expectedSize, static_cast<size_t>(kAudioRunwayBytes));
-              block.assign(blockCapacity, std::byte{0});
-              const size_t runwayCapacity =
-                  std::min(blockCapacity, static_cast<size_t>(kAudioRunwayBytes));
-              const size_t runwayToCopy =
-                  std::min(truncated.size(), runwayCapacity);
-              if (runwayToCopy > 0) {
-                std::copy_n(truncated.begin(),
-                            static_cast<std::ptrdiff_t>(runwayToCopy),
-                            block.begin());
-              }
-              if (blockCapacity > static_cast<size_t>(kAudioRunwayBytes) &&
-                  truncated.size() > static_cast<size_t>(kAudioRunwayBytes)) {
-                const size_t payloadCapacity =
-                    blockCapacity - static_cast<size_t>(kAudioRunwayBytes);
-                const size_t payloadAvailable =
-                    truncated.size() - static_cast<size_t>(kAudioRunwayBytes);
-                const size_t payloadToCopy =
-                    std::min(payloadCapacity, payloadAvailable);
-                if (payloadToCopy > 0) {
-                  auto src = truncated.begin() +
-                             static_cast<std::ptrdiff_t>(kAudioRunwayBytes);
-                  auto dst = block.begin() +
-                             static_cast<std::ptrdiff_t>(kAudioRunwayBytes);
-                  std::copy_n(src, static_cast<std::ptrdiff_t>(payloadToCopy),
-                              dst);
-                  payloadBytes = payloadToCopy;
-                }
+            const size_t bytesToRead =
+                size > 0 ? static_cast<size_t>(size) : size_t{0};
+            std::vector<std::byte> truncated(bytesToRead);
+            if (!truncated.empty()) {
+              m_fp.read(reinterpret_cast<char *>(truncated.data()),
+                        checked_streamsize(truncated.size()));
+            }
+            consumed += static_cast<int64_t>(bytesToRead);
+            const size_t expectedSize =
+                expectedAudioBlockSize > 0
+                    ? static_cast<size_t>(expectedAudioBlockSize)
+                    : size_t{0};
+            const size_t blockCapacity =
+                std::max(expectedSize, static_cast<size_t>(kAudioRunwayBytes));
+            block.assign(blockCapacity, std::byte{0});
+            const size_t runwayCapacity =
+                std::min(blockCapacity, static_cast<size_t>(kAudioRunwayBytes));
+            const size_t runwayToCopy =
+                std::min(truncated.size(), runwayCapacity);
+            if (runwayToCopy > 0) {
+              std::copy_n(truncated.begin(),
+                          static_cast<std::ptrdiff_t>(runwayToCopy),
+                          block.begin());
+            }
+            if (blockCapacity > static_cast<size_t>(kAudioRunwayBytes) &&
+                truncated.size() > static_cast<size_t>(kAudioRunwayBytes)) {
+              const size_t payloadCapacity =
+                  blockCapacity - static_cast<size_t>(kAudioRunwayBytes);
+              const size_t payloadAvailable =
+                  truncated.size() - static_cast<size_t>(kAudioRunwayBytes);
+              const size_t payloadToCopy =
+                  std::min(payloadCapacity, payloadAvailable);
+              if (payloadToCopy > 0) {
+                auto src = truncated.begin() +
+                           static_cast<std::ptrdiff_t>(kAudioRunwayBytes);
+                auto dst = block.begin() +
+                           static_cast<std::ptrdiff_t>(kAudioRunwayBytes);
+                std::copy_n(src, static_cast<std::ptrdiff_t>(payloadToCopy),
+                            dst);
+                payloadBytes = payloadToCopy;
               }
             }
-            // Les canaux audio sont déterminés par la parité de la position :
-            // valeur paire = canal pair.
-            bool isEven = (pos & 0x1) == 0;
-            // L'audio peut exister même sans primer, décompresser toujours.
-            const size_t minimumDecode =
-                std::min(block.size(), static_cast<size_t>(kAudioRunwayBytes));
-            size_t bytesToDecode = minimumDecode;
-            if (payloadBytes > 0) {
-              size_t wanted = static_cast<size_t>(kAudioRunwayBytes) + payloadBytes;
-              bytesToDecode = std::min(block.size(), wanted);
-            }
-            process_audio_block(std::span(block).first(bytesToDecode), isEven);
           }
+          // Les canaux audio sont déterminés par la parité de la position :
+          // valeur paire = canal pair.
+          bool isEven = (pos & 0x1) == 0;
+          // L'audio peut exister même sans primer, décompresser toujours.
+          const size_t minimumDecode =
+              std::min(block.size(), static_cast<size_t>(kAudioRunwayBytes));
+          size_t bytesToDecode = minimumDecode;
+          if (payloadBytes > 0) {
+            size_t wanted = static_cast<size_t>(kAudioRunwayBytes) + payloadBytes;
+            bytesToDecode = std::min(block.size(), wanted);
+          }
+          process_audio_block(std::span(block).first(bytesToDecode), isEven);
         }
         int64_t remainingBytes = static_cast<int64_t>(audioBlkLen) - consumed;
         if (remainingBytes < 0) {
