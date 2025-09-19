@@ -159,25 +159,60 @@ void write_png_cross_platform(const std::filesystem::path &path, int w, int h,
     }
 }
 
-std::vector<std::byte> lzs_decompress(std::span<const std::byte> in, size_t expected_size) {
+std::vector<std::byte> lzs_decompress(std::span<const std::byte> in,
+                                      size_t expected_size,
+                                      std::span<const std::byte> history) {
     if (expected_size > kMaxLzsOutput) {
-        throw std::runtime_error("Taille décompressée trop grande: " + 
-                                 std::to_string(expected_size) + 
-                                 " > " + 
+        throw std::runtime_error("Taille décompressée trop grande: " +
+                                 std::to_string(expected_size) +
+                                 " > " +
                                  std::to_string(kMaxLzsOutput));
     }
     std::vector<std::byte> out(expected_size);
     size_t out_pos = 0;
     size_t in_pos = 0;
 
-    while (in_pos < in.size()) {
+    constexpr size_t kHistorySize = 4096;
+    std::array<std::byte, kHistorySize> dictionary{};
+    size_t dict_pos = 0;
+    size_t valid_history = 0;
+
+    auto push_history = [&](std::byte value) {
+        dictionary[dict_pos] = value;
+        dict_pos = (dict_pos + 1) % kHistorySize;
+        if (valid_history < kHistorySize) {
+            ++valid_history;
+        }
+    };
+
+    if (!history.empty()) {
+        size_t seed_start = history.size() > kHistorySize
+                                ? history.size() - kHistorySize
+                                : 0;
+        for (size_t i = seed_start; i < history.size(); ++i) {
+            push_history(history[i]);
+        }
+    }
+
+    auto write_byte = [&](std::byte value) {
+        if (out_pos >= out.size()) {
+            throw std::runtime_error("Dépassement du tampon de sortie");
+        }
+        out[out_pos++] = value;
+        push_history(value);
+    };
+
+    while (in_pos < in.size() && out_pos < out.size()) {
         uint8_t control = std::to_integer<uint8_t>(in[in_pos++]);
-        for (int i = 0; i < 8 && in_pos < in.size(); ++i) {
+        for (int i = 0; i < 8; ++i) {
+            if (out_pos >= out.size()) {
+                break;
+            }
             if (control & (1 << i)) {
-                if (out_pos >= out.size()) {
-                    throw std::runtime_error("Dépassement du tampon de sortie");
+                if (in_pos >= in.size()) {
+                    throw std::runtime_error("Flux LZS malformé: fin de données lors de la lecture d'un littéral");
                 }
-                out[out_pos++] = in[in_pos++];
+                write_byte(in[in_pos++]);
             } else {
                 if (in_pos + 1 >= in.size()) {
                     throw std::runtime_error("Données d'entrée insuffisantes pour LZS");
@@ -189,15 +224,17 @@ std::vector<std::byte> lzs_decompress(std::span<const std::byte> in, size_t expe
                 if (offset == 0) {
                     throw std::runtime_error("Offset zéro interdit en LZS");
                 }
+                if (offset > kHistorySize) {
+                    throw std::runtime_error("Offset LZS invalide");
+                }
+                size_t available_history = valid_history;
+                if (offset > available_history) {
+                    throw std::runtime_error("Offset LZS invalide");
+                }                
                 for (uint8_t j = 0; j < length; ++j) {
-                    if (out_pos >= out.size()) {
-                        throw std::runtime_error("Dépassement du tampon de sortie");
-                    }
-                    size_t src_pos = out_pos - offset;
-                    if (src_pos >= out_pos) {
-                        throw std::runtime_error("Offset LZS invalide");
-                    }
-                    out[out_pos++] = out[src_pos];
+                    size_t src_index = (dict_pos + kHistorySize - offset) % kHistorySize;
+                    std::byte value = dictionary[src_index];
+                    write_byte(value);
                 }
             }
         }
