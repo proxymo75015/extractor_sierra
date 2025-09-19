@@ -62,7 +62,7 @@ build_primer_header(uint32_t total, uint32_t evenSize, uint32_t oddSize) {
   return p;
 }
 
-TEST_CASE("totalPrimerSize incohérent déclenche une erreur") {
+TEST_CASE("totalPrimerSize incohérent n'empêche pas l'extraction") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "primer_total_mismatch.rbt";
   fs::path outDir = tmpDir / "primer_total_mismatch_out";
@@ -74,21 +74,35 @@ TEST_CASE("totalPrimerSize incohérent déclenche une erreur") {
   auto data = build_header(static_cast<uint16_t>(reserved));
   auto primer = build_primer_header(reserved - 1, evenSize, oddSize);
   data.insert(data.end(), primer.begin(), primer.end());
-  data.resize(data.size() + static_cast<size_t>(reserved - primer.size()), 0);
+  for (uint32_t i = 0; i < evenSize; ++i) {
+    data.push_back(static_cast<uint8_t>(i));
+  }
+
+  push16(data, 2); // frame size
+  push16(data, 2); // packet size
+  for (int i = 0; i < 256; ++i)
+    push32(data, 0); // cue times
+  for (int i = 0; i < 256; ++i)
+    push16(data, 0); // cue values
+
+  data.resize(((data.size() + 2047) / 2048) * 2048, 0);
+  data.push_back(0);
+  data.push_back(0);
 
   std::ofstream out(input, std::ios::binary);
   out.write(reinterpret_cast<const char *>(data.data()),
             static_cast<std::streamsize>(data.size()));
   out.close();
 
-  RobotExtractor extractor(input, outDir, false);
-  RobotExtractorTester::readHeader(extractor);
-  try {
-    RobotExtractorTester::readPrimer(extractor);
-    FAIL("Aucune exception levée");
-  } catch (const std::runtime_error &e) {
-    INFO(e.what());
-    REQUIRE(std::string(e.what()).find("totalPrimerSize incohérent") !=
-            std::string::npos);
-  }
+  RobotExtractor extractor(input, outDir, true);
+  REQUIRE_NOTHROW(extractor.extract());
+
+  REQUIRE(fs::exists(outDir / "metadata.json"));
+  REQUIRE(RobotExtractorTester::evenPrimerSize(extractor) ==
+          static_cast<std::streamsize>(evenSize));
+  REQUIRE(RobotExtractorTester::oddPrimerSize(extractor) ==
+          static_cast<std::streamsize>(oddSize));
+  REQUIRE(RobotExtractorTester::postPrimerPos(extractor) ==
+          RobotExtractorTester::postHeaderPos(extractor) +
+              static_cast<std::streamoff>(reserved));
 }
