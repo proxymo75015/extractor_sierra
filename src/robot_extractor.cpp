@@ -219,10 +219,12 @@ void RobotExtractor::readPrimer() {
         primerHeaderSize + static_cast<std::int64_t>(m_evenPrimerSize) +
         static_cast<std::int64_t>(m_oddPrimerSize);
     if (expectedTotal != static_cast<std::int64_t>(m_totalPrimerSize)) {
-      throw std::runtime_error(
-          "totalPrimerSize incohérent: attendu " +
-          std::to_string(static_cast<long long>(expectedTotal)) +
-          ", lu " + std::to_string(static_cast<long long>(m_totalPrimerSize)));
+      log_warn(m_srcPath,
+               "totalPrimerSize incohérent: attendu " +
+                   std::to_string(static_cast<long long>(expectedTotal)) +
+                   ", lu " +
+                   std::to_string(static_cast<long long>(m_totalPrimerSize)),
+               m_options);
     }
     
     if (compType != 0) {
