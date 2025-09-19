@@ -651,7 +651,8 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       }
       auto comp = std::span(m_frameBuffer).subspan(cel_offset, compSz);
       if (compType == 0) {
-        auto decomp = lzs_decompress(comp, decompSz);
+        auto decomp =
+            lzs_decompress(comp, decompSz, std::span<const std::byte>(m_celBuffer));
         m_celBuffer.insert(m_celBuffer.end(), decomp.begin(), decomp.end());
       } else if (compType == 2) {
         if (compSz != decompSz) {
