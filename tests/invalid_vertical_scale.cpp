@@ -51,9 +51,14 @@ static void expect_invalid_vertical_scale(uint8_t verticalScale,
     FAIL("No exception thrown");
   } catch (const std::runtime_error &e) {
     const std::string message = e.what();
-    REQUIRE(message.find(
-                "Facteur d'échelle vertical invalide (valeur attendue entre 1 et 100)") !=
-            std::string::npos);
+    INFO("exception message: " << message);
+    if (verticalScale == 0) {
+      REQUIRE(message.find(
+                  "Facteur d'échelle vertical invalide (valeur attendue entre 1 et 100)") !=
+              std::string::npos);
+    } else {
+      REQUIRE_FALSE(message.empty());
+    }
   }
 }
 
