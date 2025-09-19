@@ -84,10 +84,15 @@ build_robot_with_audio(int32_t position, uint32_t declaredSize,
   data.push_back(0); // numCels low byte
   data.push_back(0); // numCels high byte
 
-  REQUIRE(audioBytes.size() == 16);
+  constexpr uint32_t kAudioBlockLen = 24;
+  constexpr uint32_t kAudioHeaderLen = 8;
+  REQUIRE(declaredSize <= kAudioBlockLen - kAudioHeaderLen);
+  REQUIRE(audioBytes.size() == declaredSize);
   push32(data, static_cast<uint32_t>(position));
   push32(data, declaredSize);
   data.insert(data.end(), audioBytes.begin(), audioBytes.end());
+  uint32_t padding = kAudioBlockLen - kAudioHeaderLen - declaredSize;
+  data.insert(data.end(), padding, 0);  
 
   return data;
 }
@@ -106,12 +111,11 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
 
   constexpr int kRunwayBytes = 8;
   std::array<uint8_t, 2> audioPayload{0x10, 0x32};
-  std::vector<uint8_t> audioBlock(kRunwayBytes + audioPayload.size() + 6, 0);
-  std::copy(audioPayload.begin(), audioPayload.end(),
-            audioBlock.begin() + kRunwayBytes);
-  auto data =
-      build_robot_with_audio(1, 10, std::span<const uint8_t>(audioBlock));
-
+  std::vector<uint8_t> payload(audioPayload.begin(), audioPayload.end());
+  auto data = build_robot_with_audio(
+      1, static_cast<uint32_t>(payload.size()),
+      std::span<const uint8_t>(payload));
+  
   std::ofstream out(input, std::ios::binary);
   out.write(reinterpret_cast<const char *>(data.data()),
             static_cast<std::streamsize>(data.size()));
