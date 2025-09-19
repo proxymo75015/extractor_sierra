@@ -1,16 +1,27 @@
 #include <array>
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <span>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 #include "robot_extractor.hpp"
+#include "utilities.hpp"
 
 namespace fs = std::filesystem;
 
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
+constexpr uint16_t kAudioBlockSize = 24;
+constexpr size_t kRunwayBytes = 8;
+constexpr size_t kTruncatedPayloadBytes = 2;
+constexpr size_t kBlockBytes = static_cast<size_t>(kAudioBlockSize) - 8;
+constexpr size_t kExpectedPayloadBytes =
+    kBlockBytes > kRunwayBytes ? kBlockBytes - kRunwayBytes : size_t{0};
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -29,7 +40,7 @@ static std::vector<uint8_t> build_header() {
   push16(h, 0x16); // signature
   h.insert(h.end(), {'S', 'O', 'L', '\0'});
   push16(h, 5);   // version
-  push16(h, 24);  // audio block size
+  push16(h, kAudioBlockSize); // audio block size
   push16(h, 0);   // primerZeroCompressFlag
   push16(h, 0);   // skip
   push16(h, 1);   // numFrames
@@ -64,12 +75,15 @@ TEST_CASE("Audio block with runway triggers error") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "runway.rbt";
   fs::path outDir = tmpDir / "runway_out";
+  if (fs::exists(outDir)) {
+    fs::remove_all(outDir);
+  }  
   fs::create_directories(outDir);
 
   auto data = build_header();
-  auto primer = build_primer_header();
-  data.insert(data.end(), primer.begin(), primer.end());
-  for (int i = 0; i < 8; ++i)
+  auto primerHeader = build_primer_header();
+  data.insert(data.end(), primerHeader.begin(), primerHeader.end());
+  for (size_t i = 0; i < kRunwayBytes; ++i)
     data.push_back(0x88); // even primer data
 
   push16(data, 2);  // frame size
@@ -88,12 +102,17 @@ TEST_CASE("Audio block with runway triggers error") {
   data.push_back(0); // numCels high byte
 
   push32(data, 2);  // pos (even)
-  push32(data, 10); // size (8 runway + 2 data)
-  for (int i = 0; i < 8; ++i)
+  const uint32_t truncatedSize =
+      static_cast<uint32_t>(kRunwayBytes + kTruncatedPayloadBytes);
+  push32(data, truncatedSize);
+  for (size_t i = 0; i < kRunwayBytes; ++i)
     data.push_back(static_cast<uint8_t>(i));
   data.push_back(0x88);
   data.push_back(0x77);
-  for (int i = 0; i < 6; ++i)
+  const size_t payloadPadding = kExpectedPayloadBytes > kTruncatedPayloadBytes
+                                    ? kExpectedPayloadBytes - kTruncatedPayloadBytes
+                                    : size_t{0};
+  for (size_t i = 0; i < payloadPadding; ++i)
     data.push_back(0); // padding to audio block size
 
   std::ofstream out(input, std::ios::binary);
@@ -103,4 +122,80 @@ TEST_CASE("Audio block with runway triggers error") {
 
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
+
+  fs::path wavPath;
+  std::string bestName;
+  for (const auto &entry : fs::directory_iterator(outDir)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    auto name = entry.path().filename().string();
+    if (name.rfind("frame_", 0) != 0 ||
+        name.find("_even.wav") == std::string::npos) {
+      continue;
+    }
+    if (wavPath.empty() || name > bestName) {
+      wavPath = entry.path();
+      bestName = name;
+    }
+  }
+  REQUIRE(!wavPath.empty());
+
+  std::ifstream wav(wavPath, std::ios::binary);
+  REQUIRE(wav);
+  wav.seekg(40, std::ios::beg);
+  std::array<unsigned char, 4> dataSizeBytes{};
+  wav.read(reinterpret_cast<char *>(dataSizeBytes.data()),
+           static_cast<std::streamsize>(dataSizeBytes.size()));
+  REQUIRE(wav);
+  uint32_t dataBytes = static_cast<uint32_t>(dataSizeBytes[0]) |
+                       (static_cast<uint32_t>(dataSizeBytes[1]) << 8) |
+                       (static_cast<uint32_t>(dataSizeBytes[2]) << 16) |
+                       (static_cast<uint32_t>(dataSizeBytes[3]) << 24);
+  REQUIRE(dataBytes % 2 == 0);
+  wav.seekg(44, std::ios::beg);
+  std::vector<uint8_t> audioData(dataBytes);
+  if (!audioData.empty()) {
+    wav.read(reinterpret_cast<char *>(audioData.data()),
+             static_cast<std::streamsize>(audioData.size()));
+    REQUIRE(wav.gcount() == static_cast<std::streamsize>(audioData.size()));
+  }
+
+  std::vector<int16_t> actualSamples;
+  actualSamples.reserve(audioData.size() / 2);
+  for (size_t i = 0; i + 1 < audioData.size(); i += 2) {
+    uint16_t lo = audioData[i];
+    uint16_t hi = static_cast<uint16_t>(audioData[i + 1]) << 8;
+    actualSamples.push_back(static_cast<int16_t>(lo | hi));
+  }
+
+  std::vector<std::byte> primerRunway(
+      kRunwayBytes, std::byte{static_cast<unsigned char>(0x88)});
+  int16_t predictor = 0;
+  robot::dpcm16_decompress(std::span<const std::byte>(primerRunway), predictor);
+
+  std::vector<std::byte> runway;
+  runway.reserve(kRunwayBytes);
+  for (size_t i = 0; i < kRunwayBytes; ++i) {
+    runway.push_back(static_cast<std::byte>(i));
+  }
+  robot::dpcm16_decompress_last(std::span<const std::byte>(runway), predictor);
+
+  std::vector<std::byte> payload = {
+      std::byte{static_cast<unsigned char>(0x88)},
+      std::byte{static_cast<unsigned char>(0x77)},
+  };
+  REQUIRE(payload.size() == kTruncatedPayloadBytes);
+  if (payload.size() < kExpectedPayloadBytes) {
+    payload.resize(kExpectedPayloadBytes,
+                   std::byte{static_cast<unsigned char>(0)});
+  }
+  REQUIRE(payload.size() == kExpectedPayloadBytes);
+  auto expectedSamplesBytes =
+      robot::dpcm16_decompress(std::span<const std::byte>(payload), predictor);
+
+  std::vector<int16_t> expectedSamples(expectedSamplesBytes.begin(),
+                                       expectedSamplesBytes.end());
+
+  REQUIRE(actualSamples == expectedSamples);  
 }
