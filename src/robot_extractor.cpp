@@ -753,32 +753,44 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         if (pos < 0) {
           throw std::runtime_error("Position audio invalide");
         }
-        int32_t size = 0;        
-        if (pos != 0) {
-          size = read_scalar<int32_t>(m_fp, m_bigEndian);
-          consumed += 4;
-          if (size < 0) {
-            throw std::runtime_error("Taille audio invalide");
+        int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
+        consumed += 4;
+        if (size < 0) {
+          throw std::runtime_error("Taille audio invalide");
+        }
+        if (size > expectedAudioBlockSize) {
+          log_error(m_srcPath,
+                    "Taille de bloc audio inattendue: " +
+                        std::to_string(size) + " (attendu: " +
+                        std::to_string(expectedAudioBlockSize) + ")",
+                    m_options);
+        }
+        if (pos == 0) {
+          int64_t bytesToSkip = static_cast<int64_t>(audioBlkLen) - consumed;
+          if (bytesToSkip < 0) {
+            throw std::runtime_error(
+                "Bloc audio consommé au-delà de sa taille déclarée");
           }
-          if (size > expectedAudioBlockSize) {
-            log_error(m_srcPath,
-                      "Taille de bloc audio inattendue: " +
-                          std::to_string(size) + " (attendu: " +
-                          std::to_string(expectedAudioBlockSize) + ")",
-                      m_options);
+          if (bytesToSkip > 0) {
+            m_fp.seekg(static_cast<std::streamoff>(bytesToSkip), std::ios::cur);
+            consumed += bytesToSkip;
           }
         } else {
           std::vector<std::byte> block;
           size_t payloadBytes = 0;
           if (size == expectedAudioBlockSize) {
-            block.resize(static_cast<size_t>(expectedAudioBlockSize));
+            const size_t expectedSize =
+                expectedAudioBlockSize > 0
+                    ? static_cast<size_t>(expectedAudioBlockSize)
+                    : size_t{0};
+            block.resize(expectedSize);
             if (!block.empty()) {
               m_fp.read(reinterpret_cast<char *>(block.data()),
                         checked_streamsize(block.size()));
             }
             consumed += static_cast<int64_t>(block.size());
             if (block.size() > kAudioRunwayBytes) {
-              payloadBytes = block.size() - kAudioRunwayBytes;            
+              payloadBytes = block.size() - kAudioRunwayBytes;
             }
           } else {
             const size_t bytesToRead =
