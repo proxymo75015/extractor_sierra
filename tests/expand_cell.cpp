@@ -59,17 +59,20 @@ TEST_CASE("expand_cel reproduit la distribution Robot pour scale 40") {
 
   REQUIRE(target == expected);
 }
-TEST_CASE("expand_cel rejette un scale supérieur à 100") {
-  const uint16_t w = 2;
-  const uint16_t h = 2;
-  const uint8_t scale = 101; // invalide
+TEST_CASE("expand_cel reproduit la distribution Robot pour scale 150") {
+  const uint16_t w = 1;
+  const uint16_t h = 4;
+  const uint8_t scale = 150; // hauteur source = 6 lignes
 
-  std::vector<std::byte> source{std::byte{1}, std::byte{2}, std::byte{3},
-                                std::byte{4}, std::byte{5}, std::byte{6},
-                                std::byte{7}, std::byte{8}};
+  std::vector<std::byte> source{std::byte{0x10}, std::byte{0x20}, std::byte{0x30},
+                                std::byte{0x40}, std::byte{0x50}, std::byte{0x60}};
 
+  std::vector<std::byte> expected{std::byte{0x20}, std::byte{0x30},
+                                  std::byte{0x50}, std::byte{0x60}};
   std::vector<std::byte> target(static_cast<size_t>(w) * h);
-  REQUIRE_THROWS(expand_cel(target, source, w, h, scale));
+  expand_cel(target, source, w, h, scale);
+
+  REQUIRE(target == expected);
 }
 
 TEST_CASE("expand_cel vérifie les tailles de tampons") {
@@ -106,15 +109,6 @@ TEST_CASE("expand_cel rejette un scale nul") {
   std::vector<std::byte> source(1);
 
   REQUIRE_THROWS(expand_cel(target, source, w, h, 0));
-}
-TEST_CASE("expand_cel rejette un scale trop grand") {
-  const uint16_t w = 1;
-  const uint16_t h = 1;
-  const uint8_t scale = 150;
-  std::vector<std::byte> target(1);
-  std::vector<std::byte> source(1);
-
-  REQUIRE_THROWS(expand_cel(target, source, w, h, scale));
 }
 
 TEST_CASE("expand_cel rejette des dimensions nulles") {
