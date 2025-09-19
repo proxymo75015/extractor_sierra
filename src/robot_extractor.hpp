@@ -236,6 +236,9 @@ struct RobotExtractorTester {
   static std::streamoff &postHeaderPos(RobotExtractor &r) {
     return r.m_postHeaderPos;
   }
+  static std::streamoff &postPrimerPos(RobotExtractor &r) {
+    return r.m_postPrimerPos;
+  }
   static std::vector<std::byte> &evenPrimer(RobotExtractor &r) {
     return r.m_evenPrimer;
   }
