@@ -223,6 +223,12 @@ struct RobotExtractorTester {
   }
   static int16_t &xRes(RobotExtractor &r) { return r.m_xRes; }
   static int16_t &yRes(RobotExtractor &r) { return r.m_yRes; }
+  static int16_t &audioPredictorEven(RobotExtractor &r) {
+    return r.m_audioPredictorEven;
+  }
+  static int16_t &audioPredictorOdd(RobotExtractor &r) {
+    return r.m_audioPredictorOdd;
+  }
   static std::vector<std::byte> &rgbaBuffer(RobotExtractor &r) {
     return r.m_rgbaBuffer;
   }
