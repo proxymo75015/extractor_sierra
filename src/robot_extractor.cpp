@@ -791,7 +791,6 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
           }
         } else {
           std::vector<std::byte> block;
-          size_t payloadBytes = 0;
           if (size == expectedAudioBlockSize) {
             const size_t expectedSize =
                 expectedAudioBlockSize > 0
@@ -803,9 +802,6 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                         checked_streamsize(block.size()));
             }
             consumed += static_cast<int64_t>(block.size());
-            if (block.size() > kAudioRunwayBytes) {
-              payloadBytes = block.size() - kAudioRunwayBytes;
-            }
           } else {
             const size_t bytesToRead =
                 size > 0 ? static_cast<size_t>(size) : size_t{0};
@@ -834,7 +830,6 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                            static_cast<std::ptrdiff_t>(runwayBytes);
                 std::copy_n(src, static_cast<std::ptrdiff_t>(payloadToCopy),
                             dst);
-                payloadBytes = payloadToCopy;
               }
             }
           }
@@ -842,14 +837,9 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
           // valeur paire = canal pair.
           bool isEven = (pos & 0x1) == 0;
           // L'audio peut exister même sans primer, décompresser toujours.
-          const size_t minimumDecode =
-              std::min(block.size(), static_cast<size_t>(kAudioRunwayBytes));
-          size_t bytesToDecode = minimumDecode;
-          if (payloadBytes > 0) {
-            size_t wanted = static_cast<size_t>(kAudioRunwayBytes) + payloadBytes;
-            bytesToDecode = std::min(block.size(), wanted);
+          if (!block.empty()) {
+            process_audio_block(block, isEven);
           }
-          process_audio_block(std::span(block).first(bytesToDecode), isEven);
         }
         int64_t remainingBytes = static_cast<int64_t>(audioBlkLen) - consumed;
         if (remainingBytes < 0) {
