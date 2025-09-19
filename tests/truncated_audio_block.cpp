@@ -1,4 +1,3 @@
-#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <catch2/catch_test_macros.hpp>
@@ -8,54 +7,13 @@
 #include <string>
 #include <vector>
 
+#include "audio_reference_data.hpp"
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
 
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
-
-static constexpr std::array<int16_t, 16> kDpcmTable = {
-    -0x0c0, -0x080, -0x040, -0x020, -0x010, -0x008, -0x004, -0x002,
-    0x002,  0x004,  0x008,  0x010,  0x020,  0x040,  0x080,  0x0c0,
-};
-
-static int16_t clamp_predictor(int32_t value) {
-  return static_cast<int16_t>(
-      std::clamp(value, static_cast<int32_t>(-32768),
-                 static_cast<int32_t>(32767)));
-}
-
-static void dpcm16_decompress_last_bytes(const std::vector<uint8_t> &bytes,
-                                         int16_t &predictor) {
-  int32_t value = predictor;
-  for (uint8_t b : bytes) {
-    uint8_t hi = b >> 4;
-    value = clamp_predictor(value + kDpcmTable[hi]);
-    predictor = static_cast<int16_t>(value);
-    uint8_t lo = static_cast<uint8_t>(b & 0x0F);
-    value = clamp_predictor(value + kDpcmTable[lo]);
-    predictor = static_cast<int16_t>(value);
-  }
-}
-
-static std::vector<int16_t> dpcm16_decompress_bytes(
-    const std::vector<uint8_t> &bytes, int16_t &predictor) {
-  std::vector<int16_t> out;
-  out.reserve(bytes.size() * 2);
-  int32_t value = predictor;
-  for (uint8_t b : bytes) {
-    uint8_t hi = b >> 4;
-    value = clamp_predictor(value + kDpcmTable[hi]);
-    predictor = static_cast<int16_t>(value);
-    out.push_back(predictor);
-    uint8_t lo = static_cast<uint8_t>(b & 0x0F);
-    value = clamp_predictor(value + kDpcmTable[lo]);
-    predictor = static_cast<int16_t>(value);
-    out.push_back(predictor);
-  }
-  return out;
-}
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -197,14 +155,9 @@ TEST_CASE("Truncated audio block triggers error") {
     actualSamples.push_back(static_cast<int16_t>(lo | hi));
   }
 
-  int16_t predictor = 0;
-  std::vector<uint8_t> primerBytes(8, 0x88);
-  auto primerSamples = dpcm16_decompress_bytes(primerBytes, predictor);
-  REQUIRE(primerSamples.size() == 16);
-  std::vector<uint8_t> zeroRunway(8, 0x00);
-  dpcm16_decompress_last_bytes(zeroRunway, predictor);
-  std::vector<uint8_t> payloadBytes = {0x88, 0x77};
-  auto expectedSamples = dpcm16_decompress_bytes(payloadBytes, predictor);
+  std::vector<int16_t> expectedSamples(
+      test_audio_reference::kScummVmTruncatedEvenBlock.begin(),
+      test_audio_reference::kScummVmTruncatedEvenBlock.end());
 
-  REQUIRE(actualSamples == expectedSamples);  
+  REQUIRE(actualSamples == expectedSamples);
 }
