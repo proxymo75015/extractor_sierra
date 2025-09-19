@@ -5,6 +5,7 @@
 #include <stdexcept>
 #include <vector>
 
+#include "audio_reference_data.hpp"
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
@@ -100,10 +101,52 @@ TEST_CASE("Odd-sized audio payload throws") {
   out.close();
 
   robot::RobotExtractor extractor(input, outDir, true);
-  try {
-    extractor.extract();
-    FAIL("No exception thrown");
-  } catch (const std::runtime_error &e) {
-    REQUIRE(std::string(e.what()) == "Odd-sized audio payload");
+  REQUIRE_NOTHROW(extractor.extract());
+
+  fs::path wavPath;
+  for (const auto &entry : fs::directory_iterator(outDir)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    auto name = entry.path().filename().string();
+    if (name == "frame_00001_even.wav") {
+      wavPath = entry.path();
+      break;
+    }
   }
+  REQUIRE(!wavPath.empty());
+
+  std::ifstream wav(wavPath, std::ios::binary);
+  REQUIRE(wav);
+  wav.seekg(40, std::ios::beg);
+  std::array<unsigned char, 4> dataSizeBytes{};
+  wav.read(reinterpret_cast<char *>(dataSizeBytes.data()),
+           static_cast<std::streamsize>(dataSizeBytes.size()));
+  REQUIRE(wav);
+  uint32_t dataBytes = static_cast<uint32_t>(dataSizeBytes[0]) |
+                       (static_cast<uint32_t>(dataSizeBytes[1]) << 8) |
+                       (static_cast<uint32_t>(dataSizeBytes[2]) << 16) |
+                       (static_cast<uint32_t>(dataSizeBytes[3]) << 24);
+  REQUIRE(dataBytes % 2 == 0);
+  wav.seekg(44, std::ios::beg);
+  std::vector<uint8_t> audioData(dataBytes);
+  if (!audioData.empty()) {
+    wav.read(reinterpret_cast<char *>(audioData.data()),
+             static_cast<std::streamsize>(audioData.size()));
+    REQUIRE(wav.gcount() == static_cast<std::streamsize>(audioData.size()));
+  }
+
+  std::vector<int16_t> actualSamples;
+  actualSamples.reserve(audioData.size() / 2);
+  for (size_t i = 0; i + 1 < audioData.size(); i += 2) {
+    uint16_t lo = audioData[i];
+    uint16_t hi = static_cast<uint16_t>(audioData[i + 1]) << 8;
+    actualSamples.push_back(static_cast<int16_t>(lo | hi));
+  }
+
+  std::vector<int16_t> expectedSamples(
+      test_audio_reference::kScummVmOddPayloadEvenBlock.begin(),
+      test_audio_reference::kScummVmOddPayloadEvenBlock.end());
+
+  REQUIRE(actualSamples == expectedSamples);
 }
