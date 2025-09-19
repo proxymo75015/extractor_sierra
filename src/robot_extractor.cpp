@@ -286,7 +286,21 @@ void RobotExtractor::readPrimer() {
     m_oddPrimer.assign(static_cast<size_t>(m_oddPrimerSize), std::byte{0});
     m_postPrimerPos = m_fp.tellg();    
   } else {
-    throw std::runtime_error("Flags de primer audio corrompus");
+    m_evenPrimerSize = 0;
+    m_oddPrimerSize = 0;
+    m_evenPrimer.clear();
+    m_evenPrimer.shrink_to_fit();
+    m_oddPrimer.clear();
+    m_oddPrimer.shrink_to_fit();
+    const std::streamoff currentPos = m_fp.tellg();
+    m_primerPosition = currentPos;
+    m_postPrimerPos = currentPos;
+    if (m_options.debug_index) {
+      log_error(m_srcPath,
+                "readPrimer: primer absent, position actuelle = " +
+                    std::to_string(static_cast<long long>(currentPos)),
+                m_options);
+    }
   }
 
   // Décompresser les buffers primer pour initialiser les prédicteurs audio
