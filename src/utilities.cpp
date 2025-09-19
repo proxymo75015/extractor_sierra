@@ -159,6 +159,77 @@ void write_png_cross_platform(const std::filesystem::path &path, int w, int h,
     }
 }
 
+namespace {
+
+class BitReaderMSB {
+public:
+    explicit BitReaderMSB(std::span<const std::byte> data) : m_data(data) {}
+
+    uint32_t getBits(int count) {
+        if (count <= 0 || count > 32) {
+            throw std::runtime_error("Lecture de bits LZS invalide");
+        }
+        ensureBits(count);
+        uint32_t value = m_bits >> (32 - count);
+        m_bits <<= count;
+        m_bitCount -= count;
+        return value;
+    }
+
+    uint8_t getByte() { return static_cast<uint8_t>(getBits(8)); }
+
+private:
+    void ensureBits(int count) {
+        while (m_bitCount < count) {
+            if (m_position >= m_data.size()) {
+                throw std::runtime_error(
+                    "Flux LZS malformé: fin de données");
+            }
+            uint8_t next = std::to_integer<uint8_t>(m_data[m_position++]);
+            m_bits |= static_cast<uint32_t>(next) << (24 - m_bitCount);
+            m_bitCount += 8;
+        }
+    }
+
+    std::span<const std::byte> m_data;
+    size_t m_position = 0;
+    uint32_t m_bits = 0;
+    int m_bitCount = 0;
+};
+
+constexpr size_t kMaxOffset = (1u << 11) - 1;
+
+size_t getCompressedLength(BitReaderMSB &reader) {
+    switch (reader.getBits(2)) {
+    case 0:
+        return 2;
+    case 1:
+        return 3;
+    case 2:
+        return 4;
+    default:
+        switch (reader.getBits(2)) {
+        case 0:
+            return 5;
+        case 1:
+            return 6;
+        case 2:
+            return 7;
+        default: {
+            size_t length = 8;
+            uint32_t nibble;
+            do {
+                nibble = reader.getBits(4);
+                length += nibble;
+            } while (nibble == 0xF);
+            return length;
+        }
+        }
+    }
+}
+
+} // namespace
+
 std::vector<std::byte> lzs_decompress(std::span<const std::byte> in,
                                       size_t expected_size,
                                       std::span<const std::byte> history) {
@@ -168,87 +239,77 @@ std::vector<std::byte> lzs_decompress(std::span<const std::byte> in,
                                  " > " +
                                  std::to_string(kMaxLzsOutput));
     }
-    std::vector<std::byte> out(expected_size);
-    size_t out_pos = 0;
-    size_t in_pos = 0;
 
-    constexpr size_t kHistorySize = 4096;
-    std::array<std::byte, kHistorySize> dictionary{};
-    size_t dict_pos = 0;
-    size_t valid_history = 0;
+    BitReaderMSB reader(in);
 
-    auto push_history = [&](std::byte value) {
-        dictionary[dict_pos] = value;
-        dict_pos = (dict_pos + 1) % kHistorySize;
-        if (valid_history < kHistorySize) {
-            ++valid_history;
-        }
-    };
-
-    if (!history.empty()) {
-        size_t seed_start = history.size() > kHistorySize
-                                ? history.size() - kHistorySize
-                                : 0;
-        for (size_t i = seed_start; i < history.size(); ++i) {
-            push_history(history[i]);
-        }
+    size_t history_to_copy = history.size();
+    if (history_to_copy > kMaxOffset) {
+        history_to_copy = kMaxOffset;
     }
 
-    auto write_byte = [&](std::byte value) {
-        if (out_pos >= out.size()) {
-            throw std::runtime_error("Dépassement du tampon de sortie");
-        }
-        out[out_pos++] = value;
-        push_history(value);
-    };
-
-    while (in_pos < in.size() && out_pos < out.size()) {
-        uint8_t control = std::to_integer<uint8_t>(in[in_pos++]);
-        for (int i = 0; i < 8; ++i) {
-            if (out_pos >= out.size()) {
-                break;
-            }
-            if (control & (1 << i)) {
-                if (in_pos >= in.size()) {
-                    throw std::runtime_error("Flux LZS malformé: fin de données lors de la lecture d'un littéral");
-                }
-                write_byte(in[in_pos++]);
-            } else {
-                if (in_pos + 1 >= in.size()) {
-                    throw std::runtime_error("Données d'entrée insuffisantes pour LZS");
-                }
-                uint8_t byte1 = std::to_integer<uint8_t>(in[in_pos++]);
-                uint8_t byte2 = std::to_integer<uint8_t>(in[in_pos++]);
-                uint16_t offset = ((byte1 & 0xF0) << 4) | byte2;
-                uint8_t length = (byte1 & 0x0F) + 3;
-                if (offset == 0) {
-                    throw std::runtime_error("Offset zéro interdit en LZS");
-                }
-                if (offset > kHistorySize) {
-                    throw std::runtime_error("Offset LZS invalide");
-                }
-                size_t available_history = valid_history;
-                if (offset > available_history) {
-                    throw std::runtime_error("Offset LZS invalide");
-                }                
-                for (uint8_t j = 0; j < length; ++j) {
-                    size_t src_index = (dict_pos + kHistorySize - offset) % kHistorySize;
-                    std::byte value = dictionary[src_index];
-                    write_byte(value);
-                }
-            }
-        }
-    }
-
-    if (in_pos != in.size()) {
-        throw std::runtime_error("Flux LZS malformé: octets non traités");
+    std::vector<std::byte> dictionary;
+    dictionary.reserve(history_to_copy + expected_size);
+    if (history_to_copy > 0) {
+        dictionary.insert(dictionary.end(), history.end() - history_to_copy,
+                          history.end());
     }
     
-    if (out_pos != expected_size) {
-        throw std::runtime_error("Taille décompressée (" + std::to_string(out_pos) +
+    std::vector<std::byte> out(expected_size);
+    size_t produced = 0;
+
+    auto append_literal = [&](std::byte value) {
+        if (produced >= expected_size) {
+            throw std::runtime_error(
+                "Taille décompressée dépasse la taille attendue");
+        }
+        dictionary.push_back(value);
+        if (produced < out.size()) {
+            out[produced] = value;
+        }
+        ++produced;
+    };
+
+    auto copy_match = [&](size_t offset, size_t length) {
+        if (offset == 0 || offset > dictionary.size()) {
+            throw std::runtime_error("Offset LZS invalide");
+        }
+        size_t src_index = dictionary.size() - offset;
+        for (size_t i = 0; i < length; ++i) {
+            if (src_index >= dictionary.size()) {
+                throw std::runtime_error("Lecture hors limites dans LZS");
+            }
+            append_literal(dictionary[src_index++]);
+        }
+    };
+
+    while (produced < expected_size) {
+        if (reader.getBits(1) == 0) {
+            append_literal(static_cast<std::byte>(reader.getByte()));
+            continue;
+        }
+        
+        bool short_offset = reader.getBits(1) != 0;
+        size_t offset = short_offset ? reader.getBits(7) : reader.getBits(11);
+        if (short_offset && offset == 0) {
+            break;
+        }
+        if (offset == 0) {
+            throw std::runtime_error("Offset LZS nul");
+        }
+        size_t length = getCompressedLength(reader);
+        if (length == 0) {
+            throw std::runtime_error("Longueur LZS invalide");
+        }
+        copy_match(offset, length);
+    }
+
+    if (produced != expected_size) {
+        throw std::runtime_error("Taille décompressée (" +
+                                 std::to_string(produced) +
                                  ") ne correspond pas à la taille attendue (" +
                                  std::to_string(expected_size) + ")");
     }
+    
     return out;
 }
 
