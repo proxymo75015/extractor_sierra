@@ -25,11 +25,11 @@ inline int validate_cel_dimensions(uint16_t w, uint16_t h, uint8_t scale) {
   if (w == 0 || h == 0) {
     throw std::runtime_error("Dimensions de cel invalides");
   }
-  if (scale < 1 || scale > 100) {
+  if (scale == 0) {
     throw std::runtime_error(
-        "Facteur d'échelle vertical invalide (valeur attendue entre 1 et 100)");
+        "Facteur d'échelle vertical invalide (valeur strictement positive attendue)");
   }
-  const int sourceHeight = static_cast<int>(h) * scale / 100;
+  const int sourceHeight = static_cast<int>(h) * static_cast<int>(scale) / 100;
   if (sourceHeight <= 0) {
     throw std::runtime_error("Facteur d'échelle vertical invalide");
   }
@@ -62,61 +62,6 @@ inline int validate_expand_params(std::span<std::byte> target,
   return sourceHeight;
 }
 
-// Agrandit une image lorsque la source est plus petite que la cible.
-inline void expand_up(std::byte *destBase, const std::byte *srcBase,
-                      size_t rowBytes, uint16_t h, int sourceHeight) {
-  const std::byte *srcPtr = srcBase;
-  std::byte *destPtr = destBase;
-  std::byte *const destEnd = destBase + static_cast<size_t>(h) * rowBytes;
-  int remainder = 0;
-
-  for (int srcY = 0; srcY < sourceHeight; ++srcY) {
-    // remainder accumule le numérateur de h/sourceHeight afin de savoir
-    // quand répéter une ligne source supplémentaire.
-    remainder += static_cast<int>(h);
-    int repeat = remainder / sourceHeight;
-    remainder %= sourceHeight;
-
-    // Répéter la ligne source autant de fois que nécessaire dans la cible.
-    for (int i = 0; i < repeat; ++i) {
-      if (destPtr >= destEnd) {
-        throw std::runtime_error("Expansion de cel hors limites");
-      }
-      std::memcpy(destPtr, srcPtr, rowBytes);
-      destPtr += rowBytes;
-    }
-
-    srcPtr += rowBytes;
-  }
-
-  if (destPtr != destEnd) {
-    throw std::runtime_error("Expansion de cel incohérente");
-  }
-}
-
-// Réduit une image lorsque la source est plus grande que la cible.
-inline void expand_down(std::byte *destBase, const std::byte *srcBase,
-                        size_t rowBytes, uint16_t h, int sourceHeight) {
-  int srcY = sourceHeight;
-  int remainder = 0;
-  for (int destY = static_cast<int>(h) - 1; destY >= 0; --destY) {
-    // remainder accumule le numérateur de sourceHeight/h afin de déterminer
-    // combien de lignes source sauter.
-    remainder += sourceHeight;
-    int step = remainder / h;
-    remainder %= h;
-    srcY -= step;
-    if (srcY < 0) {
-      throw std::runtime_error("Réduction de cel hors limites");
-    }
-    const std::byte *srcPtr = srcBase + static_cast<size_t>(srcY) * rowBytes;
-    std::byte *destPtr = destBase + static_cast<size_t>(destY) * rowBytes;
-    std::memcpy(destPtr, srcPtr, rowBytes);
-  }
-  if (srcY != 0) {
-    throw std::runtime_error("Réduction de cel incohérente");
-  }
-}
 } // namespace detail
 
 // Ajuste la hauteur d'une cel en l'agrandissant ou la réduisant.
@@ -130,18 +75,34 @@ inline void expand_cel(std::span<std::byte> target,
   const std::byte *sEnd = sBegin + source.size();
   if (rangesOverlap(tBegin, tEnd, sBegin, sEnd))
     throw std::runtime_error("target and source must not overlap");
-  
+
   const int sourceHeight =
       detail::validate_expand_params(target, source, w, h, scale);
-  
+
   const std::byte *srcBase = source.data();
   std::byte *destBase = target.data();
   const size_t rowBytes = static_cast<size_t>(w);
+  std::byte *const destEnd = destBase + target.size();
+  int remainder = 0;
 
-  if (sourceHeight <= static_cast<int>(h)) {
-    detail::expand_up(destBase, srcBase, rowBytes, h, sourceHeight);
-  } else {
-    detail::expand_down(destBase, srcBase, rowBytes, h, sourceHeight);
+  for (int remaining = sourceHeight; remaining > 0; --remaining) {
+    remainder += static_cast<int>(h);
+    int linesToDraw = remainder / sourceHeight;
+    remainder %= sourceHeight;
+
+    for (int i = 0; i < linesToDraw; ++i) {
+      if (destBase >= destEnd) {
+        throw std::runtime_error("Expansion de cel hors limites");
+      }
+      std::memcpy(destBase, srcBase, rowBytes);
+      destBase += rowBytes;
+    }
+
+    srcBase += rowBytes;
+  }
+
+  if (destBase != destEnd) {
+    throw std::runtime_error("Expansion de cel incohérente");
   }
 }
 
