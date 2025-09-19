@@ -89,11 +89,9 @@ TEST_CASE("Odd-sized audio payload throws") {
 
   // Audio block with odd-sized payload
   push32(data, 2); // pos (even)
-  push32(data, 9); // size (8 runway + 1 audio byte)
-  for (int i = 0; i < 8; ++i)
-    data.push_back(static_cast<uint8_t>(i)); // runway
-  data.push_back(0x88);                      // single audio byte
-  for (int i = 0; i < 7; ++i)
+  push32(data, 1); // size (payload byte only)
+  data.push_back(0x88); // single audio byte
+  for (int i = 0; i < 15; ++i)
     data.push_back(0); // padding to reach 24 bytes
 
   std::ofstream out(input, std::ios::binary);
