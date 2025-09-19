@@ -158,7 +158,15 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
 
   std::array<std::byte, 2> payloadBytes{std::byte{audioPayload[0]},
                                         std::byte{audioPayload[1]}};
-  auto expectedSamples = robot::dpcm16_decompress(std::span(payloadBytes), predictor);
+  constexpr size_t kExpectedPayloadBytes = 8;
+  std::vector<std::byte> audioBytes;
+  audioBytes.reserve(kExpectedPayloadBytes);
+  audioBytes.insert(audioBytes.end(), payloadBytes.begin(), payloadBytes.end());
+  if (audioBytes.size() < kExpectedPayloadBytes) {
+    audioBytes.resize(kExpectedPayloadBytes, std::byte{0});
+  }
+  auto expectedSamples =
+      robot::dpcm16_decompress(std::span(audioBytes), predictor);
 
   REQUIRE(expectedSamples.size() == samples.size());
   for (size_t i = 0; i < samples.size(); ++i) {
