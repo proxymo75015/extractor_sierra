@@ -143,14 +143,12 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   data.push_back(0);
   data.push_back(0);
 
-  // Audio block 0 truncated to 20 bytes (header + 10 bytes payload + padding)
+  // Audio block 0 truncated to payload-only bytes (padding fills the rest)
   push32(data, 2);  // pos (even)
-  push32(data, 10); // size (8 runway + 2 data)
-  for (int i = 0; i < 8; ++i)
-    data.push_back(static_cast<uint8_t>(i));
+  push32(data, 2); // size (payload bytes only)
   data.push_back(0x88);
   data.push_back(0x77);
-  for (int i = 0; i < 2; ++i)
+  for (int i = 0; i < 10; ++i)
     data.push_back(0); // padding to reach 20 bytes
 
   // Frame 1 data (numCels = 0)
@@ -220,8 +218,8 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   std::vector<uint8_t> primerBytes(8, 0x88);
   auto primerSamples = dpcm16_decompress_bytes(primerBytes, predictor);
   REQUIRE(primerSamples.size() == 16);
-  std::vector<uint8_t> runway0 = {0, 1, 2, 3, 4, 5, 6, 7};
-  dpcm16_decompress_last_bytes(runway0, predictor);
+  std::vector<uint8_t> zeroRunway(8, 0x00);
+  dpcm16_decompress_last_bytes(zeroRunway, predictor);
   std::vector<uint8_t> payload0 = {0x88, 0x77};
   auto block0Samples = dpcm16_decompress_bytes(payload0, predictor);
   REQUIRE(block0Samples.size() == 4);
