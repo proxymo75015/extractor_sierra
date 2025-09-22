@@ -17,8 +17,9 @@ namespace fs = std::filesystem;
 
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
-constexpr size_t kRunwayBytes = robot::kRobotZeroCompressSize;
-constexpr size_t kRunwaySamples = kRunwayBytes * 2;
+constexpr size_t kZeroPrefixBytes = robot::kRobotZeroCompressSize;
+constexpr size_t kRunwayBytes = robot::kRobotRunwayBytes;
+constexpr size_t kRunwaySamples = robot::kRobotRunwaySamples;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -42,7 +43,7 @@ static std::vector<uint8_t> build_header(uint16_t numFrames) {
   push16(h, 0);   // skip
   push16(h, numFrames);
   push16(h, 0);   // paletteSize
-  push16(h, static_cast<uint16_t>(kPrimerHeaderSize + 8));
+  push16(h, static_cast<uint16_t>(kPrimerHeaderSize + kRunwayBytes));
   push16(h, 1);   // xRes
   push16(h, 1);   // yRes
   h.push_back(0); // hasPalette
@@ -61,9 +62,10 @@ static std::vector<uint8_t> build_header(uint16_t numFrames) {
 
 static std::vector<uint8_t> build_primer_header() {
   std::vector<uint8_t> p;
-  push32(p, kPrimerHeaderSize + 8);
+  push32(p, kPrimerHeaderSize +
+                     static_cast<uint32_t>(kRunwayBytes));
   push16(p, 0); // compType
-  push32(p, 8); // even size
+  push32(p, static_cast<uint32_t>(kRunwayBytes)); // even size
   push32(p, 0); // odd size
   return p;
 }
@@ -83,7 +85,7 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   auto data = build_header(2);
   auto primer = build_primer_header();
   data.insert(data.end(), primer.begin(), primer.end());
-  for (int i = 0; i < 8; ++i)
+  for (size_t i = 0; i < kRunwayBytes; ++i)
     data.push_back(0x88); // even primer data
 
   // frame sizes
@@ -192,7 +194,7 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   auto actualBlock0 = readSamples(wavFrame1);
   auto actualBlock1 = readSamples(wavFrame2);
 
-  std::vector<std::byte> block0Prefix(kRunwayBytes, std::byte{0});
+  std::vector<std::byte> block0Prefix(kZeroPrefixBytes, std::byte{0});
   std::vector<std::byte> block0Payload = {
       std::byte{static_cast<unsigned char>(0x88)},
       std::byte{static_cast<unsigned char>(0x77)},
