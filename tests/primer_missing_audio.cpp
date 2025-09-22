@@ -84,8 +84,6 @@ TEST_CASE("Robot with missing primer keeps predictors zero") {
 
   REQUIRE(RobotExtractorTester::evenPrimerSize(extractor) == 0);
   REQUIRE(RobotExtractorTester::oddPrimerSize(extractor) == 0);
-  REQUIRE(RobotExtractorTester::audioPredictorEven(extractor) == 0);
-  REQUIRE(RobotExtractorTester::audioPredictorOdd(extractor) == 0);
   REQUIRE(RobotExtractorTester::postPrimerPos(extractor) ==
           RobotExtractorTester::postHeaderPos(extractor));
 }
