@@ -72,8 +72,8 @@ TEST_CASE("Invalid cel size throws") {
     RobotExtractorTester::maxCelsPerFrame(extractor) = 1;
     RobotExtractorTester::frameSizes(extractor) = {static_cast<uint32_t>(data.size())};
     RobotExtractorTester::packetSizes(extractor) = {static_cast<uint32_t>(data.size())};
-  RobotExtractorTester::palette(extractor) =
-      test_palette::build_flat_palette(0, 0, 0);
+    RobotExtractorTester::palette(extractor) =
+        test_palette::build_flat_palette(0, 0, 0);
     RobotExtractorTester::file(extractor).seekg(0, std::ios::beg);
     
     nlohmann::json frameJson;
