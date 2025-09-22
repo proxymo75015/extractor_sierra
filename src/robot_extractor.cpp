@@ -116,13 +116,13 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_yRes = read_scalar<int16_t>(m_fp, m_bigEndian);
   m_hasPalette = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
   m_hasAudio = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
-  if (m_hasAudio && m_audioBlkSize < kRobotZeroCompressSize) {
+  if (m_hasAudio && m_audioBlkSize < kRobotAudioHeaderSize) {
     log_warn(m_srcPath,
              "Taille de bloc audio trop petite: " +
                  std::to_string(m_audioBlkSize) + " (minimum " +
-                 std::to_string(kRobotZeroCompressSize) + ")",
+                 std::to_string(kRobotAudioHeaderSize) + ")",
              m_options);
-    m_audioBlkSize = static_cast<uint16_t>(kRobotZeroCompressSize);
+    m_audioBlkSize = static_cast<uint16_t>(kRobotAudioHeaderSize);
   }
   m_fp.seekg(2, std::ios::cur);
   m_frameRate = read_scalar<int16_t>(m_fp, m_bigEndian);
@@ -350,10 +350,10 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
   if (primer.empty()) {
     return;
   }
-  if (primer.size() < kRobotZeroCompressSize) {
+  if (primer.size() < kRobotRunwayBytes) {
     throw std::runtime_error("Primer audio tronqué");
   }
-  const size_t runwaySamples = kRobotZeroCompressSize * 2;
+  const size_t runwaySamples = kRobotRunwaySamples;
   int16_t predictor = 0;
   auto pcm = dpcm16_decompress(std::span(primer), predictor);
   if (!m_extractAudio) {
@@ -374,12 +374,12 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
 
 void RobotExtractor::process_audio_block(std::span<const std::byte> block,
                                          bool isEven) {
-  if (block.size() < kRobotZeroCompressSize) {
+  if (block.size() < kRobotRunwayBytes) {
     throw std::runtime_error("Bloc audio inutilisable");
   }
   int16_t predictor = 0;
   auto samples = dpcm16_decompress(block, predictor);
-  const size_t runwaySamples = kRobotZeroCompressSize * 2;
+  const size_t runwaySamples = kRobotRunwaySamples;
   if (samples.size() >= runwaySamples) {
     samples.erase(samples.begin(),
                   samples.begin() + static_cast<std::ptrdiff_t>(runwaySamples));
@@ -765,11 +765,12 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
   if (m_hasAudio) {
     if (m_packetSizes[frameNo] > m_frameSizes[frameNo]) {
       uint32_t audioBlkLen = m_packetSizes[frameNo] - m_frameSizes[frameNo];
-      if (audioBlkLen < kRobotZeroCompressSize) {
+      if (audioBlkLen < kRobotAudioHeaderSize) {
         m_fp.seekg(static_cast<std::streamoff>(audioBlkLen), std::ios::cur);
       } else {
         const int64_t expectedAudioBlockSize =
-            static_cast<int64_t>(m_audioBlkSize) - 8;
+            static_cast<int64_t>(m_audioBlkSize) -
+            static_cast<int64_t>(kRobotAudioHeaderSize);
         int64_t consumed = 0;
         int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
         consumed += 4;
