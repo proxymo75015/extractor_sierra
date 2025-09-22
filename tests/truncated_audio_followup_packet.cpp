@@ -106,7 +106,7 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   data.push_back(0);
 
   // Audio block 0 truncated to payload-only bytes (padding fills the rest)
-  push32(data, 2);  // pos (even)
+  push32(data, 4);  // pos (even)
   push32(data, 2); // size (payload bytes only)
   data.push_back(0x88);
   data.push_back(0x77);
@@ -118,7 +118,7 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   data.push_back(0);
 
   // Audio block 1 fully populated
-  push32(data, 4);   // pos (even)
+  push32(data, 8);   // pos (even)
   push32(data, 16);  // size (full block)
   std::array<uint8_t, 8> runway1 = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17};
   data.insert(data.end(), runway1.begin(), runway1.end());
