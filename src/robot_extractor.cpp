@@ -342,23 +342,22 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     throw std::runtime_error("Primer audio tronqué");
   }
   const size_t runwaySamples = kAudioRunwayBytes * 2; // kAudioRunwayBytes bytes => 16 samples
-  int16_t predictor = 0;  
-  if (m_extractAudio) {
-    auto pcm = dpcm16_decompress(std::span(primer), predictor);
-    if (pcm.size() >= runwaySamples) {
-      pcm.erase(pcm.begin(),
-                pcm.begin() + static_cast<std::ptrdiff_t>(runwaySamples));
-    } else {
-      pcm.clear();
-    }
-    size_t &audioIndex = isEven ? m_evenAudioIndex : m_oddAudioIndex;
-    if (audioIndex == std::numeric_limits<size_t>::max()) {
-      throw std::runtime_error("Audio index overflow");
-    }
-    writeWav(pcm, kSampleRate, audioIndex++, isEven);
-  } else {
-    dpcm16_decompress_last(std::span(primer), predictor);
+  int16_t predictor = 0;
+  auto pcm = dpcm16_decompress(std::span(primer), predictor);
+  if (!m_extractAudio) {
+    return;
   }
+  if (pcm.size() >= runwaySamples) {
+    pcm.erase(pcm.begin(),
+              pcm.begin() + static_cast<std::ptrdiff_t>(runwaySamples));
+  } else {
+    pcm.clear();
+  }
+  size_t &audioIndex = isEven ? m_evenAudioIndex : m_oddAudioIndex;
+  if (audioIndex == std::numeric_limits<size_t>::max()) {
+    throw std::runtime_error("Audio index overflow");
+  }
+  writeWav(pcm, kSampleRate, audioIndex++, isEven);
 }
 
 void RobotExtractor::process_audio_block(std::span<const std::byte> block,
@@ -366,26 +365,27 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   if (block.size() < kAudioRunwayBytes) {
     throw std::runtime_error("Bloc audio inutilisable");
   }
-  auto runway = block.first(kAudioRunwayBytes);
-  auto audio = block.subspan(kAudioRunwayBytes);
-  if (audio.size() % 2 != 0) {
+  auto payloadSize = block.size() - kAudioRunwayBytes;
+  if (payloadSize % 2 != 0) {
     throw std::runtime_error("Odd-sized audio payload");
   }
   int16_t predictor = 0;
-  dpcm16_decompress_last(runway, predictor);
-  if (audio.empty()) {
+  auto samples = dpcm16_decompress(block, predictor);
+  const size_t runwaySamples = kAudioRunwayBytes * 2;
+  if (samples.size() >= runwaySamples) {
+    samples.erase(samples.begin(),
+                  samples.begin() + static_cast<std::ptrdiff_t>(runwaySamples));
+  } else {
+    samples.clear();
+  }
+  if (samples.empty() || !m_extractAudio) {
     return;
   }
-  if (m_extractAudio) {
-    auto samples = dpcm16_decompress(audio, predictor);
-    size_t &audioIndex = isEven ? m_evenAudioIndex : m_oddAudioIndex;
-    if (audioIndex == std::numeric_limits<size_t>::max()) {
-      throw std::runtime_error("Audio index overflow");
-    }
-    writeWav(samples, kSampleRate, audioIndex++, isEven);
-  } else {
-    dpcm16_decompress_last(audio, predictor);
+  size_t &audioIndex = isEven ? m_evenAudioIndex : m_oddAudioIndex;
+  if (audioIndex == std::numeric_limits<size_t>::max()) {
+    throw std::runtime_error("Audio index overflow");
   }
+  writeWav(samples, kSampleRate, audioIndex++, isEven);
 }
 
 void RobotExtractor::readPalette() {
