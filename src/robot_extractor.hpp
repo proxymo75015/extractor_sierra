@@ -15,6 +15,8 @@
 
 namespace robot {
 
+inline constexpr size_t kRobotZeroCompressSize = 8;
+
 inline bool rangesOverlap(const std::byte *aBegin, const std::byte *aEnd,
                           const std::byte *bBegin, const std::byte *bEnd) {
   return !(aEnd <= bBegin || bEnd <= aBegin);
@@ -125,7 +127,6 @@ private:
   static constexpr size_t kMaxCuePoints = 256;
   static constexpr size_t kCelHeaderSize = 22;
   static constexpr uint32_t kSampleRate = 11025;
-  static constexpr size_t kAudioRunwayBytes = 8;
 
   void readHeader();
   void parseHeaderFields(bool bigEndian);
