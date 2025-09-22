@@ -15,6 +15,53 @@
 
 #include "utilities.hpp"
 
+namespace {
+constexpr size_t kHunkPaletteHeaderSize = 13;
+constexpr size_t kNumPaletteEntriesOffset = 10;
+constexpr size_t kEntryHeaderSize = 22;
+constexpr size_t kEntryStartColorOffset = 10;
+constexpr size_t kEntryNumColorsOffset = 14;
+constexpr size_t kEntryUsedOffset = 16;
+constexpr size_t kEntrySharedUsedOffset = 17;
+constexpr size_t kEntryVersionOffset = 18;
+constexpr size_t kRawPaletteSize = 1200;
+
+uint8_t read_u8(std::span<const std::byte> data, size_t offset) {
+  if (offset >= data.size()) {
+    throw std::runtime_error("Palette SCI HunkPalette tronquée");
+  }
+  return std::to_integer<uint8_t>(data[offset]);
+}
+
+uint16_t read_u16(std::span<const std::byte> data, size_t offset,
+                  bool bigEndian) {
+  if (offset + 1 >= data.size()) {
+    throw std::runtime_error("Palette SCI HunkPalette tronquée");
+  }
+  const uint16_t hi = std::to_integer<uint8_t>(data[offset]);
+  const uint16_t lo = std::to_integer<uint8_t>(data[offset + 1]);
+  if (bigEndian) {
+    return static_cast<uint16_t>((hi << 8) | lo);
+  }
+  return static_cast<uint16_t>((lo << 8) | hi);
+}
+
+uint32_t read_u32(std::span<const std::byte> data, size_t offset,
+                  bool bigEndian) {
+  if (offset + 3 >= data.size()) {
+    throw std::runtime_error("Palette SCI HunkPalette tronquée");
+  }
+  const uint32_t b0 = std::to_integer<uint8_t>(data[offset]);
+  const uint32_t b1 = std::to_integer<uint8_t>(data[offset + 1]);
+  const uint32_t b2 = std::to_integer<uint8_t>(data[offset + 2]);
+  const uint32_t b3 = std::to_integer<uint8_t>(data[offset + 3]);
+  if (bigEndian) {
+    return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+  }
+  return (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
+}
+} // namespace
+
 namespace robot {
 RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath,
                                const std::filesystem::path &dstDir,
@@ -384,6 +431,114 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   writeWav(samples, kSampleRate, audioIndex++, isEven);
 }
 
+RobotExtractor::ParsedPalette
+RobotExtractor::parseHunkPalette(std::span<const std::byte> raw,
+                                 bool bigEndian) {
+  ParsedPalette parsed;
+  if (raw.empty()) {
+    return parsed;
+  }
+  if (raw.size() < kHunkPaletteHeaderSize) {
+    throw std::runtime_error("Palette SCI HunkPalette trop courte");
+  }
+
+  const uint8_t numPalettes = read_u8(raw, kNumPaletteEntriesOffset);
+  size_t offset = kHunkPaletteHeaderSize;
+  if (numPalettes > 0) {
+    const size_t offsetsBytes = static_cast<size_t>(2 * numPalettes);
+    if (offset > std::numeric_limits<size_t>::max() - offsetsBytes ||
+        raw.size() < offset + offsetsBytes) {
+      throw std::runtime_error("Table d'offset de palette incomplète");
+    }
+    offset += offsetsBytes;
+  } else {
+    if (offset < raw.size()) {
+      parsed.remapData.assign(raw.begin() + offset, raw.end());
+    }
+    return parsed;
+  }
+
+  bool firstEntry = true;
+  uint16_t firstStart = 0;
+  uint16_t maxEnd = 0;
+
+  for (uint8_t entryIndex = 0; entryIndex < numPalettes; ++entryIndex) {
+    if (raw.size() < offset + kEntryHeaderSize) {
+      throw std::runtime_error("Palette SCI HunkPalette tronquée");
+    }
+    auto entry = raw.subspan(offset);
+    const uint8_t startColor = read_u8(entry, kEntryStartColorOffset);
+    const uint16_t numColors =
+        read_u16(entry, kEntryNumColorsOffset, bigEndian);
+    const bool defaultUsed = read_u8(entry, kEntryUsedOffset) != 0;
+    const bool sharedUsed = read_u8(entry, kEntrySharedUsedOffset) != 0;
+    const uint32_t version = read_u32(entry, kEntryVersionOffset, bigEndian);
+    const uint32_t endColor = static_cast<uint32_t>(startColor) + numColors;
+    if (endColor > 256) {
+      throw std::runtime_error("Palette SCI HunkPalette déborde 256 entrées");
+    }
+
+    const size_t perColorBytes = 3 + (sharedUsed ? 0 : 1);
+    const size_t colorsBytes = static_cast<size_t>(numColors) * perColorBytes;
+    if (entry.size() < kEntryHeaderSize + colorsBytes) {
+      throw std::runtime_error("Palette SCI HunkPalette tronquée");
+    }
+
+    auto colorData = entry.subspan(kEntryHeaderSize, colorsBytes);
+    size_t pos = 0;
+    for (uint16_t i = 0; i < numColors; ++i) {
+      const size_t paletteIndex = static_cast<size_t>(startColor) + i;
+      auto &dest = parsed.entries[paletteIndex];
+      dest.present = true;
+      if (sharedUsed) {
+        dest.used = defaultUsed;
+      } else {
+        dest.used = std::to_integer<uint8_t>(colorData[pos++]) != 0;
+      }
+      dest.r = std::to_integer<uint8_t>(colorData[pos++]);
+      dest.g = std::to_integer<uint8_t>(colorData[pos++]);
+      dest.b = std::to_integer<uint8_t>(colorData[pos++]);
+    }
+
+    if (firstEntry) {
+      parsed.startColor = startColor;
+      parsed.colorCount = numColors;
+      parsed.sharedUsed = sharedUsed;
+      parsed.defaultUsed = defaultUsed;
+      parsed.version = version;
+      firstEntry = false;
+      firstStart = startColor;
+      maxEnd = static_cast<uint16_t>(endColor);
+    } else {
+      if (startColor < firstStart) {
+        parsed.startColor = startColor;
+        parsed.colorCount = static_cast<uint16_t>(maxEnd - startColor);
+        firstStart = startColor;
+      } else {
+        const uint16_t span = static_cast<uint16_t>(endColor - firstStart);
+        if (span > parsed.colorCount) {
+          parsed.colorCount = span;
+        }
+      }
+      if (endColor > maxEnd) {
+        maxEnd = static_cast<uint16_t>(endColor);
+      }
+      parsed.sharedUsed = parsed.sharedUsed && sharedUsed;
+    }
+
+    offset += kEntryHeaderSize + colorsBytes;
+  }
+
+  if (offset < raw.size()) {
+    parsed.remapData.assign(raw.begin() + offset, raw.end());
+    if (parsed.remapData.size() > kRawPaletteSize) {
+      parsed.remapData.resize(kRawPaletteSize);
+    }
+  }
+
+  return parsed;
+}
+
 void RobotExtractor::readPalette() {
   StreamExceptionGuard guard(m_fp);
   const std::uintmax_t fileSize = m_fileSize;
@@ -588,7 +743,11 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                  std::to_string(frameNo),
              m_options);
   }
-  // Palette data has been loaded in readPalette(); consume it as-is here.
+  ParsedPalette parsedPalette;
+  if (m_hasPalette) {
+    parsedPalette = parseHunkPalette(m_palette, m_bigEndian);
+  }
+
   for (int i = 0; i < numCels; ++i) {
     if (offset + kCelHeaderSize > m_frameBuffer.size()) {
       throw std::runtime_error("En-tête de cel invalide");
@@ -713,15 +872,17 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       }
       m_rgbaBuffer.resize(required);
       for (size_t pixel = 0; pixel < m_celBuffer.size(); ++pixel) {
-        auto idx = std::to_integer<uint8_t>(m_celBuffer[pixel]);
-        if (static_cast<size_t>(idx) >= m_palette.size() / 3) {
+        const uint8_t idx = std::to_integer<uint8_t>(m_celBuffer[pixel]);
+        const auto &color = parsedPalette.entries[idx];
+        if (!color.present) {
           throw std::runtime_error("Indice de palette hors limites: " +
                                    std::to_string(idx));
         }
-        m_rgbaBuffer[pixel * 4 + 0] = m_palette[idx * 3 + 0];
-        m_rgbaBuffer[pixel * 4 + 1] = m_palette[idx * 3 + 1];
-        m_rgbaBuffer[pixel * 4 + 2] = m_palette[idx * 3 + 2];
-        m_rgbaBuffer[pixel * 4 + 3] = std::byte{255};
+        m_rgbaBuffer[pixel * 4 + 0] = std::byte{color.r};
+        m_rgbaBuffer[pixel * 4 + 1] = std::byte{color.g};
+        m_rgbaBuffer[pixel * 4 + 2] = std::byte{color.b};
+        m_rgbaBuffer[pixel * 4 + 3] =
+            static_cast<std::byte>(color.used ? 255 : 0);
       }
 
       std::ostringstream oss;
