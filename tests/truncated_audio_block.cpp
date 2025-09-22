@@ -97,7 +97,7 @@ TEST_CASE("Truncated audio block triggers error") {
   data.push_back(0); // numCels high byte
 
   // Audio block truncated to 20 bytes instead of 24
-  push32(data, 2);  // pos (even)
+  push32(data, 4);  // pos (even)
   push32(data, 2); // size (payload bytes only)
   data.push_back(0x88);
   data.push_back(0x77);
