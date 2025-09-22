@@ -99,7 +99,7 @@ TEST_CASE("Audio block with runway triggers error") {
   data.push_back(0); // numCels low byte
   data.push_back(0); // numCels high byte
 
-  push32(data, 2);  // pos (even)
+  push32(data, 4);  // pos (even)
   const uint32_t truncatedSize =
       static_cast<uint32_t>(kTruncatedPayloadBytes);
   push32(data, truncatedSize);
