@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "robot_extractor.hpp"
+#include "palette_helpers.hpp"
 
 namespace fs = std::filesystem;
 using robot::RobotExtractorTester;
@@ -42,7 +43,8 @@ TEST_CASE("Cel with zero width throws") {
   RobotExtractorTester::maxCelsPerFrame(extractor) = 1;
   RobotExtractorTester::frameSizes(extractor) = {static_cast<uint32_t>(data.size())};
   RobotExtractorTester::packetSizes(extractor) = {static_cast<uint32_t>(data.size())};
-  RobotExtractorTester::palette(extractor).assign(768, std::byte{0});
+  RobotExtractorTester::palette(extractor) =
+      test_palette::build_flat_palette(0, 0, 0);
   RobotExtractorTester::file(extractor).seekg(0, std::ios::beg);
 
   nlohmann::json frameJson;
@@ -84,7 +86,8 @@ TEST_CASE("Cel with zero height throws") {
   RobotExtractorTester::maxCelsPerFrame(extractor) = 1;
   RobotExtractorTester::frameSizes(extractor) = {static_cast<uint32_t>(data.size())};
   RobotExtractorTester::packetSizes(extractor) = {static_cast<uint32_t>(data.size())};
-  RobotExtractorTester::palette(extractor).assign(768, std::byte{0});
+  RobotExtractorTester::palette(extractor) =
+      test_palette::build_flat_palette(0, 0, 0);
   RobotExtractorTester::file(extractor).seekg(0, std::ios::beg);
 
   nlohmann::json frameJson;
