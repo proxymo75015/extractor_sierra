@@ -832,9 +832,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
               std::copy(truncated.begin(), truncated.end(), dst);
             }
           }
-          // Les canaux audio alternent toutes les deux unités de position :
-          // positions multiples de 4 -> canal pair, les autres -> canal impair.
-          bool isEven = (pos % 4) == 0;
+          // Les canaux audio alternent toutes les deux unités de position
+          // (logique alignée sur ScummVM) : positions paires -> canal pair,
+          // positions impaires -> canal impair.
+          bool isEven = (pos % 2) == 0;
           // L'audio peut exister même sans primer, décompresser toujours.
           if (!block.empty()) {
             process_audio_block(block, isEven);
