@@ -178,7 +178,7 @@ TEST_CASE("Audio block preserves runway samples and primer continuity") {
   data.push_back(0); // numCels low byte
   data.push_back(0); // numCels high byte
 
-  push32(data, 2);   // pos (even channel)
+  push32(data, 4);   // pos (even channel)
   push32(data, 16);  // block size without metadata
   data.insert(data.end(), blockData.begin(), blockData.end());
 
