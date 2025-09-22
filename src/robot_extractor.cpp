@@ -296,23 +296,11 @@ void RobotExtractor::readPrimer() {
     m_oddPrimerSize = 21024;
     m_evenPrimer.assign(static_cast<size_t>(m_evenPrimerSize), std::byte{0});
     m_oddPrimer.assign(static_cast<size_t>(m_oddPrimerSize), std::byte{0});
-    m_postPrimerPos = m_fp.tellg();    
+    m_postPrimerPos = m_fp.tellg();
   } else {
-    m_evenPrimerSize = 0;
-    m_oddPrimerSize = 0;
-    m_evenPrimer.clear();
-    m_evenPrimer.shrink_to_fit();
-    m_oddPrimer.clear();
-    m_oddPrimer.shrink_to_fit();
-    const std::streamoff currentPos = m_fp.tellg();
-    m_primerPosition = currentPos;
-    m_postPrimerPos = currentPos;
-    if (m_options.debug_index) {
-      log_error(m_srcPath,
-                "readPrimer: primer absent, position actuelle = " +
-                    std::to_string(static_cast<long long>(currentPos)),
-                m_options);
-    }
+    throw std::runtime_error(
+        "Primer audio incohérent: aucun espace réservé et drapeau "
+        "zero-compression désactivé");
   }
 
   // Décompresser les buffers primer pour initialiser les prédicteurs audio
