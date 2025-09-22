@@ -86,13 +86,13 @@ TEST_CASE("Audio blocks are routed according to parity") {
   // Pad to 2048-byte boundary
   data.resize(((data.size() + 2047) / 2048) * 2048, 0);
 
-  // Quatre frames audio dont deux avec position % 4 == 0 (canal pair) et deux
-  // avec position % 4 == 2 (canal impair).
+  // Quatre frames audio dont deux avec position paire (canal pair) et deux
+  // avec position impaire (canal impair).
   const std::array<std::pair<uint32_t, uint8_t>, kNumFrames> blocks{ {
-      {2, 0x00},  // %4 == 2 -> canal impair
-      {4, 0x10},  // %4 == 0 -> canal pair
-      {6, 0x20},  // %4 == 2 -> canal impair
-      {8, 0x30},  // %4 == 0 -> canal pair
+      {2, 0x00},  // position paire -> canal pair
+      {3, 0x10},  // position impaire -> canal impair
+      {4, 0x20},  // position paire -> canal pair
+      {5, 0x30},  // position impaire -> canal impair
   } };
 
   for (const auto &[position, base] : blocks) {
