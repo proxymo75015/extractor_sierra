@@ -1,7 +1,10 @@
-#include <catch2/catch_test_macros.hpp>
+#include <algorithm>
 #include <array>
+#include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <span>
 #include <vector>
 
 #include "robot_extractor.hpp"
@@ -11,6 +14,8 @@ namespace fs = std::filesystem;
 constexpr uint16_t kNumFrames = 4;
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
+constexpr size_t kZeroPrefixBytes = robot::kRobotZeroCompressSize;
+constexpr size_t kRunwaySamples = robot::kRobotRunwaySamples;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -22,6 +27,44 @@ static void push32(std::vector<uint8_t> &v, uint32_t x) {
   v.push_back(static_cast<uint8_t>((x >> 8) & 0xFF));
   v.push_back(static_cast<uint8_t>((x >> 16) & 0xFF));
   v.push_back(static_cast<uint8_t>((x >> 24) & 0xFF));
+}
+
+static std::vector<int16_t>
+decompress_truncated_block(const std::vector<uint8_t> &raw) {
+  std::vector<std::byte> block(kZeroPrefixBytes + raw.size(), std::byte{0});
+  for (size_t i = 0; i < raw.size(); ++i) {
+    block[kZeroPrefixBytes + i] = std::byte{raw[i]};
+  }
+  int16_t predictor = 0;
+  auto samples = robot::dpcm16_decompress(std::span(block), predictor);
+  if (samples.size() <= kRunwaySamples) {
+    return {};
+  }
+  return {samples.begin() + static_cast<std::ptrdiff_t>(kRunwaySamples),
+          samples.end()};
+}
+
+static std::vector<int16_t> read_wav_samples(const fs::path &path) {
+  std::ifstream wav(path, std::ios::binary);
+  REQUIRE(wav);
+  wav.seekg(40, std::ios::beg);
+  std::array<unsigned char, 4> dataSizeBytes{};
+  wav.read(reinterpret_cast<char *>(dataSizeBytes.data()),
+           static_cast<std::streamsize>(dataSizeBytes.size()));
+  REQUIRE(wav);
+  uint32_t dataBytes = static_cast<uint32_t>(dataSizeBytes[0]) |
+                       (static_cast<uint32_t>(dataSizeBytes[1]) << 8) |
+                       (static_cast<uint32_t>(dataSizeBytes[2]) << 16) |
+                       (static_cast<uint32_t>(dataSizeBytes[3]) << 24);
+  REQUIRE(dataBytes % 2 == 0);
+  wav.seekg(44, std::ios::beg);
+  std::vector<int16_t> samples(dataBytes / 2);
+  if (!samples.empty()) {
+    wav.read(reinterpret_cast<char *>(samples.data()),
+             static_cast<std::streamsize>(dataBytes));
+    REQUIRE(wav.gcount() == static_cast<std::streamsize>(dataBytes));
+  }
+  return samples;
 }
 
 static std::vector<uint8_t> build_header() {
@@ -88,22 +131,47 @@ TEST_CASE("Audio blocks are routed according to parity") {
 
   // Quatre frames audio dont deux avec position paire (canal pair) et deux
   // avec position impaire (canal impair).
-  const std::array<std::pair<uint32_t, uint8_t>, kNumFrames> blocks{ {
-      {2, 0x00},  // position paire -> canal pair
-      {3, 0x10},  // position impaire -> canal impair
-      {4, 0x20},  // position paire -> canal pair
-      {5, 0x30},  // position impaire -> canal impair
-  } };
+  struct BlockInfo {
+    uint32_t position = 0;
+    bool even = false;
+    std::vector<int16_t> samples;
+  };
 
-  for (const auto &[position, base] : blocks) {
+  std::array<uint8_t, kNumFrames> payloadBases = {0x00, 0x10, 0x20, 0x30};
+  uint32_t nextEvenPos = 2;
+  uint32_t nextOddPos = 3;
+  std::vector<BlockInfo> blocks;
+  blocks.reserve(kNumFrames);
+
+  for (size_t idx = 0; idx < payloadBases.size(); ++idx) {
+    const bool isEven = (idx % 2) == 0;
+    std::vector<uint8_t> raw(10);
+    for (int i = 0; i < 10; ++i) {
+      raw[static_cast<size_t>(i)] = static_cast<uint8_t>(payloadBases[idx] + i);
+    }
+    auto samples = decompress_truncated_block(raw);
+    const uint32_t pos = isEven ? nextEvenPos : nextOddPos;
+
     data.push_back(0);
     data.push_back(0);
-    push32(data, position);
-    push32(data, 10); // compressed data size
-    for (int i = 0; i < 10; ++i)
-      data.push_back(static_cast<uint8_t>(base + i));
-    for (int i = 0; i < 6; ++i)
-      data.push_back(0); // padding to expected block length
+    push32(data, pos);
+    push32(data, static_cast<uint32_t>(raw.size()));
+    data.insert(data.end(), raw.begin(), raw.end());
+    data.insert(data.end(), 6, 0); // padding to expected block length
+
+    BlockInfo info;
+    info.position = pos;
+    info.even = isEven;
+    info.samples = std::move(samples);
+    const size_t sampleCount = info.samples.size();
+    blocks.push_back(std::move(info));
+
+    const uint32_t advance = static_cast<uint32_t>(sampleCount * 2 + 2);
+    if (isEven) {
+      nextEvenPos += advance;
+    } else {
+      nextOddPos += advance;
+    }
   }
   
   std::ofstream out(input, std::ios::binary);
@@ -114,15 +182,35 @@ TEST_CASE("Audio blocks are routed according to parity") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
-  auto odd0 = outDir / "frame_00000_odd.wav";
-  auto odd1 = outDir / "frame_00001_odd.wav";
-  auto even0 = outDir / "frame_00000_even.wav";
-  auto even1 = outDir / "frame_00001_even.wav";
+  const auto evenStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, true);
+  const auto oddStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, false);
 
-  REQUIRE(fs::exists(odd0));
-  REQUIRE(fs::exists(odd1));
-  REQUIRE(fs::exists(even0));
-  REQUIRE(fs::exists(even1));
-  REQUIRE_FALSE(fs::exists(outDir / "frame_00002_odd.wav"));
-  REQUIRE_FALSE(fs::exists(outDir / "frame_00002_even.wav"));
+  std::vector<uint8_t> evenCoverage(evenStream.size(), 0);
+  std::vector<uint8_t> oddCoverage(oddStream.size(), 0);
+  for (const auto &block : blocks) {
+    auto &stream = block.even ? evenStream : oddStream;
+    auto &coverage = block.even ? evenCoverage : oddCoverage;
+    const size_t startSample = static_cast<size_t>(block.position / 2);
+    REQUIRE(stream.size() >= startSample + block.samples.size());
+    for (size_t i = 0; i < block.samples.size(); ++i) {
+      CAPTURE(block.position);
+      CAPTURE(startSample);
+      CAPTURE(i);
+      REQUIRE(stream[startSample + i] == block.samples[i]);
+      coverage[startSample + i] = 1;
+    }
+  }
+
+
+  const auto evenPath = outDir / "frame_00000_even.wav";
+  const auto oddPath = outDir / "frame_00000_odd.wav";
+  REQUIRE(fs::exists(evenPath));
+  REQUIRE(fs::exists(oddPath));
+  REQUIRE_FALSE(fs::exists(outDir / "frame_00001_even.wav"));
+  REQUIRE_FALSE(fs::exists(outDir / "frame_00001_odd.wav"));
+
+  REQUIRE(read_wav_samples(evenPath) == evenStream);
+  REQUIRE(read_wav_samples(oddPath) == oddStream);
 }
