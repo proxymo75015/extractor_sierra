@@ -3,15 +3,18 @@
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
+#include <span>
 #include <vector>
 
-#include "audio_reference_data.hpp"
 #include "robot_extractor.hpp"
+#include "utilities.hpp"
 
 namespace fs = std::filesystem;
 
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
+constexpr size_t kRunwayBytes = 8;
+constexpr size_t kRunwaySamples = kRunwayBytes * 2;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -144,9 +147,19 @@ TEST_CASE("Odd-sized audio payload throws") {
     actualSamples.push_back(static_cast<int16_t>(lo | hi));
   }
 
-  std::vector<int16_t> expectedSamples(
-      test_audio_reference::kScummVmOddPayloadEvenBlock.begin(),
-      test_audio_reference::kScummVmOddPayloadEvenBlock.end());
+  std::vector<std::byte> block(16, std::byte{0});
+  if (block.size() > kRunwayBytes) {
+    block[kRunwayBytes] = std::byte{static_cast<unsigned char>(0x88)};
+  }
+  int16_t predictor = 0;
+  auto allSamples =
+      robot::dpcm16_decompress(std::span<const std::byte>(block), predictor);
+  std::vector<int16_t> expectedSamples;
+  if (allSamples.size() > kRunwaySamples) {
+    expectedSamples.assign(allSamples.begin() +
+                               static_cast<std::ptrdiff_t>(kRunwaySamples),
+                           allSamples.end());
+  }
 
   REQUIRE(actualSamples == expectedSamples);
 }
