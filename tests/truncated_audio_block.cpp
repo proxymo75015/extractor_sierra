@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <catch2/catch_test_macros.hpp>
@@ -18,6 +19,8 @@ constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
 constexpr size_t kZeroPrefixBytes = robot::kRobotZeroCompressSize;
 constexpr size_t kRunwayBytes = robot::kRobotRunwayBytes;
 constexpr size_t kRunwaySamples = robot::kRobotRunwaySamples;
+constexpr size_t kTruncatedPayloadBytes = 2;
+constexpr uint32_t kBlockPosHalfSamples = 4;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -29,6 +32,17 @@ static void push32(std::vector<uint8_t> &v, uint32_t x) {
   v.push_back(static_cast<uint8_t>((x >> 8) & 0xFF));
   v.push_back(static_cast<uint8_t>((x >> 16) & 0xFF));
   v.push_back(static_cast<uint8_t>((x >> 24) & 0xFF));
+}
+
+static std::vector<int16_t>
+decompress_without_runway(const std::vector<std::byte> &bytes) {
+  int16_t predictor = 0;
+  auto samples = robot::dpcm16_decompress(std::span(bytes), predictor);
+  if (samples.size() <= kRunwaySamples) {
+    return {};
+  }
+  return {samples.begin() + static_cast<std::ptrdiff_t>(kRunwaySamples),
+          samples.end()};
 }
 
 static std::vector<uint8_t> build_header() {
@@ -99,7 +113,7 @@ TEST_CASE("Truncated audio block triggers error") {
   data.push_back(0); // numCels high byte
 
   // Audio block truncated to 20 bytes instead of 24
-  push32(data, 4);  // pos (even)
+  push32(data, kBlockPosHalfSamples); // pos (even)
   push32(data, 2); // size (payload bytes only)
   data.push_back(0x88);
   data.push_back(0x77);
@@ -114,23 +128,37 @@ TEST_CASE("Truncated audio block triggers error") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
-  fs::path wavPath;
-  std::string bestName;
-  for (const auto &entry : fs::directory_iterator(outDir)) {
-    if (!entry.is_regular_file()) {
-      continue;
-    }
-    auto name = entry.path().filename().string();
-    if (name.rfind("frame_", 0) != 0 ||
-        name.find("_even.wav") == std::string::npos) {
-      continue;
-    }
-    if (wavPath.empty() || name > bestName) {
-      wavPath = entry.path();
-      bestName = name;
-    }
+  const auto evenStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, true);
+
+  std::vector<std::byte> primerBytes(kRunwayBytes,
+                                     std::byte{static_cast<unsigned char>(0x88)});
+  const auto primerSamples = decompress_without_runway(primerBytes);
+
+  std::vector<std::byte> block(kZeroPrefixBytes + kTruncatedPayloadBytes,
+                               std::byte{0});
+  block[kZeroPrefixBytes + 0] = std::byte{static_cast<unsigned char>(0x88)};
+  block[kZeroPrefixBytes + 1] = std::byte{static_cast<unsigned char>(0x77)};
+  const auto blockSamples = decompress_without_runway(block);
+
+  const size_t blockStart = static_cast<size_t>(kBlockPosHalfSamples / 2);
+  size_t totalSamples = blockStart + blockSamples.size();
+  if (totalSamples < primerSamples.size()) {
+    totalSamples = primerSamples.size();
   }
-  REQUIRE(!wavPath.empty());
+  std::vector<int16_t> expected(totalSamples, 0);
+  if (!primerSamples.empty()) {
+    std::copy(primerSamples.begin(), primerSamples.end(), expected.begin());
+  }
+  if (!blockSamples.empty()) {
+    std::copy(blockSamples.begin(), blockSamples.end(),
+              expected.begin() + static_cast<std::ptrdiff_t>(blockStart));
+  }
+
+  REQUIRE(evenStream == expected);
+
+  fs::path wavPath = outDir / "frame_00000_even.wav";
+  REQUIRE(fs::exists(wavPath));
 
   std::ifstream wav(wavPath, std::ios::binary);
   REQUIRE(wav);
@@ -145,37 +173,12 @@ TEST_CASE("Truncated audio block triggers error") {
                        (static_cast<uint32_t>(dataSizeBytes[3]) << 24);
   REQUIRE(dataBytes % 2 == 0);
   wav.seekg(44, std::ios::beg);
-  std::vector<uint8_t> audioData(dataBytes);
-  if (!audioData.empty()) {
-    wav.read(reinterpret_cast<char *>(audioData.data()),
-             static_cast<std::streamsize>(audioData.size()));
-    REQUIRE(wav.gcount() == static_cast<std::streamsize>(audioData.size()));
+  std::vector<int16_t> wavSamples(dataBytes / 2);
+  if (!wavSamples.empty()) {
+    wav.read(reinterpret_cast<char *>(wavSamples.data()),
+             static_cast<std::streamsize>(dataBytes));
+    REQUIRE(wav.gcount() == static_cast<std::streamsize>(dataBytes));
   }
 
-  std::vector<int16_t> actualSamples;
-  actualSamples.reserve(audioData.size() / 2);
-  for (size_t i = 0; i + 1 < audioData.size(); i += 2) {
-    uint16_t lo = audioData[i];
-    uint16_t hi = static_cast<uint16_t>(audioData[i + 1]) << 8;
-    actualSamples.push_back(static_cast<int16_t>(lo | hi));
-  }
-
-  std::vector<std::byte> zeroPrefix(kZeroPrefixBytes, std::byte{0});
-  std::vector<std::byte> payload = {
-      std::byte{static_cast<unsigned char>(0x88)},
-      std::byte{static_cast<unsigned char>(0x77)},
-  };
-  std::vector<std::byte> block = zeroPrefix;
-  block.insert(block.end(), payload.begin(), payload.end());
-  int16_t predictor = 0;
-  auto allSamples =
-      robot::dpcm16_decompress(std::span<const std::byte>(block), predictor);
-  std::vector<int16_t> expectedSamples;
-  if (allSamples.size() > kRunwaySamples) {
-    expectedSamples.assign(allSamples.begin() +
-                               static_cast<std::ptrdiff_t>(kRunwaySamples),
-                           allSamples.end());
-  }
-
-  REQUIRE(actualSamples == expectedSamples);
+  REQUIRE(wavSamples == evenStream);
 }
