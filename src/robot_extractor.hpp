@@ -118,6 +118,24 @@ public:
                  ExtractorOptions options = {});
   void extract();
 
+  struct PaletteEntry {
+    uint8_t r = 0;
+    uint8_t g = 0;
+    uint8_t b = 0;
+    bool used = false;
+    bool present = false;
+  };
+
+  struct ParsedPalette {
+    uint8_t startColor = 0;
+    uint16_t colorCount = 0;
+    bool sharedUsed = false;
+    bool defaultUsed = false;
+    uint32_t version = 0;
+    std::array<PaletteEntry, 256> entries{};
+    std::vector<std::byte> remapData;
+  };
+
 private:
 #ifdef ROBOT_EXTRACTOR_TESTING
   friend struct RobotExtractorTester;
@@ -141,6 +159,9 @@ private:
   bool exportFrame(int frameNo, nlohmann::json &frameJson);
   void writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate,
                 size_t blockIndex, bool isEvenChannel);
+
+  static ParsedPalette parseHunkPalette(std::span<const std::byte> raw,
+                                        bool bigEndian);
 
   std::filesystem::path m_srcPath;
   std::filesystem::path m_dstDir;
@@ -242,6 +263,9 @@ struct RobotExtractorTester {
   static bool exportFrame(RobotExtractor &r, int frameNo,
                           nlohmann::json &frameJson) {
     return r.exportFrame(frameNo, frameJson);
+  }
+  static RobotExtractor::ParsedPalette parsePalette(const RobotExtractor &r) {
+    return RobotExtractor::parseHunkPalette(r.m_palette, r.m_bigEndian);
   }
   static void writeWav(RobotExtractor &r, const std::vector<int16_t> &samples,
                        uint32_t sampleRate, size_t blockIndex,
