@@ -306,7 +306,7 @@ void RobotExtractor::readPrimer() {
   // Décompresser les buffers primer pour initialiser les prédicteurs audio
   if (m_evenPrimerSize > 0) {
     try {
-      processPrimerChannel(m_evenPrimer, m_audioPredictorEven, true);
+      processPrimerChannel(m_evenPrimer, true);
     } catch (const std::runtime_error &) {
       throw std::runtime_error(std::string("Primer audio pair tronqué pour ") +
                                m_srcPath.string());
@@ -314,7 +314,7 @@ void RobotExtractor::readPrimer() {
   }
   if (m_oddPrimerSize > 0) {
     try {
-      processPrimerChannel(m_oddPrimer, m_audioPredictorOdd, false);
+      processPrimerChannel(m_oddPrimer, false);
     } catch (const std::runtime_error &) {
       throw std::runtime_error(
           std::string("Primer audio impair tronqué pour ") +
@@ -334,7 +334,7 @@ void RobotExtractor::readPrimer() {
 }
 
 void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
-                                          int16_t &predictor, bool isEven) {
+                                          bool isEven) {
   if (primer.empty()) {
     return;
   }
@@ -342,6 +342,7 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     throw std::runtime_error("Primer audio tronqué");
   }
   const size_t runwaySamples = kAudioRunwayBytes * 2; // kAudioRunwayBytes bytes => 16 samples
+  int16_t predictor = 0;  
   if (m_extractAudio) {
     auto pcm = dpcm16_decompress(std::span(primer), predictor);
     if (pcm.size() >= runwaySamples) {
@@ -370,7 +371,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   if (audio.size() % 2 != 0) {
     throw std::runtime_error("Odd-sized audio payload");
   }
-  int16_t &predictor = isEven ? m_audioPredictorEven : m_audioPredictorOdd;
+  int16_t predictor = 0;
   dpcm16_decompress_last(runway, predictor);
   if (audio.empty()) {
     return;
