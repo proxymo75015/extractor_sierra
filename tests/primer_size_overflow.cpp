@@ -67,7 +67,8 @@ TEST_CASE("Somme des primers dépasse les bornes") {
     const uint32_t evenSize = 4;
     const uint32_t oddSize = 5;
     const uint32_t total = kPrimerHeaderSize + evenSize + oddSize;
-    auto data = build_header(static_cast<uint16_t>(kPrimerHeaderSize + 8));
+    auto data = build_header(static_cast<uint16_t>(
+        kPrimerHeaderSize + robot::kRobotRunwayBytes));
     auto primer = build_primer_header(total, evenSize, oddSize);
     data.insert(data.end(), primer.begin(), primer.end());
 
