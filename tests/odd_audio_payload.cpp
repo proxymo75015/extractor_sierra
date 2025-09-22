@@ -92,7 +92,7 @@ TEST_CASE("Odd-sized audio payload throws") {
   data.push_back(0); // numCels high byte
 
   // Audio block with odd-sized payload
-  push32(data, 2); // pos (even)
+  push32(data, 4); // pos (even)
   push32(data, 1); // size (payload byte only)
   data.push_back(0x88); // single audio byte
   for (int i = 0; i < 15; ++i)
