@@ -12,6 +12,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <system_error>
+#include <cmath>
 
 #include "utilities.hpp"
 
@@ -400,15 +401,13 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
   } else {
     pcm.clear();
   }
-  size_t &audioIndex = isEven ? m_evenAudioIndex : m_oddAudioIndex;
-  if (audioIndex == std::numeric_limits<size_t>::max()) {
-    throw std::runtime_error("Audio index overflow");
+  if (!pcm.empty()) {
+    appendChannelSamples(isEven, isEven ? 0 : 1, pcm);
   }
-  writeWav(pcm, kSampleRate, audioIndex++, isEven);
 }
 
 void RobotExtractor::process_audio_block(std::span<const std::byte> block,
-                                         bool isEven) {
+                                         int32_t pos, bool isEven) {
   if (block.size() < kRobotRunwayBytes) {
     throw std::runtime_error("Bloc audio inutilisable");
   }
@@ -424,11 +423,138 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   if (samples.empty() || !m_extractAudio) {
     return;
   }
-  size_t &audioIndex = isEven ? m_evenAudioIndex : m_oddAudioIndex;
-  if (audioIndex == std::numeric_limits<size_t>::max()) {
-    throw std::runtime_error("Audio index overflow");
+  appendChannelSamples(isEven, pos, samples);
+}
+
+void RobotExtractor::appendChannelSamples(bool isEven, int32_t pos,
+                                          const std::vector<int16_t> &samples) {
+  if (samples.empty()) {
+    return;
   }
-  writeWav(samples, kSampleRate, audioIndex++, isEven);
+  if (pos < 0) {
+    throw std::runtime_error("Position audio négative");
+  }
+  ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
+  if ((pos & 1) != 0 && isEven) {
+    throw std::runtime_error("Position impaire pour canal pair");
+  }
+  if ((pos & 1) == 0 && !isEven) {
+    throw std::runtime_error("Position paire pour canal impair");
+  }
+  int64_t startHalf = static_cast<int64_t>(pos);
+  if (startHalf < 0) {
+    throw std::runtime_error("Position audio invalide");
+  }
+  size_t startSample = static_cast<size_t>(startHalf / 2);
+  if (samples.size() > std::numeric_limits<size_t>::max() - startSample) {
+    throw std::runtime_error("Insertion audio dépasse la capacité");
+  }
+  size_t requiredSize = startSample + samples.size();
+  if (channel.samples.size() < startSample) {
+    channel.samples.resize(startSample, 0);
+    channel.occupied.resize(startSample, 0);
+  }
+  if (channel.samples.size() < requiredSize) {
+    channel.samples.resize(requiredSize, 0);
+    channel.occupied.resize(requiredSize, 0);
+  }
+  for (size_t i = 0; i < samples.size(); ++i) {
+    size_t index = startSample + i;
+    if (channel.occupied[index]) {
+      throw std::runtime_error("Chevauchement de blocs audio détecté");
+    }
+    channel.samples[index] = samples[i];
+    channel.occupied[index] = 1;
+  }
+}
+
+std::vector<int16_t> RobotExtractor::buildChannelStream(bool isEven) const {
+  const ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
+  if (channel.samples.empty()) {
+    return {};
+  }
+  const size_t totalSamples = channel.samples.size();
+  if (channel.occupied.empty()) {
+    return {};
+  }
+  size_t firstOccupied = 0;
+  while (firstOccupied < channel.occupied.size() &&
+         channel.occupied[firstOccupied] == 0) {
+    ++firstOccupied;
+  }
+  if (firstOccupied == channel.occupied.size()) {
+    return {};
+  }
+  size_t lastOccupied = channel.occupied.size() - 1;
+  while (lastOccupied > firstOccupied &&
+         channel.occupied[lastOccupied] == 0) {
+    --lastOccupied;
+  }
+  const size_t outputSize = std::min(totalSamples, lastOccupied + 1);
+  std::vector<int16_t> stream(outputSize);
+  std::vector<int16_t> working(channel.samples.begin(),
+                               channel.samples.begin() +
+                                   static_cast<std::ptrdiff_t>(outputSize));
+  std::vector<uint8_t> occupied(channel.occupied.begin(),
+                                channel.occupied.begin() +
+                                    static_cast<std::ptrdiff_t>(outputSize));
+  for (size_t i = 0; i < firstOccupied; ++i) {
+    working[i] = 0;
+    occupied[i] = 1;
+  }
+  size_t idx = firstOccupied;
+  while (idx < outputSize) {
+    if (occupied[idx]) {
+      ++idx;
+      continue;
+    }
+    const size_t gapStart = idx;
+    const size_t prevIndex = gapStart - 1;
+    const int16_t prevSample = working[prevIndex];
+    size_t gapEnd = gapStart;
+    while (gapEnd < outputSize && occupied[gapEnd] == 0) {
+      ++gapEnd;
+    }
+    if (gapEnd >= outputSize) {
+      for (size_t i = gapStart; i < outputSize; ++i) {
+        working[i] = 0;
+        occupied[i] = 1;
+      }
+      break;
+    }
+    const int16_t nextSample = working[gapEnd];
+    const size_t span = gapEnd - prevIndex;
+    for (size_t i = gapStart; i < gapEnd; ++i) {
+      double t = static_cast<double>(i - prevIndex) / static_cast<double>(span);
+      double value = static_cast<double>(prevSample) +
+                     (static_cast<double>(nextSample) - prevSample) * t;
+      int32_t rounded = static_cast<int32_t>(std::lrint(value));
+      if (rounded < -32768) {
+        rounded = -32768;
+      } else if (rounded > 32767) {
+        rounded = 32767;
+      }
+      working[i] = static_cast<int16_t>(rounded);
+      occupied[i] = 1;
+    }
+    idx = gapEnd;
+  }
+  std::copy(working.begin(), working.end(), stream.begin());
+  return stream;
+}
+
+void RobotExtractor::finalizeAudio() {
+  if (!m_extractAudio) {
+    return;
+  }
+  auto evenStream = buildChannelStream(true);
+  if (!evenStream.empty()) {
+    writeWav(evenStream, kSampleRate, 0, true);
+  }
+  auto oddStream = buildChannelStream(false);
+  if (!oddStream.empty()) {
+    writeWav(oddStream, kSampleRate, 0, false);
+  }
 }
 
 RobotExtractor::ParsedPalette
@@ -987,7 +1113,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
           bool isEven = (pos % 2) == 0;
           // L'audio peut exister même sans primer, décompresser toujours.
           if (!block.empty()) {
-            process_audio_block(block, isEven);
+            process_audio_block(block, pos, isEven);
           }
         }
         int64_t remainingBytes = static_cast<int64_t>(audioBlkLen) - consumed;
@@ -1119,6 +1245,8 @@ void RobotExtractor::extract() {
     m_fp.seekg(posOff + packetOff, std::ios::beg);
   }
 
+  finalizeAudio();
+  
   auto tmpPath = m_dstDir / "metadata.json.tmp";
   std::string tmpPathStr = tmpPath.string();
   struct TempFileGuard {
