@@ -115,6 +115,8 @@ TEST_CASE("Primer mismatch realigns stream and preserves primer data") {
   REQUIRE(RobotExtractorTester::oddPrimerSize(extractor) ==
           static_cast<std::streamsize>(kOddPrimerSize));
 
+  RobotExtractorTester::finalizeAudio(extractor);
+
   fs::path evenWav = outDir / "frame_00000_even.wav";
   fs::path oddWav = outDir / "frame_00000_odd.wav";
   REQUIRE(fs::exists(evenWav));
