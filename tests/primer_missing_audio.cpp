@@ -2,12 +2,12 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <string>
 #include <vector>
 
 #include "robot_extractor.hpp"
 
 using robot::RobotExtractor;
-using robot::RobotExtractorTester;
 
 namespace fs = std::filesystem;
 
@@ -50,7 +50,7 @@ static std::vector<uint8_t> build_header() {
   return h;
 }
 
-TEST_CASE("Robot with missing primer keeps predictors zero") {
+TEST_CASE("Robot with missing primer triggers an error") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "missing_primer_audio.rbt";
   fs::path outDir = tmpDir / "missing_primer_audio_out";
@@ -80,10 +80,11 @@ TEST_CASE("Robot with missing primer keeps predictors zero") {
   }
 
   RobotExtractor extractor(input, outDir, true);
-  REQUIRE_NOTHROW(extractor.extract());
-
-  REQUIRE(RobotExtractorTester::evenPrimerSize(extractor) == 0);
-  REQUIRE(RobotExtractorTester::oddPrimerSize(extractor) == 0);
-  REQUIRE(RobotExtractorTester::postPrimerPos(extractor) ==
-          RobotExtractorTester::postHeaderPos(extractor));
+  try {
+    extractor.extract();
+    FAIL("Les fichiers audio sans primer valide devraient être rejetés");
+  } catch (const std::runtime_error &e) {
+    REQUIRE(std::string(e.what()).find("Primer audio incohérent") !=
+            std::string::npos);
+  }
 }
