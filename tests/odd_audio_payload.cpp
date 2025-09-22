@@ -13,7 +13,7 @@ namespace fs = std::filesystem;
 
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
-constexpr size_t kRunwayBytes = 8;
+constexpr size_t kRunwayBytes = robot::kRobotZeroCompressSize;
 constexpr size_t kRunwaySamples = kRunwayBytes * 2;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
@@ -147,10 +147,9 @@ TEST_CASE("Odd-sized audio payload throws") {
     actualSamples.push_back(static_cast<int16_t>(lo | hi));
   }
 
-  std::vector<std::byte> block(16, std::byte{0});
-  if (block.size() > kRunwayBytes) {
-    block[kRunwayBytes] = std::byte{static_cast<unsigned char>(0x88)};
-  }
+  std::vector<std::byte> zeroPrefix(kRunwayBytes, std::byte{0});
+  std::vector<std::byte> block = zeroPrefix;
+  block.push_back(std::byte{static_cast<unsigned char>(0x88)});
   int16_t predictor = 0;
   auto allSamples =
       robot::dpcm16_decompress(std::span<const std::byte>(block), predictor);
