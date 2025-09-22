@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <array>
+#include <algorithm>
 #include <cstdint>
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
@@ -83,6 +84,10 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   fs::create_directories(outDir);
 
   auto data = build_header(2);
+  std::vector<int16_t> expectedBlock0;
+  std::vector<int16_t> expectedBlock1;
+  uint32_t block1Pos = 0;
+  const uint32_t block0Pos = 4;  
   auto primer = build_primer_header();
   data.insert(data.end(), primer.begin(), primer.end());
   for (size_t i = 0; i < kRunwayBytes; ++i)
@@ -108,24 +113,58 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   data.push_back(0);
 
   // Audio block 0 truncated to payload-only bytes (padding fills the rest)
-  push32(data, 4);  // pos (even)
-  push32(data, 2); // size (payload bytes only)
-  data.push_back(0x88);
-  data.push_back(0x77);
+  push32(data, block0Pos); // pos (even)
+  const uint32_t block0Size = 2;
+  push32(data, block0Size);
+  std::vector<uint8_t> block0PayloadBytes = {0x88, 0x77};
+  data.insert(data.end(), block0PayloadBytes.begin(), block0PayloadBytes.end());
   for (int i = 0; i < 10; ++i)
     data.push_back(0); // padding to reach 20 bytes
+
+  std::vector<std::byte> block0Compressed(kZeroPrefixBytes, std::byte{0});
+  for (uint8_t b : block0PayloadBytes) {
+    block0Compressed.push_back(static_cast<std::byte>(b));
+  }
+  int16_t predictor0 = 0;
+  auto block0AllSamples =
+      robot::dpcm16_decompress(std::span(block0Compressed), predictor0);
+  if (block0AllSamples.size() > kRunwaySamples) {
+    expectedBlock0.assign(block0AllSamples.begin() +
+                              static_cast<std::ptrdiff_t>(kRunwaySamples),
+                          block0AllSamples.end());
+  }
+  const size_t block0SampleCount = expectedBlock0.size();
+  const size_t block0StartSample = block0Pos / 2;
+  block1Pos = static_cast<uint32_t>((block0StartSample + block0SampleCount) * 2);
 
   // Frame 1 data (numCels = 0)
   data.push_back(0);
   data.push_back(0);
 
   // Audio block 1 fully populated
-  push32(data, 8);   // pos (even)
+  push32(data, block1Pos); // pos (even)
   push32(data, 16);  // size (full block)
   std::array<uint8_t, 8> runway1 = {0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17};
   data.insert(data.end(), runway1.begin(), runway1.end());
   std::array<uint8_t, 8> payload1 = {0x10, 0x32, 0x54, 0x76, 0x98, 0xba, 0xdc, 0xfe};
   data.insert(data.end(), payload1.begin(), payload1.end());
+
+  std::vector<std::byte> block1Compressed;
+  block1Compressed.reserve(runway1.size() + payload1.size());
+  for (uint8_t b : runway1) {
+    block1Compressed.push_back(static_cast<std::byte>(b));
+  }
+  for (uint8_t b : payload1) {
+    block1Compressed.push_back(static_cast<std::byte>(b));
+  }
+  int16_t predictor1 = 0;
+  auto block1AllSamples =
+      robot::dpcm16_decompress(std::span(block1Compressed), predictor1);
+  if (block1AllSamples.size() > kRunwaySamples) {
+    expectedBlock1.assign(block1AllSamples.begin() +
+                              static_cast<std::ptrdiff_t>(kRunwaySamples),
+                          block1AllSamples.end());
+  }
 
   std::ofstream out(input, std::ios::binary);
   out.write(reinterpret_cast<const char *>(data.data()),
@@ -145,21 +184,8 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   REQUIRE(jsonDoc["frames"].is_array());
   REQUIRE(jsonDoc["frames"].size() == 2);
 
-  fs::path wavFrame1;
-  fs::path wavFrame2;
-  for (const auto &entry : fs::directory_iterator(outDir)) {
-    if (!entry.is_regular_file()) {
-      continue;
-    }
-    auto name = entry.path().filename().string();
-    if (name == "frame_00001_even.wav") {
-      wavFrame1 = entry.path();
-    } else if (name == "frame_00002_even.wav") {
-      wavFrame2 = entry.path();
-    }
-  }
-  REQUIRE(!wavFrame1.empty());
-  REQUIRE(!wavFrame2.empty());
+  fs::path wavPath = outDir / "frame_00000_even.wav";
+  REQUIRE(fs::exists(wavPath));
 
   auto readSamples = [](const fs::path &path) {
     std::ifstream wav(path, std::ios::binary);
@@ -191,44 +217,19 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
     return samples;
   };
   
-  auto actualBlock0 = readSamples(wavFrame1);
-  auto actualBlock1 = readSamples(wavFrame2);
+  auto actualSamples = readSamples(wavPath);
 
-  std::vector<std::byte> block0Prefix(kZeroPrefixBytes, std::byte{0});
-  std::vector<std::byte> block0Payload = {
-      std::byte{static_cast<unsigned char>(0x88)},
-      std::byte{static_cast<unsigned char>(0x77)},
-  };
-  std::vector<std::byte> block0 = block0Prefix;
-  block0.insert(block0.end(), block0Payload.begin(), block0Payload.end());
-  int16_t predictor0 = 0;
-  auto block0Samples =
-      robot::dpcm16_decompress(std::span<const std::byte>(block0), predictor0);
-  std::vector<int16_t> expectedBlock0;
-  if (block0Samples.size() > kRunwaySamples) {
-    expectedBlock0.assign(block0Samples.begin() +
-                              static_cast<std::ptrdiff_t>(kRunwaySamples),
-                          block0Samples.end());
+  const size_t block1StartSample = block1Pos / 2;
+  size_t totalSamples = std::max(block0StartSample + expectedBlock0.size(),
+                                 block1StartSample + expectedBlock1.size());
+  std::vector<int16_t> expected(totalSamples, 0);
+  if (!expectedBlock0.empty()) {
+    std::copy(expectedBlock0.begin(), expectedBlock0.end(),
+              expected.begin() + static_cast<std::ptrdiff_t>(block0StartSample));
   }
-
-  std::vector<std::byte> block1;
-  block1.reserve(runway1.size() + payload1.size());
-  for (uint8_t b : runway1) {
-    block1.push_back(static_cast<std::byte>(b));
+  if (!expectedBlock1.empty()) {
+    std::copy(expectedBlock1.begin(), expectedBlock1.end(),
+              expected.begin() + static_cast<std::ptrdiff_t>(block1StartSample));
   }
-  for (uint8_t b : payload1) {
-    block1.push_back(static_cast<std::byte>(b));
-  }
-  int16_t predictor1 = 0;
-  auto block1Samples =
-      robot::dpcm16_decompress(std::span<const std::byte>(block1), predictor1);
-  std::vector<int16_t> expectedBlock1;
-  if (block1Samples.size() > kRunwaySamples) {
-    expectedBlock1.assign(block1Samples.begin() +
-                              static_cast<std::ptrdiff_t>(kRunwaySamples),
-                          block1Samples.end());
-  }
-
-  REQUIRE(actualBlock0 == expectedBlock0);
-  REQUIRE(actualBlock1 == expectedBlock1);
+  REQUIRE(actualSamples == expected);
 }
