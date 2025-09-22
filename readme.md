@@ -45,6 +45,10 @@ WAV files for audio tracks (if --audio is specified):
 frame_XXXXX_even.wav: Even channel (mono, 16-bit, 11.025 kHz)
 frame_XXXXX_odd.wav: Odd channel (mono, 16-bit, 11.025 kHz)
 
+Robot files that contain audio must also provide a valid audio primer.
+Either a primer block must be reserved in the header or the
+zero-compression primer flag must be set; otherwise the extractor aborts
+with an error to match ScummVM's behaviour.
 
 metadata.json containing frame and cel metadata
 
@@ -62,6 +66,7 @@ Earlier revisions of this project bundled a legacy standalone extractor at `src/
 License
 
 BSD 3-Clause License
+
 
 
 
