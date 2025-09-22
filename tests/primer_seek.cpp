@@ -68,11 +68,14 @@ TEST_CASE("Primer seek goes to reserved end") {
   fs::path outDir = tmpDir / "primer_seek_out";
   fs::create_directories(outDir);
 
-  auto data =
-      build_header(static_cast<uint16_t>(kPrimerHeaderSize + 8));
-  auto primer = build_primer_header(kPrimerHeaderSize + 8, 8, 0);
+  auto data = build_header(static_cast<uint16_t>(
+      kPrimerHeaderSize + robot::kRobotRunwayBytes));
+  auto primer = build_primer_header(kPrimerHeaderSize +
+                                        robot::kRobotRunwayBytes,
+                                    static_cast<uint32_t>(robot::kRobotRunwayBytes),
+                                    0);
   data.insert(data.end(), primer.begin(), primer.end());
-  data.insert(data.end(), 8, 0); // even primer data
+  data.insert(data.end(), robot::kRobotRunwayBytes, 0); // even primer data
 
   push16(data, 2); // frame size
   push16(data, 2); // packet size
