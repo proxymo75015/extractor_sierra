@@ -43,6 +43,7 @@ add_executable(robot_extractor
 
 # Chemins d'inclusion
 target_include_directories(robot_extractor PRIVATE
+    ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/include
 )
 
@@ -96,6 +97,7 @@ if(BUILD_TESTS)
 
     target_compile_definitions(tests PRIVATE ROBOT_EXTRACTOR_NO_MAIN ROBOT_EXTRACTOR_TESTING)
     target_include_directories(tests PRIVATE
+        ${CMAKE_SOURCE_DIR}
         ${CMAKE_SOURCE_DIR}/src
         ${CMAKE_SOURCE_DIR}/include
     )
@@ -126,6 +128,7 @@ install(FILES
     CONFIGURATIONS Release
 
 )
+
 
 
 
