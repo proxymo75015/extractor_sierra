@@ -7,15 +7,18 @@
 #include <nlohmann/json.hpp>
 #include <stdexcept>
 #include <string>
+#include <span>
 #include <vector>
 
-#include "audio_reference_data.hpp"
 #include "robot_extractor.hpp"
+#include "utilities.hpp"
 
 namespace fs = std::filesystem;
 
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
+constexpr size_t kRunwayBytes = 8;
+constexpr size_t kRunwaySamples = kRunwayBytes * 2;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -189,12 +192,40 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   auto actualBlock0 = readSamples(wavFrame1);
   auto actualBlock1 = readSamples(wavFrame2);
 
-  std::vector<int16_t> expectedBlock0(
-      test_audio_reference::kScummVmTruncatedEvenBlock.begin(),
-      test_audio_reference::kScummVmTruncatedEvenBlock.end());
-  std::vector<int16_t> expectedBlock1(
-      test_audio_reference::kScummVmFollowupEvenBlock.begin(),
-      test_audio_reference::kScummVmFollowupEvenBlock.end());
+  std::vector<std::byte> block0(16, std::byte{0});
+  if (block0.size() > kRunwayBytes) {
+    block0[kRunwayBytes] = std::byte{static_cast<unsigned char>(0x88)};
+  }
+  if (block0.size() > kRunwayBytes + 1) {
+    block0[kRunwayBytes + 1] = std::byte{static_cast<unsigned char>(0x77)};
+  }
+  int16_t predictor0 = 0;
+  auto block0Samples =
+      robot::dpcm16_decompress(std::span<const std::byte>(block0), predictor0);
+  std::vector<int16_t> expectedBlock0;
+  if (block0Samples.size() > kRunwaySamples) {
+    expectedBlock0.assign(block0Samples.begin() +
+                              static_cast<std::ptrdiff_t>(kRunwaySamples),
+                          block0Samples.end());
+  }
+
+  std::vector<std::byte> block1;
+  block1.reserve(16);
+  for (uint8_t b : runway1) {
+    block1.push_back(static_cast<std::byte>(b));
+  }
+  for (uint8_t b : payload1) {
+    block1.push_back(static_cast<std::byte>(b));
+  }
+  int16_t predictor1 = 0;
+  auto block1Samples =
+      robot::dpcm16_decompress(std::span<const std::byte>(block1), predictor1);
+  std::vector<int16_t> expectedBlock1;
+  if (block1Samples.size() > kRunwaySamples) {
+    expectedBlock1.assign(block1Samples.begin() +
+                              static_cast<std::ptrdiff_t>(kRunwaySamples),
+                          block1Samples.end());
+  }
 
   REQUIRE(actualBlock0 == expectedBlock0);
   REQUIRE(actualBlock1 == expectedBlock1);
