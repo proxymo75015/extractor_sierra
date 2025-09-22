@@ -169,13 +169,11 @@ TEST_CASE("Audio block with runway triggers error") {
     actualSamples.push_back(static_cast<int16_t>(lo | hi));
   }
 
-  int16_t predictor = 0;
   std::vector<std::byte> runway;
   runway.reserve(kRunwayBytes);
   for (size_t i = 0; i < kRunwayBytes; ++i) {
     runway.push_back(static_cast<std::byte>(i));
   }
-  robot::dpcm16_decompress_last(std::span<const std::byte>(runway), predictor);
 
   std::vector<std::byte> payload = {
       std::byte{static_cast<unsigned char>(0x88)},
@@ -187,11 +185,19 @@ TEST_CASE("Audio block with runway triggers error") {
                    std::byte{static_cast<unsigned char>(0)});
   }
   REQUIRE(payload.size() == kExpectedPayloadBytes);
-  auto expectedSamplesBytes =
-      robot::dpcm16_decompress(std::span<const std::byte>(payload), predictor);
+  std::vector<std::byte> block = runway;
+  block.insert(block.end(), payload.begin(), payload.end());
 
-  std::vector<int16_t> expectedSamples(expectedSamplesBytes.begin(),
-                                       expectedSamplesBytes.end());
+  int16_t predictor = 0;
+  auto allSamples =
+      robot::dpcm16_decompress(std::span<const std::byte>(block), predictor);
+  std::vector<int16_t> expectedSamples;
+  constexpr size_t runwaySamples = kRunwayBytes * 2;
+  if (allSamples.size() > runwaySamples) {
+    expectedSamples.assign(allSamples.begin() +
+                               static_cast<std::ptrdiff_t>(runwaySamples),
+                           allSamples.end());
+  }
 
-  REQUIRE(actualSamples == expectedSamples);  
+  REQUIRE(actualSamples == expectedSamples);
 }
