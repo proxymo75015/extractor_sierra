@@ -205,12 +205,6 @@ void RobotExtractor::readPrimer() {
       throw std::runtime_error("totalPrimerSize négatif dans le primer audio");
     }
 
-    if (static_cast<std::int64_t>(m_totalPrimerSize) >
-        static_cast<std::int64_t>(m_primerReservedSize)) {
-      throw std::runtime_error(
-          "totalPrimerSize dépasse primerReservedSize dans le primer audio");
-    }
-    
     if (m_evenPrimerSize < 0 || m_oddPrimerSize < 0) {
       throw std::runtime_error("Tailles de primer audio incohérentes");
     }
@@ -232,13 +226,17 @@ void RobotExtractor::readPrimer() {
                                std::to_string(compType));
     }
 
-    const uint64_t primerSizesSum =
-        static_cast<uint64_t>(m_evenPrimerSize) +
-        static_cast<uint64_t>(m_oddPrimerSize);
-    const std::uint64_t reservedDataSize = static_cast<std::uint64_t>(
-        static_cast<std::int64_t>(m_primerReservedSize) - primerHeaderSize);
-    const std::streamoff reservedEnd =
-        primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
+    const std::uint64_t primerHeaderSizeU =
+        static_cast<std::uint64_t>(primerHeaderSize);
+    const std::uint64_t reservedSize =
+        static_cast<std::uint64_t>(m_primerReservedSize);
+    const std::uint64_t primerSizesSum =
+        static_cast<std::uint64_t>(m_evenPrimerSize) +
+        static_cast<std::uint64_t>(m_oddPrimerSize);
+    const std::uint64_t totalRequired = primerHeaderSizeU + primerSizesSum;
+    const bool reservedCoversHeader = reservedSize >= totalRequired;
+    const std::uint64_t reservedDataSize =
+        reservedCoversHeader ? (reservedSize - primerHeaderSizeU) : reservedSize;
 
     if (primerSizesSum > reservedDataSize) {
       throw std::runtime_error(
@@ -249,6 +247,17 @@ void RobotExtractor::readPrimer() {
                 "readPrimer: primer plus petit que primerReservedSize", m_options);
     }
 
+    const std::uint64_t reservedSpan =
+        reservedCoversHeader ? reservedSize : totalRequired;
+    const std::uintmax_t primerHeaderPosMax =
+        static_cast<std::uintmax_t>(primerHeaderPos);
+    if (primerHeaderPosMax > fileSize ||
+        reservedSpan > fileSize - primerHeaderPosMax) {
+      throw std::runtime_error("Primer hors limites");
+    }
+    const std::streamoff reservedEnd =
+        primerHeaderPos + static_cast<std::streamoff>(reservedSpan);
+    
     m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
     m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
     if (m_evenPrimerSize > 0) {
@@ -271,7 +280,10 @@ void RobotExtractor::readPrimer() {
             m_srcPath.string());
       }
     }
-    m_fp.seekg(reservedEnd, std::ios::beg);    
+    const std::streamoff afterPrimerDataPos = m_fp.tellg();
+    if (reservedEnd > afterPrimerDataPos) {
+      m_fp.seekg(reservedEnd, std::ios::beg);
+    }
     m_postPrimerPos = m_fp.tellg();
     if (m_options.debug_index) {
       log_error(m_srcPath,
