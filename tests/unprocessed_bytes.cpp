@@ -4,6 +4,7 @@
 #include <vector>
 #include <cstdint>
 
+#include "palette_helpers.hpp"
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
@@ -27,6 +28,9 @@ TEST_CASE("Extra data after cels throws") {
     fs::create_directories(outDir);
 
     std::vector<uint8_t> data;
+    auto palette = test_palette::build_flat_palette(0, 0, 0);
+    const uint16_t paletteSize = static_cast<uint16_t>(palette.size());
+    
     // Header
     push16(data, 0x16); // signature
     data.insert(data.end(), {'S','O','L','\0'});
@@ -35,7 +39,7 @@ TEST_CASE("Extra data after cels throws") {
     push16(data, 0); // primerZeroCompressFlag
     push16(data, 0); // skip
     push16(data, 1); // numFrames
-    push16(data, 768); // paletteSize
+    push16(data, paletteSize); // paletteSize
     push16(data, 0); // primerReservedSize
     push16(data, 1); // xRes
     push16(data, 1); // yRes
@@ -50,7 +54,9 @@ TEST_CASE("Extra data after cels throws") {
     for (int i = 0; i < 2; ++i) push32(data, 0); // zone réservée
 
     // Palette
-    data.insert(data.end(), 768, 0);
+    data.insert(data.end(), reinterpret_cast<const uint8_t *>(palette.data()),
+                reinterpret_cast<const uint8_t *>(palette.data()) +
+                    static_cast<ptrdiff_t>(palette.size()));
 
     // Frame and packet sizes
     push16(data, 39); // frame size
