@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -7,6 +8,7 @@
 
 namespace fs = std::filesystem;
 
+constexpr uint16_t kNumFrames = 4;
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
 
@@ -30,7 +32,7 @@ static std::vector<uint8_t> build_header() {
   push16(h, 24);  // audio block size
   push16(h, 0);   // primerZeroCompressFlag
   push16(h, 0);   // skip
-  push16(h, 3);   // numFrames
+  push16(h, kNumFrames); // numFrames
   push16(h, 0);   // paletteSize
   push16(h, static_cast<uint16_t>(kPrimerHeaderSize));
   push16(h, 1);   // xRes
@@ -68,14 +70,14 @@ TEST_CASE("Audio blocks are routed according to parity") {
   auto primer = build_primer_header();
   data.insert(data.end(), primer.begin(), primer.end());
 
-  // Frame sizes (3 frames) and packet sizes including audio blocks
-  push16(data, 2);
-  push16(data, 2);
-  push16(data, 2);
-  push16(data, 26);
-  push16(data, 26);
-  push16(data, 26);
-
+  // Frame sizes and packet sizes including audio blocks
+  for (uint16_t i = 0; i < kNumFrames; ++i) {
+    push16(data, 2);
+  }
+  for (uint16_t i = 0; i < kNumFrames; ++i) {
+    push16(data, 26);
+  }
+  
   for (int i = 0; i < 256; ++i)
     push32(data, 0); // cue times
   for (int i = 0; i < 256; ++i)
@@ -84,35 +86,25 @@ TEST_CASE("Audio blocks are routed according to parity") {
   // Pad to 2048-byte boundary
   data.resize(((data.size() + 2047) / 2048) * 2048, 0);
 
-  // Frame 0: numCels = 0
-  data.push_back(0);
-  data.push_back(0);
-  push32(data, 1);  // position impaire -> canal odd
-  push32(data, 10); // compressed data size
-  for (int i = 0; i < 10; ++i)
-    data.push_back(static_cast<uint8_t>(i));
-  for (int i = 0; i < 6; ++i)
-    data.push_back(0); // padding to expected block length
+  // Quatre frames audio dont deux avec position % 4 == 0 (canal pair) et deux
+  // avec position % 4 == 2 (canal impair).
+  const std::array<std::pair<uint32_t, uint8_t>, kNumFrames> blocks{ {
+      {2, 0x00},  // %4 == 2 -> canal impair
+      {4, 0x10},  // %4 == 0 -> canal pair
+      {6, 0x20},  // %4 == 2 -> canal impair
+      {8, 0x30},  // %4 == 0 -> canal pair
+  } };
 
-  // Frame 1: numCels = 0
-  data.push_back(0);
-  data.push_back(0);
-  push32(data, 5);  // position impaire -> canal odd
-  push32(data, 10); // compressed data size
-  for (int i = 0; i < 10; ++i)
-    data.push_back(static_cast<uint8_t>(0x20 + i));
-  for (int i = 0; i < 6; ++i)
+  for (const auto &[position, base] : blocks) {
     data.push_back(0);
-
-  // Frame 2: numCels = 0
-  data.push_back(0);
-  data.push_back(0);
-  push32(data, 4);  // position paire -> canal even
-  push32(data, 10); // compressed data size
-  for (int i = 0; i < 10; ++i)
-    data.push_back(static_cast<uint8_t>(0x40 + i));
-  for (int i = 0; i < 6; ++i)
     data.push_back(0);
+    push32(data, position);
+    push32(data, 10); // compressed data size
+    for (int i = 0; i < 10; ++i)
+      data.push_back(static_cast<uint8_t>(base + i));
+    for (int i = 0; i < 6; ++i)
+      data.push_back(0); // padding to expected block length
+  }
   
   std::ofstream out(input, std::ios::binary);
   out.write(reinterpret_cast<const char *>(data.data()),
@@ -124,15 +116,13 @@ TEST_CASE("Audio blocks are routed according to parity") {
 
   auto odd0 = outDir / "frame_00000_odd.wav";
   auto odd1 = outDir / "frame_00001_odd.wav";
-  auto odd2 = outDir / "frame_00002_odd.wav";
   auto even0 = outDir / "frame_00000_even.wav";
   auto even1 = outDir / "frame_00001_even.wav";
-  auto even2 = outDir / "frame_00002_even.wav";  
 
   REQUIRE(fs::exists(odd0));
   REQUIRE(fs::exists(odd1));
   REQUIRE(fs::exists(even0));
-  REQUIRE_FALSE(fs::exists(even1));
-  REQUIRE_FALSE(fs::exists(even2));
-  REQUIRE_FALSE(fs::exists(odd2));
+  REQUIRE(fs::exists(even1));
+  REQUIRE_FALSE(fs::exists(outDir / "frame_00002_odd.wav"));
+  REQUIRE_FALSE(fs::exists(outDir / "frame_00002_even.wav"));
 }
