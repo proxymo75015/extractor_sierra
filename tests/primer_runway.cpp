@@ -66,12 +66,14 @@ TEST_CASE("Primer WAV excludes runway samples") {
   fs::path outDir = tmpDir / "primer_runway_out";
   fs::create_directories(outDir);
 
-  constexpr uint16_t primerReserved =
-      static_cast<uint16_t>(kPrimerHeaderSize + 10);
+  constexpr uint16_t primerReserved = static_cast<uint16_t>(
+      kPrimerHeaderSize + robot::kRobotRunwayBytes + 2);
   auto data = build_header(primerReserved);
-  auto primer = build_primer_header(kPrimerHeaderSize + 10, 10, 0);
+  auto primer = build_primer_header(
+      kPrimerHeaderSize + robot::kRobotRunwayBytes + 2,
+      static_cast<uint32_t>(robot::kRobotRunwayBytes + 2), 0);
   data.insert(data.end(), primer.begin(), primer.end());
-  for (int i = 0; i < 8; ++i)
+  for (size_t i = 0; i < robot::kRobotRunwayBytes; ++i)
     data.push_back(static_cast<uint8_t>(i));
   data.push_back(0x88);
   data.push_back(0x77);
