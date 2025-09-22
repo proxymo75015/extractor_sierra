@@ -13,8 +13,9 @@ namespace fs = std::filesystem;
 
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
-constexpr size_t kRunwayBytes = robot::kRobotZeroCompressSize;
-constexpr size_t kRunwaySamples = kRunwayBytes * 2;
+constexpr size_t kZeroPrefixBytes = robot::kRobotZeroCompressSize;
+constexpr size_t kRunwayBytes = robot::kRobotRunwayBytes;
+constexpr size_t kRunwaySamples = robot::kRobotRunwaySamples;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -38,7 +39,7 @@ static std::vector<uint8_t> build_header() {
   push16(h, 0);   // skip
   push16(h, 1);   // numFrames
   push16(h, 0);   // paletteSize
-  push16(h, static_cast<uint16_t>(kPrimerHeaderSize + 8));
+  push16(h, static_cast<uint16_t>(kPrimerHeaderSize + kRunwayBytes));
   push16(h, 1);   // xRes
   push16(h, 1);   // yRes
   h.push_back(0); // hasPalette
@@ -57,9 +58,10 @@ static std::vector<uint8_t> build_header() {
 
 static std::vector<uint8_t> build_primer_header() {
   std::vector<uint8_t> p;
-  push32(p, kPrimerHeaderSize + 8);
+  push32(p, kPrimerHeaderSize +
+                     static_cast<uint32_t>(kRunwayBytes));
   push16(p, 0); // compType
-  push32(p, 8); // even size
+  push32(p, static_cast<uint32_t>(kRunwayBytes)); // even size
   push32(p, 0); // odd size
   return p;
 }
@@ -73,7 +75,7 @@ TEST_CASE("Odd-sized audio payload throws") {
   auto data = build_header();
   auto primer = build_primer_header();
   data.insert(data.end(), primer.begin(), primer.end());
-  for (int i = 0; i < 8; ++i)
+  for (size_t i = 0; i < kRunwayBytes; ++i)
     data.push_back(0x88); // even primer data
 
   push16(data, 2);  // frame size
@@ -147,7 +149,7 @@ TEST_CASE("Odd-sized audio payload throws") {
     actualSamples.push_back(static_cast<int16_t>(lo | hi));
   }
 
-  std::vector<std::byte> zeroPrefix(kRunwayBytes, std::byte{0});
+  std::vector<std::byte> zeroPrefix(kZeroPrefixBytes, std::byte{0});
   std::vector<std::byte> block = zeroPrefix;
   block.push_back(std::byte{static_cast<unsigned char>(0x88)});
   int16_t predictor = 0;
