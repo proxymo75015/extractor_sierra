@@ -169,11 +169,7 @@ TEST_CASE("Audio block with runway triggers error") {
     actualSamples.push_back(static_cast<int16_t>(lo | hi));
   }
 
-  std::vector<std::byte> primerRunway(
-      kRunwayBytes, std::byte{static_cast<unsigned char>(0x88)});
   int16_t predictor = 0;
-  robot::dpcm16_decompress(std::span<const std::byte>(primerRunway), predictor);
-
   std::vector<std::byte> runway;
   runway.reserve(kRunwayBytes);
   for (size_t i = 0; i < kRunwayBytes; ++i) {
