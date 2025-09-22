@@ -174,6 +174,8 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
   REQUIRE(expected == samples);
 
   int16_t runwayPredictor = 0;
+  auto runwaySpan =
+      std::span(zeroPrefix).first(robot::kRobotRunwayBytes);  
   auto runwaySamplesVector =
       robot::dpcm16_decompress(runwaySpan, runwayPredictor);
   REQUIRE(runwaySamplesVector.size() == runwaySamples);
