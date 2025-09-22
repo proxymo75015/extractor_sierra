@@ -116,13 +116,13 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_yRes = read_scalar<int16_t>(m_fp, m_bigEndian);
   m_hasPalette = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
   m_hasAudio = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
-  if (m_hasAudio && m_audioBlkSize < kAudioRunwayBytes) {
+  if (m_hasAudio && m_audioBlkSize < kRobotZeroCompressSize) {
     log_warn(m_srcPath,
              "Taille de bloc audio trop petite: " +
                  std::to_string(m_audioBlkSize) + " (minimum " +
-                 std::to_string(kAudioRunwayBytes) + ")",
+                 std::to_string(kRobotZeroCompressSize) + ")",
              m_options);
-    m_audioBlkSize = kAudioRunwayBytes;
+    m_audioBlkSize = static_cast<uint16_t>(kRobotZeroCompressSize);
   }
   m_fp.seekg(2, std::ios::cur);
   m_frameRate = read_scalar<int16_t>(m_fp, m_bigEndian);
@@ -338,10 +338,10 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
   if (primer.empty()) {
     return;
   }
-  if (primer.size() < kAudioRunwayBytes) {
+  if (primer.size() < kRobotZeroCompressSize) {
     throw std::runtime_error("Primer audio tronqué");
   }
-  const size_t runwaySamples = kAudioRunwayBytes * 2; // kAudioRunwayBytes bytes => 16 samples
+  const size_t runwaySamples = kRobotZeroCompressSize * 2;
   int16_t predictor = 0;
   auto pcm = dpcm16_decompress(std::span(primer), predictor);
   if (!m_extractAudio) {
@@ -362,16 +362,12 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
 
 void RobotExtractor::process_audio_block(std::span<const std::byte> block,
                                          bool isEven) {
-  if (block.size() < kAudioRunwayBytes) {
+  if (block.size() < kRobotZeroCompressSize) {
     throw std::runtime_error("Bloc audio inutilisable");
-  }
-  auto payloadSize = block.size() - kAudioRunwayBytes;
-  if (payloadSize % 2 != 0) {
-    throw std::runtime_error("Odd-sized audio payload");
   }
   int16_t predictor = 0;
   auto samples = dpcm16_decompress(block, predictor);
-  const size_t runwaySamples = kAudioRunwayBytes * 2;
+  const size_t runwaySamples = kRobotZeroCompressSize * 2;
   if (samples.size() >= runwaySamples) {
     samples.erase(samples.begin(),
                   samples.begin() + static_cast<std::ptrdiff_t>(runwaySamples));
@@ -757,7 +753,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
   if (m_hasAudio) {
     if (m_packetSizes[frameNo] > m_frameSizes[frameNo]) {
       uint32_t audioBlkLen = m_packetSizes[frameNo] - m_frameSizes[frameNo];
-      if (audioBlkLen < kAudioRunwayBytes) {
+      if (audioBlkLen < kRobotZeroCompressSize) {
         m_fp.seekg(static_cast<std::streamoff>(audioBlkLen), std::ios::cur);
       } else {
         const int64_t expectedAudioBlockSize =
@@ -812,36 +808,15 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                         checked_streamsize(truncated.size()));
             }
             consumed += static_cast<int64_t>(bytesToRead);
-            const size_t expectedSize =
-                expectedAudioBlockSize > 0
-                    ? static_cast<size_t>(expectedAudioBlockSize)
-                    : size_t{0};
-            const size_t truncatedSize = truncated.size();            
-            const size_t blockCapacity =
-                std::max({expectedSize, static_cast<size_t>(kAudioRunwayBytes),
-                          truncatedSize});
-            block.assign(blockCapacity, std::byte{0});
-            const size_t runwayBytes =
-                std::min(blockCapacity, static_cast<size_t>(kAudioRunwayBytes));
-            size_t runwayCopied = 0;
-            if (runwayBytes > 0 && truncatedSize >= runwayBytes) {
-              runwayCopied = runwayBytes;
-              std::copy_n(truncated.begin(),
-                          static_cast<std::ptrdiff_t>(runwayCopied),
-                          block.begin());
+            const size_t zeroPrefix = kRobotZeroCompressSize;
+            if (bytesToRead > std::numeric_limits<size_t>::max() - zeroPrefix) {
+              throw std::runtime_error("Audio block too large");
             }
-            if (blockCapacity > runwayBytes && truncatedSize > runwayCopied) {
-              const size_t payloadCapacity = blockCapacity - runwayBytes;
-              const size_t payloadToCopy = truncatedSize - runwayCopied;
-              if (payloadToCopy > payloadCapacity) {
-                throw std::runtime_error(
-                    "Audio block payload exceeds allocated capacity");
-              }
-              auto src = truncated.begin() +
-                         static_cast<std::ptrdiff_t>(runwayCopied);
+            block.assign(zeroPrefix + truncated.size(), std::byte{0});
+            if (!truncated.empty()) {
               auto dst = block.begin() +
-                         static_cast<std::ptrdiff_t>(runwayBytes);
-              std::copy_n(src, static_cast<std::ptrdiff_t>(payloadToCopy), dst);
+                         static_cast<std::ptrdiff_t>(zeroPrefix);
+              std::copy(truncated.begin(), truncated.end(), dst);
             }
           }
           // Les canaux audio sont déterminés par la parité de la position :
