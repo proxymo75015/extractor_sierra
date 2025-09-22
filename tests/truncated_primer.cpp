@@ -64,9 +64,11 @@ TEST_CASE("Primer audio pair tronqué") {
     fs::path outDir = tmpDir / "trunc_even_out";
     fs::create_directories(outDir);
 
-    auto data =
-        build_header(static_cast<uint16_t>(kPrimerHeaderSize + 8));
-    auto primer = build_primer_header(kPrimerHeaderSize + 8, 4, 4);
+    auto data = build_header(static_cast<uint16_t>(
+        kPrimerHeaderSize + robot::kRobotRunwayBytes));
+    auto primer = build_primer_header(kPrimerHeaderSize +
+                                          robot::kRobotRunwayBytes,
+                                      4, 4);
     data.insert(data.end(), primer.begin(), primer.end());
     data.push_back(0xAA); // données tronquées (2 < 4)
     data.push_back(0xBB);
