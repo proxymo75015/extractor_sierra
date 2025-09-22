@@ -9,6 +9,7 @@ namespace fs = std::filesystem;
 
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
+constexpr uint32_t kRunwayBytes = static_cast<uint32_t>(robot::kRobotRunwayBytes);
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -32,7 +33,7 @@ static std::vector<uint8_t> build_header() {
   push16(h, 0);   // skip
   push16(h, 1);   // numFrames
   push16(h, 0);   // paletteSize
-  push16(h, static_cast<uint16_t>(kPrimerHeaderSize + 8));
+  push16(h, static_cast<uint16_t>(kPrimerHeaderSize + kRunwayBytes));
   push16(h, 1);   // xRes
   push16(h, 1);   // yRes
   h.push_back(0); // hasPalette
@@ -51,9 +52,9 @@ static std::vector<uint8_t> build_header() {
 
 static std::vector<uint8_t> build_primer_header() {
   std::vector<uint8_t> p;
-  push32(p, kPrimerHeaderSize + 8);
+  push32(p, kPrimerHeaderSize + kRunwayBytes);
   push16(p, 0); // compType
-  push32(p, 8); // even size
+  push32(p, kRunwayBytes); // even size
   push32(p, 0); // odd size
   return p;
 }
@@ -67,7 +68,7 @@ TEST_CASE("Negative audio position throws") {
   auto data = build_header();
   auto primer = build_primer_header();
   data.insert(data.end(), primer.begin(), primer.end());
-  for (int i = 0; i < 8; ++i)
+  for (uint32_t i = 0; i < kRunwayBytes; ++i)
     data.push_back(0x88); // even primer data
 
   push16(data, 2);  // frame size
@@ -87,7 +88,7 @@ TEST_CASE("Negative audio position throws") {
 
   push32(data, static_cast<uint32_t>(-2)); // negative pos
   push32(data, 10);                        // size (unused, but valid)
-  for (int i = 0; i < 8; ++i)
+  for (uint32_t i = 0; i < kRunwayBytes; ++i)
     data.push_back(0); // runway
   for (int i = 0; i < 2; ++i)
     data.push_back(0); // audio data
