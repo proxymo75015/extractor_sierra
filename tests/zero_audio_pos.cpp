@@ -103,8 +103,8 @@ TEST_CASE("Zero audio position is skipped") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
-  auto wavEven = outDir / "frame_00001_even.wav";
-  auto wavOdd = outDir / "frame_00001_odd.wav";
+  auto wavEven = outDir / "frame_00000_even.wav";
+  auto wavOdd = outDir / "frame_00000_odd.wav";
   REQUIRE_FALSE(fs::exists(wavEven));
   REQUIRE_FALSE(fs::exists(wavOdd));
 }
