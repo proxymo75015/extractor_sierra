@@ -17,7 +17,7 @@ namespace fs = std::filesystem;
 
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
-constexpr size_t kRunwayBytes = 8;
+constexpr size_t kRunwayBytes = robot::kRobotZeroCompressSize;
 constexpr size_t kRunwaySamples = kRunwayBytes * 2;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
@@ -192,13 +192,13 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   auto actualBlock0 = readSamples(wavFrame1);
   auto actualBlock1 = readSamples(wavFrame2);
 
-  std::vector<std::byte> block0(16, std::byte{0});
-  if (block0.size() > kRunwayBytes) {
-    block0[kRunwayBytes] = std::byte{static_cast<unsigned char>(0x88)};
-  }
-  if (block0.size() > kRunwayBytes + 1) {
-    block0[kRunwayBytes + 1] = std::byte{static_cast<unsigned char>(0x77)};
-  }
+  std::vector<std::byte> block0Prefix(kRunwayBytes, std::byte{0});
+  std::vector<std::byte> block0Payload = {
+      std::byte{static_cast<unsigned char>(0x88)},
+      std::byte{static_cast<unsigned char>(0x77)},
+  };
+  std::vector<std::byte> block0 = block0Prefix;
+  block0.insert(block0.end(), block0Payload.begin(), block0Payload.end());
   int16_t predictor0 = 0;
   auto block0Samples =
       robot::dpcm16_decompress(std::span<const std::byte>(block0), predictor0);
@@ -210,7 +210,7 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   }
 
   std::vector<std::byte> block1;
-  block1.reserve(16);
+  block1.reserve(runway1.size() + payload1.size());
   for (uint8_t b : runway1) {
     block1.push_back(static_cast<std::byte>(b));
   }
