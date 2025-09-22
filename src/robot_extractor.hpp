@@ -131,8 +131,7 @@ private:
   void parseHeaderFields(bool bigEndian);
   void readPrimer();
   void readPalette();
-  void processPrimerChannel(std::vector<std::byte> &primer, int16_t &predictor,
-                            bool isEven);
+  void processPrimerChannel(std::vector<std::byte> &primer, bool isEven);
   void process_audio_block(std::span<const std::byte> block, bool isEven);
   void readSizesAndCues();
   bool exportFrame(int frameNo, nlohmann::json &frameJson);
@@ -176,8 +175,6 @@ private:
   std::vector<std::byte> m_frameBuffer;
   std::vector<std::byte> m_celBuffer;
   std::vector<std::byte> m_rgbaBuffer;
-  int16_t m_audioPredictorEven = 0;
-  int16_t m_audioPredictorOdd = 0;
   size_t m_evenAudioIndex = 0;
   size_t m_oddAudioIndex = 0;
 };
@@ -223,12 +220,6 @@ struct RobotExtractorTester {
   }
   static int16_t &xRes(RobotExtractor &r) { return r.m_xRes; }
   static int16_t &yRes(RobotExtractor &r) { return r.m_yRes; }
-  static int16_t &audioPredictorEven(RobotExtractor &r) {
-    return r.m_audioPredictorEven;
-  }
-  static int16_t &audioPredictorOdd(RobotExtractor &r) {
-    return r.m_audioPredictorOdd;
-  }
   static std::vector<std::byte> &rgbaBuffer(RobotExtractor &r) {
     return r.m_rgbaBuffer;
   }
