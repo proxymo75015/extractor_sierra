@@ -16,8 +16,8 @@ namespace {
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
 constexpr uint16_t kAudioBlockSize = 24;
-constexpr size_t kRunwayBytes = 8;
-constexpr size_t kRunwaySamples = kRunwayBytes * 2;
+constexpr size_t kRunwayBytes = robot::kRobotRunwayBytes;
+constexpr size_t kRunwaySamples = robot::kRobotRunwaySamples;
 
 void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
