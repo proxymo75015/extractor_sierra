@@ -109,7 +109,7 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
     fs::remove(input);
   }
 
-  constexpr int kRunwayBytes = 8;
+  constexpr size_t kZeroPrefix = robot::kRobotZeroCompressSize;
   std::array<uint8_t, 2> audioPayload{0x10, 0x32};
   std::vector<uint8_t> payload(audioPayload.begin(), audioPayload.end());
   auto data = build_robot_with_audio(
@@ -152,26 +152,44 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
     REQUIRE(wavFile.gcount() == static_cast<std::streamsize>(dataSize));
   }
 
-  int16_t predictor = 0;
-  std::array<std::byte, 8> zeroRunway{};
-  robot::dpcm16_decompress_last(std::span(zeroRunway), predictor);
+  std::vector<std::byte> zeroPrefix(kZeroPrefix, std::byte{0});
+  std::vector<std::byte> payloadBytes(payload.size());
+  std::transform(payload.begin(), payload.end(), payloadBytes.begin(),
+                 [](uint8_t value) { return std::byte{value}; });
 
-  std::array<std::byte, 2> payloadBytes{std::byte{audioPayload[0]},
-                                        std::byte{audioPayload[1]}};
-  constexpr size_t kExpectedPayloadBytes = 8;
-  std::vector<std::byte> audioBytes;
-  audioBytes.reserve(kExpectedPayloadBytes);
-  audioBytes.insert(audioBytes.end(), payloadBytes.begin(), payloadBytes.end());
-  if (audioBytes.size() < kExpectedPayloadBytes) {
-    audioBytes.resize(kExpectedPayloadBytes, std::byte{0});
-  }
-  auto expectedSamples =
-      robot::dpcm16_decompress(std::span(audioBytes), predictor);
+  std::vector<std::byte> reconstructed;
+  reconstructed.reserve(zeroPrefix.size() + payloadBytes.size());
+  reconstructed.insert(reconstructed.end(), zeroPrefix.begin(), zeroPrefix.end());
+  reconstructed.insert(reconstructed.end(), payloadBytes.begin(),
+                       payloadBytes.end());
 
-  REQUIRE(expectedSamples.size() == samples.size());
-  for (size_t i = 0; i < samples.size(); ++i) {
-    REQUIRE(expectedSamples[i] == samples[i]);
-  }
+  int16_t combinedPredictor = 0;
+  auto decoded = robot::dpcm16_decompress(std::span(reconstructed),
+                                          combinedPredictor);
+  const size_t runwaySamples = kZeroPrefix * 2;
+  REQUIRE(decoded.size() >= runwaySamples);
+  std::vector<int16_t> expected(
+      decoded.begin() + static_cast<std::ptrdiff_t>(runwaySamples),
+      decoded.end());
+  REQUIRE(expected == samples);
+
+  int16_t runwayPredictor = 0;
+  auto runwaySamplesVector =
+      robot::dpcm16_decompress(std::span(zeroPrefix), runwayPredictor);
+  REQUIRE(runwaySamplesVector.size() == runwaySamples);
+  std::vector<int16_t> decodedRunway(
+      decoded.begin(),
+      decoded.begin() + static_cast<std::ptrdiff_t>(runwaySamples));
+  REQUIRE(runwaySamplesVector == decodedRunway);
+
+  auto payloadSamplesVector =
+      robot::dpcm16_decompress(std::span(payloadBytes), runwayPredictor);
+  REQUIRE(payloadSamplesVector == samples);
+  std::vector<int16_t> recombined = runwaySamplesVector;
+  recombined.insert(recombined.end(), payloadSamplesVector.begin(),
+                    payloadSamplesVector.end());
+  REQUIRE(recombined == decoded);
+  REQUIRE(runwayPredictor == combinedPredictor);
 }
 
 TEST_CASE("Audio block with zero position is skipped") {
@@ -186,7 +204,7 @@ TEST_CASE("Audio block with zero position is skipped") {
     fs::remove(input);
   }
 
-  constexpr int kRunwayBytes = 8;
+  constexpr size_t kRunwayBytes = robot::kRobotZeroCompressSize;
   std::array<uint8_t, 8> audioPayload{0x01, 0x23, 0x45, 0x67,
                                       0x89, 0xAB, 0xCD, 0xEF};
   std::vector<uint8_t> audioBlock(kRunwayBytes + audioPayload.size(), 0);
