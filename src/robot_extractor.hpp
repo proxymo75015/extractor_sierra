@@ -154,11 +154,16 @@ private:
   void readPrimer();
   void readPalette();
   void processPrimerChannel(std::vector<std::byte> &primer, bool isEven);
-  void process_audio_block(std::span<const std::byte> block, bool isEven);
+  void process_audio_block(std::span<const std::byte> block, int32_t pos,
+                           bool isEven);
   void readSizesAndCues();
   bool exportFrame(int frameNo, nlohmann::json &frameJson);
   void writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate,
                 size_t blockIndex, bool isEvenChannel);
+  void appendChannelSamples(bool isEven, int32_t pos,
+                            const std::vector<int16_t> &samples);
+  void finalizeAudio();
+  std::vector<int16_t> buildChannelStream(bool isEven) const;
 
   static ParsedPalette parseHunkPalette(std::span<const std::byte> raw,
                                         bool bigEndian);
@@ -200,8 +205,12 @@ private:
   std::vector<std::byte> m_frameBuffer;
   std::vector<std::byte> m_celBuffer;
   std::vector<std::byte> m_rgbaBuffer;
-  size_t m_evenAudioIndex = 0;
-  size_t m_oddAudioIndex = 0;
+  struct ChannelAudio {
+    std::vector<int16_t> samples;
+    std::vector<uint8_t> occupied;
+  };
+  ChannelAudio m_evenChannelAudio;
+  ChannelAudio m_oddChannelAudio;
 };
 
 #ifdef ROBOT_EXTRACTOR_TESTING
@@ -263,6 +272,11 @@ struct RobotExtractorTester {
   static bool exportFrame(RobotExtractor &r, int frameNo,
                           nlohmann::json &frameJson) {
     return r.exportFrame(frameNo, frameJson);
+  }
+  static void finalizeAudio(RobotExtractor &r) { r.finalizeAudio(); }
+  static std::vector<int16_t> buildChannelStream(RobotExtractor &r,
+                                                 bool isEven) {
+    return r.buildChannelStream(isEven);
   }
   static RobotExtractor::ParsedPalette parsePalette(const RobotExtractor &r) {
     return RobotExtractor::parseHunkPalette(r.m_palette, r.m_bigEndian);
