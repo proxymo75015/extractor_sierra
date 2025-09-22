@@ -17,9 +17,12 @@ namespace fs = std::filesystem;
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
 constexpr uint16_t kAudioBlockSize = 24;
-constexpr size_t kRunwayBytes = robot::kRobotZeroCompressSize;
+constexpr size_t kZeroPrefixBytes = robot::kRobotZeroCompressSize;
+constexpr size_t kRunwayBytes = robot::kRobotRunwayBytes;
+constexpr size_t kRunwaySamples = robot::kRobotRunwaySamples;
 constexpr size_t kTruncatedPayloadBytes = 2;
-constexpr size_t kBlockBytes = static_cast<size_t>(kAudioBlockSize) - 8;
+constexpr size_t kBlockBytes = static_cast<size_t>(kAudioBlockSize) -
+                               robot::kRobotAudioHeaderSize;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -43,7 +46,7 @@ static std::vector<uint8_t> build_header() {
   push16(h, 0);   // skip
   push16(h, 1);   // numFrames
   push16(h, 0);   // paletteSize
-  push16(h, static_cast<uint16_t>(kPrimerHeaderSize + 8));
+  push16(h, static_cast<uint16_t>(kPrimerHeaderSize + kRunwayBytes));
   push16(h, 1);   // xRes
   push16(h, 1);   // yRes
   h.push_back(0); // hasPalette
@@ -62,9 +65,10 @@ static std::vector<uint8_t> build_header() {
 
 static std::vector<uint8_t> build_primer_header() {
   std::vector<uint8_t> p;
-  push32(p, kPrimerHeaderSize + 8);
+  push32(p, kPrimerHeaderSize +
+                     static_cast<uint32_t>(kRunwayBytes));
   push16(p, 0); // compType
-  push32(p, 8); // even size
+  push32(p, static_cast<uint32_t>(kRunwayBytes)); // even size
   push32(p, 0); // odd size
   return p;
 }
@@ -163,7 +167,7 @@ TEST_CASE("Audio block with runway triggers error") {
     actualSamples.push_back(static_cast<int16_t>(lo | hi));
   }
 
-  std::vector<std::byte> zeroPrefix(kRunwayBytes, std::byte{0});
+  std::vector<std::byte> zeroPrefix(kZeroPrefixBytes, std::byte{0});
   std::vector<std::byte> payload = {
       std::byte{static_cast<unsigned char>(0x88)},
       std::byte{static_cast<unsigned char>(0x77)},
@@ -176,10 +180,9 @@ TEST_CASE("Audio block with runway triggers error") {
   auto allSamples =
       robot::dpcm16_decompress(std::span<const std::byte>(block), predictor);
   std::vector<int16_t> expectedSamples;
-  constexpr size_t runwaySamples = kRunwayBytes * 2;
-  if (allSamples.size() > runwaySamples) {
+  if (allSamples.size() > kRunwaySamples) {
     expectedSamples.assign(allSamples.begin() +
-                               static_cast<std::ptrdiff_t>(runwaySamples),
+                               static_cast<std::ptrdiff_t>(kRunwaySamples),
                            allSamples.end());
   }
 
