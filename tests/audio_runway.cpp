@@ -17,11 +17,9 @@ namespace fs = std::filesystem;
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
 constexpr uint16_t kAudioBlockSize = 24;
-constexpr size_t kRunwayBytes = 8;
+constexpr size_t kRunwayBytes = robot::kRobotZeroCompressSize;
 constexpr size_t kTruncatedPayloadBytes = 2;
 constexpr size_t kBlockBytes = static_cast<size_t>(kAudioBlockSize) - 8;
-constexpr size_t kExpectedPayloadBytes =
-    kBlockBytes > kRunwayBytes ? kBlockBytes - kRunwayBytes : size_t{0};
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x & 0xFF));
@@ -103,17 +101,13 @@ TEST_CASE("Audio block with runway triggers error") {
 
   push32(data, 2);  // pos (even)
   const uint32_t truncatedSize =
-      static_cast<uint32_t>(kRunwayBytes + kTruncatedPayloadBytes);
+      static_cast<uint32_t>(kTruncatedPayloadBytes);
   push32(data, truncatedSize);
-  for (size_t i = 0; i < kRunwayBytes; ++i)
-    data.push_back(static_cast<uint8_t>(i));
   data.push_back(0x88);
   data.push_back(0x77);
-  const size_t payloadPadding = kExpectedPayloadBytes > kTruncatedPayloadBytes
-                                    ? kExpectedPayloadBytes - kTruncatedPayloadBytes
-                                    : size_t{0};
-  for (size_t i = 0; i < payloadPadding; ++i)
-    data.push_back(0); // padding to audio block size
+  const size_t payloadPadding =
+      kBlockBytes > truncatedSize ? kBlockBytes - truncatedSize : size_t{0};
+  data.insert(data.end(), payloadPadding, 0);
 
   std::ofstream out(input, std::ios::binary);
   out.write(reinterpret_cast<const char *>(data.data()),
@@ -169,23 +163,13 @@ TEST_CASE("Audio block with runway triggers error") {
     actualSamples.push_back(static_cast<int16_t>(lo | hi));
   }
 
-  std::vector<std::byte> runway;
-  runway.reserve(kRunwayBytes);
-  for (size_t i = 0; i < kRunwayBytes; ++i) {
-    runway.push_back(static_cast<std::byte>(i));
-  }
-
+  std::vector<std::byte> zeroPrefix(kRunwayBytes, std::byte{0});
   std::vector<std::byte> payload = {
       std::byte{static_cast<unsigned char>(0x88)},
       std::byte{static_cast<unsigned char>(0x77)},
   };
   REQUIRE(payload.size() == kTruncatedPayloadBytes);
-  if (payload.size() < kExpectedPayloadBytes) {
-    payload.resize(kExpectedPayloadBytes,
-                   std::byte{static_cast<unsigned char>(0)});
-  }
-  REQUIRE(payload.size() == kExpectedPayloadBytes);
-  std::vector<std::byte> block = runway;
+  std::vector<std::byte> block = zeroPrefix;
   block.insert(block.end(), payload.begin(), payload.end());
 
   int16_t predictor = 0;
