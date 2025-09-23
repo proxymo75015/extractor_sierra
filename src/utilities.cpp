@@ -313,31 +313,17 @@ std::vector<std::byte> lzs_decompress(std::span<const std::byte> in,
     return out;
 }
 
-constexpr std::array<int16_t, 16> DPCM_TABLE = {
-    -0x0c0, -0x080, -0x040, -0x020,
-    -0x010, -0x008, -0x004, -0x002,
-     0x002,  0x004,  0x008,  0x010,
-     0x020,  0x040,  0x080,  0x0c0,
-};
-
 std::vector<int16_t> dpcm16_decompress(std::span<const std::byte> in, int16_t &carry) {
     std::vector<int16_t> out;
-    if (in.size() > SIZE_MAX / 2) {
-        throw std::runtime_error("Entrée trop volumineuse");
-    }
-    out.reserve(in.size() * 2);
+    out.reserve(in.size());
 
     int32_t predictor = carry;
     for (auto byte : in) {
-        uint8_t b = std::to_integer<uint8_t>(byte);
-        uint8_t hi = b >> 4;
-        uint8_t lo = b & 0x0F;
-        for (uint8_t nib : {hi, lo}) {
-            predictor += DPCM_TABLE[nib];
-            predictor = std::clamp(predictor, -32768, 32767);
-            carry = static_cast<int16_t>(predictor);
-            out.push_back(carry);
-        }
+        int8_t delta = static_cast<int8_t>(std::to_integer<uint8_t>(byte));
+        predictor += delta;
+        predictor = std::clamp(predictor, -32768, 32767);
+        carry = static_cast<int16_t>(predictor);
+        out.push_back(carry);
     }
     
     return out;
@@ -346,13 +332,8 @@ std::vector<int16_t> dpcm16_decompress(std::span<const std::byte> in, int16_t &c
 void dpcm16_decompress_last(std::span<const std::byte> in, int16_t &carry) {
     int32_t predictor = carry;
     for (auto byte : in) {
-        uint8_t b = std::to_integer<uint8_t>(byte);
-        uint8_t hi = b >> 4;
-        predictor += DPCM_TABLE[hi];
-        predictor = std::clamp(predictor, -32768, 32767);
-        carry = static_cast<int16_t>(predictor);
-        uint8_t lo = b & 0x0F;
-        predictor += DPCM_TABLE[lo];
+        int8_t delta = static_cast<int8_t>(std::to_integer<uint8_t>(byte));
+        predictor += delta;
         predictor = std::clamp(predictor, -32768, 32767);
         carry = static_cast<int16_t>(predictor);
     }
