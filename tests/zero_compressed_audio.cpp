@@ -124,10 +124,22 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
-  auto wavOdd = outDir / "frame_00000_odd.wav";
-  REQUIRE(fs::exists(wavOdd));
+  const auto evenStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, true);
+  const auto oddStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, false);
+  const bool useEven = !evenStream.empty();
+  if (useEven) {
+    REQUIRE(oddStream.empty());
+  } else {
+    REQUIRE_FALSE(oddStream.empty());
+  }
 
-  std::ifstream wavFile(wavOdd, std::ios::binary);
+  const auto selectedPath =
+      useEven ? outDir / "frame_00000_even.wav" : outDir / "frame_00000_odd.wav";
+  REQUIRE(fs::exists(selectedPath));
+
+  std::ifstream wavFile(selectedPath, std::ios::binary);
   REQUIRE(wavFile.is_open());
 
   std::array<char, 44> header{};
@@ -152,6 +164,9 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
     REQUIRE(wavFile.gcount() == static_cast<std::streamsize>(dataSize));
   }
 
+  const auto &expectedStream = useEven ? evenStream : oddStream;
+  REQUIRE(expectedStream == samples);
+  
   std::vector<std::byte> zeroPrefix(kZeroPrefix, std::byte{0});
   std::vector<std::byte> payloadBytes(payload.size());
   std::transform(payload.begin(), payload.end(), payloadBytes.begin(),
