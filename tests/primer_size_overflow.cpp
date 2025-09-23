@@ -5,6 +5,9 @@
 
 #include "robot_extractor.hpp"
 
+using robot::RobotExtractor;
+using robot::RobotExtractorTester;
+
 namespace fs = std::filesystem;
 
 constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
@@ -64,19 +67,40 @@ TEST_CASE("Somme des primers dépasse les bornes") {
     fs::path outDir = tmpDir / "overflow_primer_out";
     fs::create_directories(outDir);
 
-    const uint32_t evenSize = 4;
-    const uint32_t oddSize = 5;
+    const uint32_t evenSize = static_cast<uint32_t>(robot::kRobotRunwayBytes + 2);
+    const uint32_t oddSize = 0;
     const uint32_t total = kPrimerHeaderSize + evenSize + oddSize;
     auto data = build_header(static_cast<uint16_t>(
         kPrimerHeaderSize + robot::kRobotRunwayBytes));
     auto primer = build_primer_header(total, evenSize, oddSize);
     data.insert(data.end(), primer.begin(), primer.end());
+    
+    std::vector<uint8_t> primerData(robot::kRobotRunwayBytes, 0);
+    primerData.push_back(0x02);
+    primerData.push_back(0x00);
+    data.insert(data.end(), primerData.begin(), primerData.end());
+
+    push16(data, 2); // packet size
+    for (int i = 0; i < 256; ++i) push32(data, 0); // cue times
+    for (int i = 0; i < 256; ++i) push16(data, 0); // cue values
+
+    data.resize(((data.size() + 2047) / 2048) * 2048, 0);
+    data.push_back(0);
+    data.push_back(0);
 
     std::ofstream out(input, std::ios::binary);
     out.write(reinterpret_cast<const char*>(data.data()),
               static_cast<std::streamsize>(data.size()));
     out.close();
 
-    robot::RobotExtractor extractor(input, outDir, false);
-    REQUIRE_THROWS_AS(extractor.extract(), std::runtime_error);
+    RobotExtractor extractor(input, outDir, false);
+    REQUIRE_NOTHROW(extractor.extract());
+
+    const auto &frames = RobotExtractorTester::frameSizes(extractor);
+    REQUIRE(frames.size() == 1);
+    REQUIRE(frames[0] == 2);
+
+    const auto &packets = RobotExtractorTester::packetSizes(extractor);
+    REQUIRE(packets.size() == 1);
+    REQUIRE(packets[0] == 2);
 }
