@@ -73,11 +73,11 @@ static std::vector<int16_t> decode_block(const std::vector<uint8_t> &bytes) {
   }
   int16_t predictor = 0;
   auto decoded = robot::dpcm16_decompress(std::span(asBytes), predictor);
-  if (decoded.size() <= robot::kRobotRunwaySamples) {
+  if (decoded.size() <= robot::kRobotRunwayBytes) {
     return {};
   }
   return std::vector<int16_t>(decoded.begin() +
-                                  static_cast<std::ptrdiff_t>(robot::kRobotRunwaySamples),
+                                  static_cast<std::ptrdiff_t>(robot::kRobotRunwayBytes),
                               decoded.end());
 }
 
