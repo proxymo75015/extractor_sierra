@@ -17,7 +17,7 @@ namespace robot {
 
 inline constexpr size_t kRobotZeroCompressSize = 2048;
 inline constexpr size_t kRobotRunwayBytes = 8;
-inline constexpr size_t kRobotRunwaySamples = kRobotRunwayBytes * 2;
+inline constexpr size_t kRobotRunwaySamples = kRobotRunwayBytes;
 inline constexpr size_t kRobotAudioHeaderSize = 8;
 
 inline bool rangesOverlap(const std::byte *aBegin, const std::byte *aEnd,
