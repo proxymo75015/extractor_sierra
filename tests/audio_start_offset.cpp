@@ -132,12 +132,12 @@ TEST_CASE("Audio start offset routed using doubled positions") {
 
   std::array<BlockInfo, 2> blocks;
   blocks[0].position = 3;
-  blocks[0].even = true;
+  blocks[0].even = false;
   blocks[0].raw = {0x12, 0x34, 0x56, 0x78, 0x9A};
   blocks[0].samples = decompress_truncated_block(blocks[0].raw);
 
   blocks[1].position = 4;
-  blocks[1].even = false;
+  blocks[1].even = true;
   blocks[1].raw = {0xAB, 0xCD, 0xEF, 0x10, 0x24};
   blocks[1].samples = decompress_truncated_block(blocks[1].raw);
 
