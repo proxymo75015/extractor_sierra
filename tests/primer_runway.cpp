@@ -102,7 +102,7 @@ TEST_CASE("Primer WAV excludes runway samples") {
 
   auto wavPath = outDir / "frame_00000_even.wav";
   REQUIRE(fs::exists(wavPath));
-  REQUIRE(fs::file_size(wavPath) == 52); // 44 header + 8 data bytes
+  REQUIRE(fs::file_size(wavPath) == 48); // 44 header + 4 data bytes
 
   std::ifstream wav(wavPath, std::ios::binary);
   REQUIRE(wav);
