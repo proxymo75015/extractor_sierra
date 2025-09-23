@@ -450,18 +450,41 @@ void RobotExtractor::appendChannelSamples(bool isEven, int32_t pos,
     throw std::runtime_error("Insertion audio dépasse la capacité");
   }
   size_t requiredSize = startSample + samples.size();
-  if (channel.samples.size() < startSample) {
-    channel.samples.resize(startSample, 0);
-    channel.occupied.resize(startSample, 0);
+
+  size_t leadingOverlap = 0;
+  while (leadingOverlap < samples.size()) {
+    size_t index = startSample + leadingOverlap;
+    if (index >= channel.occupied.size() || !channel.occupied[index]) {
+      break;
+    }
+    if (channel.samples[index] != samples[leadingOverlap]) {
+      throw std::runtime_error("Chevauchement de blocs audio détecté");
+    }
+    ++leadingOverlap;
+  }
+
+  if (leadingOverlap == samples.size()) {
+    return;
+  }
+
+  size_t trimmedStart = startSample + leadingOverlap;
+
+  if (channel.samples.size() < trimmedStart) {
+    channel.samples.resize(trimmedStart, 0);
+    channel.occupied.resize(trimmedStart, 0);
   }
   if (channel.samples.size() < requiredSize) {
     channel.samples.resize(requiredSize, 0);
     channel.occupied.resize(requiredSize, 0);
   }
-  for (size_t i = 0; i < samples.size(); ++i) {
+
+  for (size_t i = leadingOverlap; i < samples.size(); ++i) {
     size_t index = startSample + i;
     if (channel.occupied[index]) {
-      throw std::runtime_error("Chevauchement de blocs audio détecté");
+      if (channel.samples[index] != samples[i]) {
+        throw std::runtime_error("Chevauchement de blocs audio détecté");
+      }
+      continue;
     }
     channel.samples[index] = samples[i];
     channel.occupied[index] = 1;
