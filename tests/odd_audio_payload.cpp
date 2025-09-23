@@ -16,7 +16,7 @@ constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
 constexpr size_t kZeroPrefixBytes = robot::kRobotZeroCompressSize;
 constexpr size_t kRunwayBytes = robot::kRobotRunwayBytes;
-constexpr size_t kRunwaySamples = robot::kRobotRunwaySamples;
+constexpr size_t kRunwaySamples = robot::kRobotRunwayBytes;
 constexpr uint32_t kBlockPosHalfSamples = 4;
 
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
