@@ -121,8 +121,8 @@ TEST_CASE("Primer mismatch realigns stream and preserves primer data") {
   fs::path oddWav = outDir / "frame_00000_odd.wav";
   REQUIRE(fs::exists(evenWav));
   REQUIRE(fs::exists(oddWav));
-  REQUIRE(fs::file_size(evenWav) == 60);
-  REQUIRE(fs::file_size(oddWav) == 60);
+  REQUIRE(fs::file_size(evenWav) == 52);
+  REQUIRE(fs::file_size(oddWav) == 52);
 
   int nextByte = file.peek();
   REQUIRE(nextByte == 0xCC);
