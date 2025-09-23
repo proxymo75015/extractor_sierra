@@ -281,22 +281,19 @@ void RobotExtractor::readPrimer() {
     const std::uint64_t primerSizesSum =
         static_cast<std::uint64_t>(m_evenPrimerSize) +
         static_cast<std::uint64_t>(m_oddPrimerSize);
-    const std::uint64_t totalRequired = primerHeaderSizeU + primerSizesSum;
-    const bool reservedCoversHeader = reservedSize >= totalRequired;
     const std::uint64_t reservedDataSize =
-        reservedCoversHeader ? (reservedSize - primerHeaderSizeU) : reservedSize;
+        reservedSize >= primerHeaderSizeU ? (reservedSize - primerHeaderSizeU) : 0;
 
     if (primerSizesSum > reservedDataSize) {
-      throw std::runtime_error(
-          "Tailles de primer dépassent l'espace réservé");
+      log_warn(m_srcPath,
+               "Tailles de primer dépassent l'espace réservé", m_options);
     }
     if (primerSizesSum < reservedDataSize && m_options.debug_index) {
       log_error(m_srcPath,
                 "readPrimer: primer plus petit que primerReservedSize", m_options);
     }
 
-    const std::uint64_t reservedSpan =
-        reservedCoversHeader ? reservedSize : totalRequired;
+    const std::uint64_t reservedSpan = reservedSize;
     const std::uintmax_t primerHeaderPosMax =
         static_cast<std::uintmax_t>(primerHeaderPos);
     if (primerHeaderPosMax > fileSize ||
@@ -304,7 +301,7 @@ void RobotExtractor::readPrimer() {
       throw std::runtime_error("Primer hors limites");
     }
     const std::streamoff reservedEnd =
-        primerHeaderPos + static_cast<std::streamoff>(reservedSpan);
+        primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
     
     m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
     m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
@@ -329,7 +326,7 @@ void RobotExtractor::readPrimer() {
       }
     }
     const std::streamoff afterPrimerDataPos = m_fp.tellg();
-    if (reservedEnd > afterPrimerDataPos) {
+    if (reservedEnd != afterPrimerDataPos) {
       m_fp.seekg(reservedEnd, std::ios::beg);
     }
     m_postPrimerPos = m_fp.tellg();
