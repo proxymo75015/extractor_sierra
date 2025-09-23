@@ -404,7 +404,7 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
 }
 
 void RobotExtractor::process_audio_block(std::span<const std::byte> block,
-                                         int32_t pos, bool isEven) {
+                                         int32_t pos) {
   if (block.size() < kRobotRunwayBytes) {
     throw std::runtime_error("Bloc audio inutilisable");
   }
@@ -417,97 +417,261 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   } else {
     samples.clear();
   }
+  
   if (samples.empty() || !m_extractAudio) {
     return;
   }
-  appendChannelSamples(isEven, pos, samples);
-}
 
-void RobotExtractor::appendChannelSamples(bool isEven, int32_t pos,
-                                          const std::vector<int16_t> &samples) {
-  if (samples.empty()) {
+  const int64_t doubledPos = static_cast<int64_t>(pos) * 2;
+
+  auto tryOffset = [&](int64_t offset, ChannelAudio *&channel,
+                       bool &isEvenChannel, int64_t &halfPos,
+                       AppendPlan &plan) -> AppendPlanStatus {
+    int64_t adjustedDoubledPos = doubledPos - offset;
+    if ((adjustedDoubledPos & 1LL) != 0) {
+      throw std::runtime_error("Position audio incohérente");
+    }
+    int64_t mod = adjustedDoubledPos % 4;
+    if (mod < 0) {
+      mod += 4;
+    }
+    isEvenChannel = (mod == 0);
+    halfPos = adjustedDoubledPos / 2;
+    channel = isEvenChannel ? &m_evenChannelAudio : &m_oddChannelAudio;
+    return planChannelAppend(*channel, isEvenChannel, halfPos, samples, plan);
+  };
+
+  auto computeAlternateOffset = [](int64_t offset) {
+    int64_t remainder = offset % 4;
+    if (remainder < 0) {
+      remainder += 4;
+    }
+    if (remainder == 0) {
+      return offset + 2;
+    }
+    if (remainder == 2) {
+      return offset - 2;
+    }
+    throw std::runtime_error("Position audio incohérente");
+  };
+
+  struct AttemptResult {
+    AppendPlanStatus status = AppendPlanStatus::Conflict;
+    AppendPlan plan{};
+    bool isEven = false;
+    int64_t halfPos = 0;
+    ChannelAudio *channel = nullptr;
+  };
+
+  auto evaluateOffset = [&](int64_t offset) {
+    AttemptResult result;
+    result.status =
+        tryOffset(offset, result.channel, result.isEven, result.halfPos, result.plan);
+    return result;
+  };
+
+  auto throwParityMismatch = [](const AppendPlan &p) {
+    if (p.posIsEven) {
+      throw std::runtime_error("Position paire pour canal impair");
+    }
+    throw std::runtime_error("Position impaire pour canal pair");
+  };
+
+  std::vector<int64_t> attemptedOffsets;
+  bool conflictEncountered = false;
+  AppendPlan parityFailurePlan{};
+  bool sawParityFailure = false;
+
+  auto processOffset = [&](int64_t offset) -> bool {
+    if (std::find(attemptedOffsets.begin(), attemptedOffsets.end(), offset) !=
+        attemptedOffsets.end()) {
+      return false;
+    }
+    attemptedOffsets.push_back(offset);
+    AttemptResult attempt = evaluateOffset(offset);
+    if (attempt.status == AppendPlanStatus::Ok ||
+        attempt.status == AppendPlanStatus::Skip) {
+      if (doubledPos >= 0) {
+        m_audioStartOffset = offset;
+        m_audioStartOffsetInitialized = true;
+      }
+      finalizeChannelAppend(*attempt.channel, attempt.isEven, attempt.halfPos,
+                            samples, attempt.plan, attempt.status);
+      return true;
+    }
+    if (attempt.status == AppendPlanStatus::ParityMismatch) {
+      if (!sawParityFailure) {
+        parityFailurePlan = attempt.plan;
+        sawParityFailure = true;
+      }
+    } else if (attempt.status == AppendPlanStatus::Conflict) {
+      conflictEncountered = true;
+    }
+    return false;
+  };
+
+  auto attemptWithAlternate = [&](int64_t offset) -> bool {
+    if (processOffset(offset)) {
+      return true;
+    }
+    int64_t altOffset = computeAlternateOffset(offset);
+    return processOffset(altOffset);
+  };
+
+  if (!m_audioStartOffsetInitialized && doubledPos >= 0) {
+    int64_t normalized = doubledPos % 4;
+    if (normalized < 0) {
+      normalized += 4;
+    }
+    if (std::find(attemptedOffsets.begin(), attemptedOffsets.end(), normalized) ==
+        attemptedOffsets.end()) {
+      if (attemptWithAlternate(normalized)) {
+        return;
+      }
+    }
+  }
+
+  if (attemptWithAlternate(m_audioStartOffset)) {
     return;
   }
-  ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
-  const bool posIsEven = (pos % 2) == 0;
-  if (posIsEven && !isEven) {
-    throw std::runtime_error("Position paire pour canal impair");
+
+  if (sawParityFailure) {
+    throwParityMismatch(parityFailurePlan);
   }
-  if (!posIsEven && isEven) {
-    throw std::runtime_error("Position impaire pour canal pair");
+  if (conflictEncountered) {
+    throw std::runtime_error("Chevauchement de blocs audio détecté");
   }
-  int64_t startHalf = static_cast<int64_t>(pos);
+  throw std::runtime_error("Chevauchement de blocs audio détecté");
+}
+
+RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
+    const ChannelAudio &channel, bool isEven, int64_t halfPos,
+    const std::vector<int16_t> &samples, AppendPlan &plan) const {
+  plan = {};
+  if (samples.empty()) {
+    return AppendPlanStatus::Skip;
+  }
+  plan.posIsEven = (halfPos & 1LL) == 0;
+  if (plan.posIsEven && !isEven) {
+    return AppendPlanStatus::ParityMismatch;
+  }
+  if (!plan.posIsEven && isEven) {
+    return AppendPlanStatus::ParityMismatch;
+  }
+  int64_t startHalf = halfPos;
   int64_t startSampleSigned = 0;
   if (startHalf >= 0) {
     startSampleSigned = startHalf / 2;
   } else {
     startSampleSigned = (startHalf - 1) / 2;
   }
-  size_t skipSamples = 0;
-  size_t startSample = 0;
   if (startSampleSigned < 0) {
-    skipSamples = static_cast<size_t>(-startSampleSigned);
-    if (skipSamples >= samples.size()) {
-      log_warn(m_srcPath,
-               "Bloc audio à position négative ignoré: " +
-                   std::to_string(static_cast<long long>(pos)),
-               m_options);
-      return;
+    plan.negativeAdjusted = true;
+    plan.skipSamples = static_cast<size_t>(-startSampleSigned);
+    if (plan.skipSamples >= samples.size()) {
+      plan.negativeIgnored = true;
+      return AppendPlanStatus::Skip;
     }
-    startSample = 0;
-    log_warn(m_srcPath,
-             "Bloc audio à position négative ajusté (" +
-                 std::to_string(static_cast<long long>(pos)) + ")",
-             m_options);
+    plan.startSample = 0;
   } else {
-    startSample = static_cast<size_t>(startSampleSigned);
+    plan.startSample = static_cast<size_t>(startSampleSigned);
   }
-  const size_t availableSamples = samples.size() - skipSamples;
-  if (availableSamples == 0) {
-    return;
+  plan.availableSamples = samples.size() - plan.skipSamples;
+  if (plan.availableSamples == 0) {
+    return AppendPlanStatus::Skip;
   }
-  if (availableSamples > std::numeric_limits<size_t>::max() - startSample) {
+  if (plan.availableSamples > std::numeric_limits<size_t>::max() -
+                                   plan.startSample) {
     throw std::runtime_error("Insertion audio dépasse la capacité");
   }
-  size_t requiredSize = startSample + availableSamples;
-
-  size_t leadingOverlap = 0;
-  while (leadingOverlap < availableSamples) {
-    size_t index = startSample + leadingOverlap;
+  plan.requiredSize = plan.startSample + plan.availableSamples;
+  plan.leadingOverlap = 0;
+  while (plan.leadingOverlap < plan.availableSamples) {
+    size_t index = plan.startSample + plan.leadingOverlap;
     if (index >= channel.occupied.size() || !channel.occupied[index]) {
       break;
     }
-    if (channel.samples[index] != samples[skipSamples + leadingOverlap]) {
-      throw std::runtime_error("Chevauchement de blocs audio détecté");
+    if (channel.samples[index] != samples[plan.skipSamples + plan.leadingOverlap]) {
+      return AppendPlanStatus::Conflict;
     }
-    ++leadingOverlap;
+    ++plan.leadingOverlap;
   }
+  if (plan.leadingOverlap == plan.availableSamples) {
+    return AppendPlanStatus::Skip;
+  }
+  plan.trimmedStart = plan.startSample + plan.leadingOverlap;
+  for (size_t i = plan.leadingOverlap; i < plan.availableSamples; ++i) {
+    size_t index = plan.startSample + i;
+    if (index < channel.occupied.size() && channel.occupied[index] &&
+        channel.samples[index] != samples[plan.skipSamples + i]) {
+      return AppendPlanStatus::Conflict;
+    }
+  }
+  return AppendPlanStatus::Ok;
+}
 
-  if (leadingOverlap == availableSamples) {
+void RobotExtractor::finalizeChannelAppend(
+    ChannelAudio &channel, bool /*isEven*/, int64_t halfPos,
+    const std::vector<int16_t> &samples, const AppendPlan &plan,
+    AppendPlanStatus status) {
+  if (status == AppendPlanStatus::Skip) {
+    if (plan.negativeIgnored) {
+      log_warn(m_srcPath,
+               "Bloc audio à position négative ignoré: " +
+                   std::to_string(static_cast<long long>(halfPos)),
+               m_options);
+    } else if (plan.negativeAdjusted) {
+      log_warn(m_srcPath,
+               "Bloc audio à position négative ajusté (" +
+                   std::to_string(static_cast<long long>(halfPos)) + ")",
+               m_options);
+    }
     return;
   }
-
-  size_t trimmedStart = startSample + leadingOverlap;
-
-  if (channel.samples.size() < trimmedStart) {
-    channel.samples.resize(trimmedStart, 0);
-    channel.occupied.resize(trimmedStart, 0);
+  if (status != AppendPlanStatus::Ok) {
+    return;
   }
-  if (channel.samples.size() < requiredSize) {
-    channel.samples.resize(requiredSize, 0);
-    channel.occupied.resize(requiredSize, 0);
+  if (plan.negativeAdjusted) {
+    log_warn(m_srcPath,
+             "Bloc audio à position négative ajusté (" +
+                 std::to_string(static_cast<long long>(halfPos)) + ")",
+             m_options);
   }
-
-  for (size_t i = leadingOverlap; i < availableSamples; ++i) {
-    size_t index = startSample + i;
-    if (channel.occupied[index]) {
-      if (channel.samples[index] != samples[skipSamples + i]) {
-        throw std::runtime_error("Chevauchement de blocs audio détecté");
-      }
-      continue;
-    }
-    channel.samples[index] = samples[skipSamples + i];
+  if (channel.samples.size() < plan.trimmedStart) {
+    channel.samples.resize(plan.trimmedStart, 0);
+    channel.occupied.resize(plan.trimmedStart, 0);
+  }
+  if (channel.samples.size() < plan.requiredSize) {
+    channel.samples.resize(plan.requiredSize, 0);
+    channel.occupied.resize(plan.requiredSize, 0);
+  }
+  for (size_t i = plan.leadingOverlap; i < plan.availableSamples; ++i) {
+    size_t index = plan.startSample + i;
+    channel.samples[index] = samples[plan.skipSamples + i];
     channel.occupied[index] = 1;
+  }
+}
+void RobotExtractor::appendChannelSamples(bool isEven, int64_t halfPos,
+                                          const std::vector<int16_t> &samples) {
+  if (samples.empty()) {
+    return;
+  }
+  ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
+  AppendPlan plan{};
+  AppendPlanStatus status =
+      planChannelAppend(channel, isEven, halfPos, samples, plan);
+  switch (status) {
+  case AppendPlanStatus::Ok:
+  case AppendPlanStatus::Skip:
+    finalizeChannelAppend(channel, isEven, halfPos, samples, plan, status);
+    return;
+  case AppendPlanStatus::Conflict:
+    throw std::runtime_error("Chevauchement de blocs audio détecté");
+  case AppendPlanStatus::ParityMismatch:
+    if (plan.posIsEven) {
+      throw std::runtime_error("Position paire pour canal impair");
+    }
+    throw std::runtime_error("Position impaire pour canal pair");
   }
 }
 
@@ -1156,10 +1320,9 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
           // Les canaux audio alternent toutes les deux unités de position
           // (logique alignée sur ScummVM) : positions paires -> canal pair,
           // positions impaires -> canal impair.
-          bool isEven = (pos % 2) == 0;
           // L'audio peut exister même sans primer, décompresser toujours.
           if (!block.empty()) {
-            process_audio_block(block, pos, isEven);
+            process_audio_block(block, pos);
           }
         }
         int64_t remainingBytes = static_cast<int64_t>(audioBlkLen) - consumed;
@@ -1269,6 +1432,8 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
 }
 
 void RobotExtractor::extract() {
+  m_audioStartOffset = 0;
+  m_audioStartOffsetInitialized = false;  
   readHeader();
   readPrimer();
   readPalette();
