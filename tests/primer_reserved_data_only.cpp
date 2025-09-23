@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -75,15 +76,38 @@ TEST_CASE("Primer reserved size only covers channel data") {
   auto data = build_header(static_cast<uint16_t>(evenSize + oddSize));
   auto primer = build_primer_header(totalPrimer, evenSize, oddSize);
   data.insert(data.end(), primer.begin(), primer.end());
-  data.insert(data.end(), evenSize, 0);
-  data.insert(data.end(), oddSize, 0);
+  
+  std::vector<uint8_t> evenPrimer(evenSize, 0);
+  std::vector<uint8_t> oddPrimer(oddSize, 0);
 
-  push16(data, 2); // frame size
-  push16(data, 2); // packet size
+  std::vector<uint8_t> tail;
+  push16(tail, 2); // frame size
+  push16(tail, 2); // packet size
   for (int i = 0; i < 256; ++i)
-    push32(data, 0); // cue times
+    push32(tail, 0); // cue times
   for (int i = 0; i < 256; ++i)
-    push16(data, 0); // cue values
+    push16(tail, 0); // cue values
+
+  const size_t headerSize = kPrimerHeaderSize;
+  const size_t reservedSize = evenSize + oddSize;
+  const size_t primerLength = evenPrimer.size() + oddPrimer.size();
+  size_t pointerOffset = reservedSize > headerSize ? reservedSize - headerSize : 0;
+  pointerOffset = std::min(pointerOffset, primerLength);
+  const size_t overlap = std::min(tail.size(), primerLength - pointerOffset);
+
+  for (size_t i = 0; i < overlap; ++i) {
+    size_t idx = pointerOffset + i;
+    if (idx < evenPrimer.size()) {
+      evenPrimer[idx] = tail[i];
+    } else {
+      oddPrimer[idx - evenPrimer.size()] = tail[i];
+    }
+  }
+
+  data.insert(data.end(), evenPrimer.begin(), evenPrimer.end());
+  data.insert(data.end(), oddPrimer.begin(), oddPrimer.end());
+  data.insert(data.end(), tail.begin() + static_cast<std::ptrdiff_t>(overlap),
+              tail.end());
 
   data.resize(((data.size() + 2047) / 2048) * 2048, 0);
   data.push_back(0);
@@ -103,6 +127,6 @@ TEST_CASE("Primer reserved size only covers channel data") {
 
   REQUIRE(dataStart ==
           primerStart + static_cast<std::streamoff>(kPrimerHeaderSize));
-  REQUIRE(postPrimer == dataStart +
-                               static_cast<std::streamoff>(evenSize + oddSize));
+  REQUIRE(postPrimer ==
+          primerStart + static_cast<std::streamoff>(evenSize + oddSize));
 }
