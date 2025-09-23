@@ -75,7 +75,7 @@ decode_block_without_runway(const std::vector<uint8_t> &blockData) {
   int16_t predictor = 0;
   auto decoded = robot::dpcm16_decompress(std::span(bytes), predictor);
   std::vector<int16_t> samples;
-  const size_t runwaySamples = robot::kRobotRunwaySamples;
+  const size_t runwaySamples = robot::kRobotRunwayBytes;
   if (decoded.size() > runwaySamples) {
     samples.assign(decoded.begin() +
                        static_cast<std::ptrdiff_t>(runwaySamples),
