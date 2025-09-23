@@ -154,14 +154,35 @@ private:
   void readPrimer();
   void readPalette();
   void processPrimerChannel(std::vector<std::byte> &primer, bool isEven);
-  void process_audio_block(std::span<const std::byte> block, int32_t pos,
-                           bool isEven);
+  void process_audio_block(std::span<const std::byte> block, int32_t pos);
   void readSizesAndCues();
   bool exportFrame(int frameNo, nlohmann::json &frameJson);
   void writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate,
                 size_t blockIndex, bool isEvenChannel);
-  void appendChannelSamples(bool isEven, int32_t pos,
+  void appendChannelSamples(bool isEven, int64_t halfPos,
                             const std::vector<int16_t> &samples);
+  struct ChannelAudio;
+  struct AppendPlan {
+    size_t skipSamples = 0;
+    size_t startSample = 0;
+    size_t availableSamples = 0;
+    size_t leadingOverlap = 0;
+    size_t trimmedStart = 0;
+    size_t requiredSize = 0;
+    bool negativeAdjusted = false;
+    bool negativeIgnored = false;
+    bool posIsEven = true;
+  };
+  enum class AppendPlanStatus { Skip, Ok, Conflict, ParityMismatch };
+  AppendPlanStatus planChannelAppend(const ChannelAudio &channel, bool isEven,
+                                     int64_t halfPos,
+                                     const std::vector<int16_t> &samples,
+                                     AppendPlan &plan) const;
+  void finalizeChannelAppend(ChannelAudio &channel, bool isEven,
+                             int64_t halfPos,
+                             const std::vector<int16_t> &samples,
+                             const AppendPlan &plan,
+                             AppendPlanStatus status);
   void finalizeAudio();
   std::vector<int16_t> buildChannelStream(bool isEven) const;
 
@@ -211,6 +232,8 @@ private:
   };
   ChannelAudio m_evenChannelAudio;
   ChannelAudio m_oddChannelAudio;
+  int64_t m_audioStartOffset = 0;
+  bool m_audioStartOffsetInitialized = false;
 };
 
 #ifdef ROBOT_EXTRACTOR_TESTING
