@@ -428,39 +428,62 @@ void RobotExtractor::appendChannelSamples(bool isEven, int32_t pos,
   if (samples.empty()) {
     return;
   }
-  if (pos < 0) {
-    throw std::runtime_error("Position audio négative");
-  }
   ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
-  if ((pos & 1) != 0 && isEven) {
-    throw std::runtime_error("Position impaire pour canal pair");
-  }
-  if ((pos & 1) == 0 && !isEven) {
+  const bool posIsEven = (pos % 2) == 0;
+  if (posIsEven && !isEven) {
     throw std::runtime_error("Position paire pour canal impair");
   }
-  int64_t startHalf = static_cast<int64_t>(pos);
-  if (startHalf < 0) {
-    throw std::runtime_error("Position audio invalide");
+  if (!posIsEven && isEven) {
+    throw std::runtime_error("Position impaire pour canal pair");
   }
-  size_t startSample = static_cast<size_t>(startHalf / 2);
-  if (samples.size() > std::numeric_limits<size_t>::max() - startSample) {
+  int64_t startHalf = static_cast<int64_t>(pos);
+  int64_t startSampleSigned = 0;
+  if (startHalf >= 0) {
+    startSampleSigned = startHalf / 2;
+  } else {
+    startSampleSigned = (startHalf - 1) / 2;
+  }
+  size_t skipSamples = 0;
+  size_t startSample = 0;
+  if (startSampleSigned < 0) {
+    skipSamples = static_cast<size_t>(-startSampleSigned);
+    if (skipSamples >= samples.size()) {
+      log_warn(m_srcPath,
+               "Bloc audio à position négative ignoré: " +
+                   std::to_string(static_cast<long long>(pos)),
+               m_options);
+      return;
+    }
+    startSample = 0;
+    log_warn(m_srcPath,
+             "Bloc audio à position négative ajusté (" +
+                 std::to_string(static_cast<long long>(pos)) + ")",
+             m_options);
+  } else {
+    startSample = static_cast<size_t>(startSampleSigned);
+  }
+  const size_t availableSamples = samples.size() - skipSamples;
+  if (availableSamples == 0) {
+    return;
+  }
+  if (availableSamples > std::numeric_limits<size_t>::max() - startSample) {
     throw std::runtime_error("Insertion audio dépasse la capacité");
   }
-  size_t requiredSize = startSample + samples.size();
+  size_t requiredSize = startSample + availableSamples;
 
   size_t leadingOverlap = 0;
-  while (leadingOverlap < samples.size()) {
+  while (leadingOverlap < availableSamples) {
     size_t index = startSample + leadingOverlap;
     if (index >= channel.occupied.size() || !channel.occupied[index]) {
       break;
     }
-    if (channel.samples[index] != samples[leadingOverlap]) {
+    if (channel.samples[index] != samples[skipSamples + leadingOverlap]) {
       throw std::runtime_error("Chevauchement de blocs audio détecté");
     }
     ++leadingOverlap;
   }
 
-  if (leadingOverlap == samples.size()) {
+  if (leadingOverlap == availableSamples) {
     return;
   }
 
@@ -475,15 +498,15 @@ void RobotExtractor::appendChannelSamples(bool isEven, int32_t pos,
     channel.occupied.resize(requiredSize, 0);
   }
 
-  for (size_t i = leadingOverlap; i < samples.size(); ++i) {
+  for (size_t i = leadingOverlap; i < availableSamples; ++i) {
     size_t index = startSample + i;
     if (channel.occupied[index]) {
-      if (channel.samples[index] != samples[i]) {
+      if (channel.samples[index] != samples[skipSamples + i]) {
         throw std::runtime_error("Chevauchement de blocs audio détecté");
       }
       continue;
     }
-    channel.samples[index] = samples[i];
+    channel.samples[index] = samples[skipSamples + i];
     channel.occupied[index] = 1;
   }
 }
@@ -1070,7 +1093,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
         consumed += 4;
         if (pos < 0) {
-          throw std::runtime_error("Position audio invalide");
+          log_warn(m_srcPath,
+                   "Bloc audio avec position négative: " +
+                       std::to_string(static_cast<long long>(pos)),
+                   m_options);
         }
         int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
         consumed += 4;
