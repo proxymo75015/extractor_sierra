@@ -1190,9 +1190,9 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             lzs_decompress(comp, decompSz, std::span<const std::byte>(m_celBuffer));
         m_celBuffer.insert(m_celBuffer.end(), decomp.begin(), decomp.end());
       } else if (compType == 2) {
-        if (compSz != decompSz) {
+        if (compSz < decompSz) {
           throw std::runtime_error(
-              "Données de cel malformées: taille de chunk incohérente");
+              "Données de cel malformées: chunk plus petit que la taille décompressée annoncée");
         }
         m_celBuffer.insert(m_celBuffer.end(), comp.begin(),
                            comp.begin() + static_cast<ptrdiff_t>(decompSz));
