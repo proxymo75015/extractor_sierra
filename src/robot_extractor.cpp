@@ -499,8 +499,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     }
   };
 
-  auto processOffset =
-      [&](int64_t offset, std::optional<int64_t> storeOverride)
+  auto processOffset = [&](int64_t offset)
       -> std::pair<bool, AppendPlanStatus> {
     if (std::find(attemptedOffsets.begin(), attemptedOffsets.end(), offset) !=
         attemptedOffsets.end()) {
@@ -511,8 +510,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     if (attempt.status == AppendPlanStatus::Ok ||
         attempt.status == AppendPlanStatus::Skip) {
       if (doubledPos >= 0) {
-        int64_t storeValue = storeOverride.has_value() ? *storeOverride : offset;
-        m_audioStartOffset = storeValue;
+        m_audioStartOffset = attempt.offset;
         m_audioStartOffsetInitialized = true;
       }
       finalizeChannelAppend(*attempt.channel, attempt.isEven, attempt.halfPos,
@@ -523,10 +521,9 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     return {false, attempt.status};
   };
 
-  auto attemptWithAlternate = [&](int64_t offset,
-                                  std::optional<int64_t> storeOverride,
-                                  bool onConflictOnly) -> bool {
-    auto [success, status] = processOffset(offset, storeOverride);
+  auto attemptWithAlternate =
+      [&](int64_t offset, bool onConflictOnly) -> bool {
+    auto [success, status] = processOffset(offset);
     if (success) {
       return true;
     }
@@ -534,7 +531,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
       return false;
     }
     int64_t altOffset = computeAlternateOffset(offset);
-    auto [altSuccess, altStatus] = processOffset(altOffset, storeOverride);
+    auto [altSuccess, altStatus] = processOffset(altOffset);
     if (altSuccess) {
       return true;
     }
@@ -546,13 +543,13 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
 
   if (!m_audioStartOffsetInitialized && doubledPos >= 0) {
     attemptedBase = true;
-    if (attemptWithAlternate(baseOffset, baseOffset, true)) {
+    if (attemptWithAlternate(baseOffset, true)) {
       return;
     }
   }
 
   if (!attemptedBase || m_audioStartOffsetInitialized || doubledPos < 0) {
-    if (attemptWithAlternate(m_audioStartOffset, std::nullopt, true)) {
+    if (attemptWithAlternate(m_audioStartOffset, true)) {
       return;
     }
   }
