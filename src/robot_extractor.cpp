@@ -457,6 +457,14 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     throw std::runtime_error("Position audio incohérente");
   };
 
+    auto normalizeStartOffset = [](int64_t offset) {
+    int64_t remainder = offset % 4;
+    if (remainder < 0) {
+      remainder += 4;
+    }
+    return offset - remainder;
+  };
+
   struct AttemptResult {
     int64_t offset = 0;  
     AppendPlanStatus status = AppendPlanStatus::Conflict;
@@ -508,7 +516,11 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     if (attempt.status == AppendPlanStatus::Ok ||
         attempt.status == AppendPlanStatus::Skip) {
       if (doubledPos >= 0) {
-        m_audioStartOffset = attempt.offset;
+        const int64_t normalizedOffset = normalizeStartOffset(attempt.offset);
+        if (!m_audioStartOffsetInitialized ||
+            m_audioStartOffset != normalizedOffset) {
+          m_audioStartOffset = normalizedOffset;
+        }
         m_audioStartOffsetInitialized = true;
       }
       finalizeChannelAppend(*attempt.channel, attempt.isEven, attempt.halfPos,
@@ -547,7 +559,8 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   }
 
   if (!attemptedBase || m_audioStartOffsetInitialized || doubledPos < 0) {
-    if (attemptWithAlternate(m_audioStartOffset, true)) {
+    const bool onConflictOnly = !m_audioStartOffsetInitialized;
+    if (attemptWithAlternate(m_audioStartOffset, onConflictOnly)) {
       return;
     }
   }
