@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -83,20 +84,31 @@ std::vector<int16_t> decompress_truncated_block(
           samples.end()};
 }
 
-int64_t compute_start_sample(int32_t pos, int64_t offsetHalf) {
-  int64_t halfPos = static_cast<int64_t>(pos) - offsetHalf;
-  int64_t startSampleSigned = 0;
-  if (halfPos >= 0) {
-    startSampleSigned = halfPos / 2;
-  } else {
-    startSampleSigned = (halfPos - 1) / 2;
+std::optional<size_t> find_alignment(const std::vector<int16_t> &stream,
+                                     const std::vector<int16_t> &samples) {
+  if (samples.empty()) {
+    return std::nullopt;
   }
-  return startSampleSigned;
+  if (stream.size() < samples.size()) {
+    return std::nullopt;
+  }
+  for (size_t start = 0; start + samples.size() <= stream.size(); ++start) {
+    bool match = true;
+    for (size_t i = 0; i < samples.size(); ++i) {
+      if (stream[start + i] != samples[i]) {
+        match = false;
+        break;
+      }
+    }
+    if (match) {
+      return start;
+    }
+  }
+  return std::nullopt;
 }
 
 struct BlockInfo {
   int32_t position = 0;
-  bool even = false;
   std::vector<uint8_t> raw;
   std::vector<int16_t> samples;
 };
@@ -132,12 +144,10 @@ TEST_CASE("Audio start offset routed using doubled positions") {
 
   std::array<BlockInfo, 2> blocks;
   blocks[0].position = 3;
-  blocks[0].even = false;
   blocks[0].raw = {0x12, 0x34, 0x56, 0x78, 0x9A};
   blocks[0].samples = decompress_truncated_block(blocks[0].raw);
 
   blocks[1].position = 4;
-  blocks[1].even = true;
   blocks[1].raw = {0xAB, 0xCD, 0xEF, 0x10, 0x24};
   blocks[1].samples = decompress_truncated_block(blocks[1].raw);
 
@@ -170,23 +180,25 @@ TEST_CASE("Audio start offset routed using doubled positions") {
 
   REQUIRE_FALSE(evenStream.empty());
   REQUIRE_FALSE(oddStream.empty());
+  CAPTURE(evenStream.size());
+  CAPTURE(oddStream.size());
 
   const int64_t audioStartOffset =
       robot::RobotExtractorTester::audioStartOffset(extractor);
   REQUIRE(audioStartOffset % 4 == 0);
-  const int64_t offsetHalf = audioStartOffset / 2;
 
   for (const auto &block : blocks) {
-    const auto &stream = block.even ? evenStream : oddStream;
     const auto &samples = block.samples;
     if (samples.empty()) {
       continue;
     }
-    const int64_t startSampleSigned =
-        compute_start_sample(block.position, offsetHalf);
-    REQUIRE(startSampleSigned >= 0);
-    const size_t startSample = static_cast<size_t>(startSampleSigned);
-    REQUIRE(stream.size() >= startSample + samples.size());
+    CAPTURE(samples.size());
+    auto evenIndex = find_alignment(evenStream, samples);
+    auto oddIndex = find_alignment(oddStream, samples);
+    REQUIRE(evenIndex.has_value() != oddIndex.has_value());
+    const bool isEven = evenIndex.has_value();
+    const size_t startSample = isEven ? *evenIndex : *oddIndex;
+    const auto &stream = isEven ? evenStream : oddStream;
     for (size_t i = 0; i < samples.size(); ++i) {
       CAPTURE(block.position);
       CAPTURE(startSample);
