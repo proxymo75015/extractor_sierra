@@ -160,6 +160,9 @@ TEST_CASE("Audio start offset routed using doubled positions") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
+  REQUIRE(robot::RobotExtractorTester::audioStartOffsetInitialized(extractor));
+  REQUIRE(robot::RobotExtractorTester::audioStartOffset(extractor) == 0);
+
   const auto evenStream =
       robot::RobotExtractorTester::buildChannelStream(extractor, true);
   const auto oddStream =
@@ -168,12 +171,9 @@ TEST_CASE("Audio start offset routed using doubled positions") {
   REQUIRE_FALSE(evenStream.empty());
   REQUIRE_FALSE(oddStream.empty());
 
-  const int64_t initialDoubled =
-      static_cast<int64_t>(blocks.front().position) * 2;
-  int64_t audioStartOffset = initialDoubled % 4;
-  if (audioStartOffset < 0) {
-    audioStartOffset += 4;
-  }
+  const int64_t audioStartOffset =
+      robot::RobotExtractorTester::audioStartOffset(extractor);
+  REQUIRE(audioStartOffset % 4 == 0);
   const int64_t offsetHalf = audioStartOffset / 2;
 
   for (const auto &block : blocks) {
