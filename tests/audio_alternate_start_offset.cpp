@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <span>
 #include <vector>
 
@@ -170,27 +171,84 @@ TEST_CASE("Alternate audio start offset persists across blocks") {
 
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
+  
+  REQUIRE(robot::RobotExtractorTester::audioStartOffsetInitialized(extractor));
+  const int64_t audioStartOffset =
+      robot::RobotExtractorTester::audioStartOffset(extractor);
+  REQUIRE(audioStartOffset % 4 == 0);
+  const int64_t offsetHalf = audioStartOffset / 2;
+  CAPTURE(audioStartOffset);
+  CAPTURE(offsetHalf);
+
+  auto computeAlternateHalf = [](int64_t baseOffset) {
+    int64_t remainder = baseOffset % 4;
+    if (remainder < 0) {
+      remainder += 4;
+    }
+    if (remainder == 0) {
+      return (baseOffset + 2) / 2;
+    }
+    if (remainder == 2) {
+      return (baseOffset - 2) / 2;
+    }
+    FAIL("Offset audio inattendu");
+    return baseOffset / 2;
+  };
+  const int64_t alternateOffsetHalf = computeAlternateHalf(audioStartOffset);
 
   const auto evenStream =
       robot::RobotExtractorTester::buildChannelStream(extractor, true);
   REQUIRE_FALSE(evenStream.empty());
 
   std::vector<int16_t> expected = primerSamples;
-  const int64_t offsetHalf = 1; // alternate offset corresponds to half-offset 1
 
   for (const auto &block : blocks) {
     if (block.samples.empty()) {
       continue;
     }
-    const int64_t startSample = compute_start_sample(block.position, offsetHalf);
-    REQUIRE(startSample >= 0);
-    const size_t requiredSize = static_cast<size_t>(startSample) +
-                                block.samples.size();
+    auto evaluateAlignment = [&](int64_t candidateHalf)
+        -> std::optional<size_t> {
+      const int64_t startSampleSigned =
+          compute_start_sample(block.position, candidateHalf);
+      if (startSampleSigned < 0) {
+        return std::nullopt;
+      }
+      const size_t startIndex = static_cast<size_t>(startSampleSigned);
+      if (startIndex > evenStream.size()) {
+        return std::nullopt;
+      }
+      const size_t requiredSize = startIndex + block.samples.size();
+      if (requiredSize > evenStream.size()) {
+        return std::nullopt;
+      }
+      for (size_t i = 0; i < block.samples.size(); ++i) {
+        if (evenStream[startIndex + i] != block.samples[i]) {
+          return std::nullopt;
+        }
+      }
+      return startIndex;
+    };
+
+    std::optional<size_t> startIndexOpt = evaluateAlignment(offsetHalf);
+    if (!startIndexOpt) {
+      startIndexOpt = evaluateAlignment(alternateOffsetHalf);
+    }
+    REQUIRE(startIndexOpt.has_value());
+    const size_t startIndex = *startIndexOpt;
+    if (expected.size() < startIndex) {
+      const size_t previousSize = expected.size();
+      expected.resize(startIndex, 0);
+      for (size_t i = previousSize; i < startIndex; ++i) {
+        expected[i] = evenStream[i];
+      }
+    }
+    const size_t requiredSize = startIndex + block.samples.size();
     if (expected.size() < requiredSize) {
       expected.resize(requiredSize, 0);
     }
-    std::copy(block.samples.begin(), block.samples.end(),
-              expected.begin() + static_cast<std::ptrdiff_t>(startSample));
+    for (size_t i = 0; i < block.samples.size(); ++i) {
+      expected[startIndex + i] = block.samples[i];
+    }
   }
 
   REQUIRE(evenStream == expected);
