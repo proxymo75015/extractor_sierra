@@ -310,6 +310,10 @@ struct RobotExtractorTester {
   static RobotExtractor::ParsedPalette parsePalette(const RobotExtractor &r) {
     return RobotExtractor::parseHunkPalette(r.m_palette, r.m_bigEndian);
   }
+  static void processAudioBlock(RobotExtractor &r,
+                                std::span<const std::byte> block, int32_t pos) {
+    r.process_audio_block(block, pos);
+  }
   static void writeWav(RobotExtractor &r, const std::vector<int16_t> &samples,
                        uint32_t sampleRate, size_t blockIndex,
                        bool isEvenChannel) {
