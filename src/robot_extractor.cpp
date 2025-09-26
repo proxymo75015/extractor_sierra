@@ -429,11 +429,12 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     if ((adjustedDoubledPos & 1LL) != 0) {
       throw std::runtime_error("Position audio incohérente");
     }
-    isEvenChannel = posIsEven;
+    const bool evenChannel = (adjustedDoubledPos & 3LL) == 0;
+    isEvenChannel = evenChannel;
     channel = isEvenChannel ? &m_evenChannelAudio : &m_oddChannelAudio;
 
     int64_t rawHalfPos = adjustedDoubledPos / 2;
-    const int64_t desiredParity = posIsEven ? 0 : 1;
+    const int64_t desiredParity = evenChannel ? 0 : 1;
     const int64_t rawParity = rawHalfPos & 1LL;
     if (rawParity != desiredParity) {
       rawHalfPos += (desiredParity == 0) ? -1 : 1;
@@ -1351,9 +1352,9 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
               std::copy(truncated.begin(), truncated.end(), dst);
             }
           }
-          // Les canaux audio alternent toutes les deux unités de position
-          // (logique alignée sur ScummVM) : positions paires -> canal pair,
-          // positions impaires -> canal impair.
+          // Les canaux audio sont déterminés à partir de la position ajustée
+          // (logique alignée sur ScummVM) : une valeur ajustée congrue à 0 (mod
+          // 4) va sur le canal pair, congrue à 2 (mod 4) sur le canal impair.
           // L'audio peut exister même sans primer, décompresser toujours.
           if (!block.empty()) {
             process_audio_block(block, pos);
