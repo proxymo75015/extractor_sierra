@@ -116,7 +116,10 @@ void RobotExtractor::readHeader() {
 void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_bigEndian = bigEndian;
   uint16_t sig = read_scalar<uint16_t>(m_fp, m_bigEndian);
-  if (sig != kRobotSig && sig != 0x3d) {
+   if (sig == 0x3d) {
+    throw std::runtime_error("Version Robot non supportée: 4");
+  }
+  if (sig != kRobotSig) {
     throw std::runtime_error("Signature Robot invalide");
   }
   std::array<char, 4> sol;
@@ -124,12 +127,7 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   if (sol != std::array<char, 4>{'S', 'O', 'L', '\0'}) {
     throw std::runtime_error("Tag SOL invalide");
   }
-  if (sig == 0x3d) {
-    m_version = 4;
-    m_fp.seekg(2, std::ios::cur);
-  } else {
-    m_version = read_scalar<uint16_t>(m_fp, m_bigEndian);
-  }
+  m_version = read_scalar<uint16_t>(m_fp, m_bigEndian);
   m_audioBlkSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (m_audioBlkSize > kMaxAudioBlockSize) {
     log_warn(m_srcPath,
