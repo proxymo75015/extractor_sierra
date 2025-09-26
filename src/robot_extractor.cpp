@@ -203,11 +203,19 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
                  std::to_string(m_maxCelsPerFrame),
              m_options);
   }
-  // Champs supplémentaires de 32 bits présents dans le nouveau format.
-  for (int i = 0; i < 4; ++i) {
-    (void)read_scalar<int32_t>(m_fp, m_bigEndian);
-  }  
-  m_fp.seekg(8, std::ios::cur);
+  m_fixedCelSizes.fill(0);
+  m_reservedHeaderSpace.fill(0);
+  // Champs supplémentaires présents uniquement dans les versions >= 5. Les
+  // fichiers v4 n'en disposent pas : nous conservons donc des valeurs par
+  // défaut à zéro et laissons le flux sur les tables d'index.
+  if (m_version >= 5) {
+    for (auto &size : m_fixedCelSizes) {
+      size = read_scalar<uint32_t>(m_fp, m_bigEndian);
+    }
+    for (auto &reserved : m_reservedHeaderSpace) {
+      reserved = read_scalar<uint32_t>(m_fp, m_bigEndian);
+    }
+  }
 }
 
 void RobotExtractor::readPrimer() {
