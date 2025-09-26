@@ -301,6 +301,12 @@ struct RobotExtractorTester {
                                                  bool isEven) {
     return r.buildChannelStream(isEven);
   }
+  static int64_t &audioStartOffset(RobotExtractor &r) {
+    return r.m_audioStartOffset;
+  }
+  static bool &audioStartOffsetInitialized(RobotExtractor &r) {
+    return r.m_audioStartOffsetInitialized;
+  }
   static RobotExtractor::ParsedPalette parsePalette(const RobotExtractor &r) {
     return RobotExtractor::parseHunkPalette(r.m_palette, r.m_bigEndian);
   }
