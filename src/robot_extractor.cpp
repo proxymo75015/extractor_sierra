@@ -116,8 +116,8 @@ void RobotExtractor::readHeader() {
 void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_bigEndian = bigEndian;
   uint16_t sig = read_scalar<uint16_t>(m_fp, m_bigEndian);
-   if (sig == 0x3d) {
-    throw std::runtime_error("Version Robot non supportée: 4");
+  if (sig == 0x3d) {
+    sig = kRobotSig;
   }
   if (sig != kRobotSig) {
     throw std::runtime_error("Signature Robot invalide");
