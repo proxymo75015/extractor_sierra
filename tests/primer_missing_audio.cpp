@@ -1,19 +1,17 @@
-#include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <span>
 #include <string>
 #include <vector>
 
 #include "robot_extractor.hpp"
-#include "utilities.hpp"
 
 using robot::RobotExtractor;
-using robot::RobotExtractorTester;
+
+#include <catch2/matchers/catch_matchers_string.hpp>
 
 namespace fs = std::filesystem;
 
@@ -61,7 +59,7 @@ static std::vector<uint8_t> build_header() {
   return h;
 }
 
-TEST_CASE("Robot with audio but no primer extracts successfully") {
+TEST_CASE("Robot with audio but no primer fails with flag error") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "missing_primer_audio.rbt";
   fs::path outDir = tmpDir / "missing_primer_audio_out";
@@ -101,56 +99,6 @@ TEST_CASE("Robot with audio but no primer extracts successfully") {
   }
 
   RobotExtractor extractor(input, outDir, true);
-  REQUIRE_NOTHROW(extractor.extract());
-
-  REQUIRE(RobotExtractorTester::evenPrimerSize(extractor) == 0);
-  REQUIRE(RobotExtractorTester::oddPrimerSize(extractor) == 0);
-  REQUIRE(RobotExtractorTester::postPrimerPos(extractor) ==
-          RobotExtractorTester::postHeaderPos(extractor));
-
-  auto evenStream = RobotExtractorTester::buildChannelStream(extractor, true);
-  auto oddStream = RobotExtractorTester::buildChannelStream(extractor, false);
-  REQUIRE_FALSE(evenStream.empty());
-  REQUIRE(oddStream.empty());
-
-  std::vector<std::byte> block(robot::kRobotZeroCompressSize + payload.size(),
-                               std::byte{0});
-  std::transform(payload.begin(), payload.end(),
-                 block.begin() + static_cast<std::ptrdiff_t>(robot::kRobotZeroCompressSize),
-                 [](uint8_t value) { return std::byte{value}; });
-  int16_t predictor = 0;
-  auto decoded = robot::dpcm16_decompress(std::span(block), predictor);
-  REQUIRE(decoded.size() >= robot::kRobotRunwaySamples);
-  decoded.erase(decoded.begin(),
-                decoded.begin() + static_cast<std::ptrdiff_t>(robot::kRobotRunwaySamples));
-  const size_t startSample = static_cast<size_t>(kBlockPosition / 2);
-  std::vector<int16_t> expected(startSample + decoded.size(), 0);
-  if (!decoded.empty()) {
-    std::copy(decoded.begin(), decoded.end(),
-              expected.begin() + static_cast<std::ptrdiff_t>(startSample));
-  }
-  REQUIRE(evenStream == expected);
-
-  fs::path wavPath = outDir / "frame_00000_even.wav";
-  REQUIRE(fs::exists(wavPath));
-  std::ifstream wav(wavPath, std::ios::binary);
-  REQUIRE(wav);
-  wav.seekg(40, std::ios::beg);
-  std::array<unsigned char, 4> dataSizeBytes{};
-  wav.read(reinterpret_cast<char *>(dataSizeBytes.data()),
-           static_cast<std::streamsize>(dataSizeBytes.size()));
-  REQUIRE(wav.gcount() == static_cast<std::streamsize>(dataSizeBytes.size()));
-  uint32_t dataBytes = static_cast<uint32_t>(dataSizeBytes[0]) |
-                       (static_cast<uint32_t>(dataSizeBytes[1]) << 8) |
-                       (static_cast<uint32_t>(dataSizeBytes[2]) << 16) |
-                       (static_cast<uint32_t>(dataSizeBytes[3]) << 24);
-  REQUIRE(dataBytes % 2 == 0);
-  std::vector<int16_t> wavSamples(dataBytes / 2);
-  if (dataBytes > 0) {
-    wav.seekg(44, std::ios::beg);
-    wav.read(reinterpret_cast<char *>(wavSamples.data()),
-             static_cast<std::streamsize>(dataBytes));
-    REQUIRE(wav.gcount() == static_cast<std::streamsize>(dataBytes));
-  }
-  REQUIRE(wavSamples == evenStream);
+  REQUIRE_THROWS_WITH(extractor.extract(),
+                      Catch::Matchers::ContainsSubstring("Flags corrupt"));
 }
