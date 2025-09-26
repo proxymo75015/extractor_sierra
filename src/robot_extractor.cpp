@@ -344,17 +344,7 @@ void RobotExtractor::readPrimer() {
     m_oddPrimer.assign(static_cast<size_t>(m_oddPrimerSize), std::byte{0});
     m_postPrimerPos = m_fp.tellg();
   } else {
-    // No primer reserved and zero compression disabled: accept zero-length
-    // primers like ScummVM.
-    std::streamoff currentPos = m_fp.tellg();
-    if (currentPos < 0) {
-      throw std::runtime_error("Primer audio incohérent: position de flux invalide");
-    }
-    m_totalPrimerSize = 0;
-    m_evenPrimerSize = 0;
-    m_oddPrimerSize = 0;
-    m_primerPosition = currentPos;
-    m_postPrimerPos = currentPos;
+    throw std::runtime_error("ReadPrimerData - Flags corrupt");
   }
 
   // Décompresser les buffers primer pour initialiser les prédicteurs audio
