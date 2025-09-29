@@ -76,3 +76,67 @@ TEST_CASE("Hunk palette preserves remap data and shared flags") {
   }
   REQUIRE(parsed.remapData == remap);
 }
+
+TEST_CASE("Hunk palette respects offset table ordering and explicit remap") {
+  fs::path tmpDir = fs::temp_directory_path() / "palette_parser";
+  fs::create_directories(tmpDir);
+  fs::path input = tmpDir / "offset_table.rbt";
+  fs::path outDir = tmpDir / "offset_table_out";
+  fs::create_directories(outDir);
+  if (!fs::exists(input)) {
+    std::ofstream out(input, std::ios::binary);
+  }
+
+  test_palette::EntrySpec lateEntry;
+  lateEntry.offset = 70;
+  lateEntry.startColor = 20;
+  lateEntry.sharedUsed = false;
+  lateEntry.defaultUsed = true;
+  lateEntry.version = 3;
+  lateEntry.colors = {{true, 100, 110, 120}, {false, 130, 140, 150}};
+
+  test_palette::EntrySpec earlyEntry;
+  earlyEntry.offset = 40;
+  earlyEntry.startColor = 5;
+  earlyEntry.sharedUsed = true;
+  earlyEntry.defaultUsed = false;
+  earlyEntry.version = 2;
+  earlyEntry.colors = {{true, 10, 20, 30}, {true, 40, 50, 60}, {true, 70, 80, 90}};
+
+  std::vector<std::byte> remap = {std::byte{0x11}, std::byte{0x22}, std::byte{0x33}};
+  auto raw = test_palette::build_hunk_palette_with_offsets(
+      {lateEntry, earlyEntry}, remap, static_cast<uint16_t>(108));
+
+  robot::RobotExtractor extractor(input, outDir, false);
+  RobotExtractorTester::palette(extractor) = raw;
+  RobotExtractorTester::bigEndian(extractor) = false;
+  auto parsed = RobotExtractorTester::parsePalette(extractor);
+
+  REQUIRE(parsed.startColor == 5);
+  REQUIRE(parsed.colorCount == 17);
+  REQUIRE_FALSE(parsed.sharedUsed);
+  REQUIRE_FALSE(parsed.defaultUsed);
+
+  for (uint8_t i = 5; i < 8; ++i) {
+    INFO("shared block index " << static_cast<int>(i));
+    REQUIRE(parsed.entries[i].present);
+    REQUIRE_FALSE(parsed.entries[i].used);
+  }
+  REQUIRE(parsed.entries[5].r == 10);
+  REQUIRE(parsed.entries[6].g == 50);
+  REQUIRE(parsed.entries[7].b == 90);
+
+  REQUIRE(parsed.entries[20].present);
+  REQUIRE(parsed.entries[20].used);
+  REQUIRE(parsed.entries[20].r == 100);
+  REQUIRE(parsed.entries[20].g == 110);
+  REQUIRE(parsed.entries[20].b == 120);
+
+  REQUIRE(parsed.entries[21].present);
+  REQUIRE_FALSE(parsed.entries[21].used);
+  REQUIRE(parsed.entries[21].r == 130);
+  REQUIRE(parsed.entries[21].g == 140);
+  REQUIRE(parsed.entries[21].b == 150);
+
+  REQUIRE(parsed.remapData == remap);
+}
