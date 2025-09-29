@@ -16,7 +16,7 @@ TEST_CASE("Les cels énormes déclenchent une exception d'allocation") {
     size_t required = std::numeric_limits<size_t>::max() - 1;
 
     REQUIRE_THROWS([&]() {
-        if (required > RobotExtractorTester::maxCelPixels() * 4) {
+        if (required > RobotExtractorTester::rgbaBufferLimit(extractor)) {
             throw std::runtime_error("Tampon RGBA dépasse la limite");
         }
         if (required > RobotExtractorTester::rgbaBuffer(extractor).capacity()) {
