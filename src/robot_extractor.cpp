@@ -115,6 +115,35 @@ void RobotExtractor::readHeader() {
 
 void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_bigEndian = bigEndian;
+    const std::streampos headerStart = m_fp.tellg();
+  if (headerStart == std::streampos(-1)) {
+    throw std::runtime_error(
+        "Impossible de déterminer la position de l'en-tête Robot");
+  }
+
+  constexpr std::streamoff versionOffset =
+      static_cast<std::streamoff>(sizeof(uint16_t) + 4);
+  const std::streampos versionPos = headerStart + versionOffset;
+
+  m_fp.seekg(versionPos);
+  if (!m_fp) {
+    throw std::runtime_error(
+        "Impossible d'accéder au champ version de l'en-tête Robot");
+  }
+
+  m_version = read_scalar<uint16_t>(m_fp, m_bigEndian);
+  if (m_version < 4 || m_version > 6) {
+    throw std::runtime_error("Version Robot non supportée: " +
+                             std::to_string(m_version));
+  }
+
+  m_fp.clear();
+  m_fp.seekg(headerStart);
+  if (!m_fp) {
+    throw std::runtime_error(
+        "Impossible de repositionner le flux au début de l'en-tête Robot");
+  }
+
   uint16_t sig = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (sig == 0x3d) {
     sig = kRobotSig;
@@ -127,7 +156,11 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   if (sol != std::array<char, 4>{'S', 'O', 'L', '\0'}) {
     throw std::runtime_error("Tag SOL invalide");
   }
-  m_version = read_scalar<uint16_t>(m_fp, m_bigEndian);
+  const uint16_t versionFromHeader = read_scalar<uint16_t>(m_fp, m_bigEndian);
+  if (versionFromHeader != m_version) {
+    throw std::runtime_error(
+        "Version Robot incohérente entre les lectures successives");
+  }
   m_audioBlkSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (m_audioBlkSize > kMaxAudioBlockSize) {
     log_warn(m_srcPath,
