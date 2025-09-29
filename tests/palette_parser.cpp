@@ -140,3 +140,52 @@ TEST_CASE("Hunk palette respects offset table ordering and explicit remap") {
 
   REQUIRE(parsed.remapData == remap);
 }
+
+TEST_CASE("Hunk palette clamps entries that exceed palette capacity") {
+  fs::path tmpDir = fs::temp_directory_path() / "palette_parser";
+  fs::create_directories(tmpDir);
+  fs::path input = tmpDir / "overflow.rbt";
+  fs::path outDir = tmpDir / "overflow_out";
+  fs::create_directories(outDir);
+  if (!fs::exists(input)) {
+    std::ofstream out(input, std::ios::binary);
+  }
+
+  std::vector<test_palette::Color> colors;
+  for (int i = 0; i < 10; ++i) {
+    colors.push_back(test_palette::Color{
+        (i % 2) == 0,
+        static_cast<uint8_t>(10 * i + 1),
+        static_cast<uint8_t>(10 * i + 2),
+        static_cast<uint8_t>(10 * i + 3),
+    });
+  }
+
+  auto raw = test_palette::build_hunk_palette(colors, 250, false);
+
+  robot::RobotExtractor extractor(input, outDir, false);
+  RobotExtractorTester::palette(extractor) = raw;
+  RobotExtractorTester::bigEndian(extractor) = false;
+  auto parsed = RobotExtractorTester::parsePalette(extractor);
+
+  REQUIRE(parsed.startColor == 250);
+  REQUIRE(parsed.colorCount == 6);
+  REQUIRE_FALSE(parsed.sharedUsed);
+  REQUIRE(parsed.defaultUsed);
+
+  for (size_t i = 0; i < 6; ++i) {
+    const size_t paletteIndex = 250 + i;
+    INFO("palette index " << paletteIndex);
+    REQUIRE(parsed.entries[paletteIndex].present);
+    REQUIRE(parsed.entries[paletteIndex].used == colors[i].used);
+    REQUIRE(parsed.entries[paletteIndex].r == colors[i].r);
+    REQUIRE(parsed.entries[paletteIndex].g == colors[i].g);
+    REQUIRE(parsed.entries[paletteIndex].b == colors[i].b);
+  }
+
+  REQUIRE_FALSE(parsed.entries[249].present);
+  REQUIRE(parsed.entries[255].present);
+  REQUIRE(parsed.entries[255].r == colors[5].r);
+  REQUIRE(parsed.entries[255].g == colors[5].g);
+  REQUIRE(parsed.entries[255].b == colors[5].b);
+}
