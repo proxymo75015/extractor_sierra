@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <system_error>
 #include <cmath>
+#include <vector>
 
 #include "utilities.hpp"
 
@@ -857,27 +858,73 @@ RobotExtractor::parseHunkPalette(std::span<const std::byte> raw,
   }
 
   const uint8_t numPalettes = read_u8(raw, kNumPaletteEntriesOffset);
-  size_t offset = kHunkPaletteHeaderSize;
-  if (numPalettes > 0) {
-    const size_t offsetsBytes = static_cast<size_t>(2 * numPalettes);
-    if (offset > std::numeric_limits<size_t>::max() - offsetsBytes ||
-        raw.size() < offset + offsetsBytes) {
-      throw std::runtime_error("Table d'offset de palette incomplète");
-    }
-    offset += offsetsBytes;
-  } else {
-    if (offset < raw.size()) {
-      parsed.remapData.assign(raw.begin() + offset, raw.end());
+  const size_t offsetTablePos = kHunkPaletteHeaderSize;
+  if (numPalettes == 0) {
+    if (offsetTablePos < raw.size()) {
+      parsed.remapData.assign(raw.begin() + offsetTablePos, raw.end());
+      if (parsed.remapData.size() > kRawPaletteSize) {
+        parsed.remapData.resize(kRawPaletteSize);
+      }
     }
     return parsed;
   }
 
+  const size_t offsetsBytes = static_cast<size_t>(2 * numPalettes);
+  if (raw.size() < offsetTablePos + offsetsBytes) {
+    throw std::runtime_error("Table d'offset de palette incomplète");
+  }
+
+  struct EntryPointer {
+    size_t offset;
+    uint8_t index;
+  };
+
+  std::vector<EntryPointer> entryPointers;
+  entryPointers.reserve(numPalettes);
+  for (uint8_t i = 0; i < numPalettes; ++i) {
+    const size_t pos = offsetTablePos + static_cast<size_t>(i) * 2;
+    const uint16_t entryOffset = read_u16(raw, pos, bigEndian);
+    if (entryOffset < offsetTablePos + offsetsBytes ||
+        entryOffset > raw.size()) {
+      throw std::runtime_error("Offset de palette invalide");
+    }
+    entryPointers.push_back(EntryPointer{static_cast<size_t>(entryOffset), i});
+  }
+
+  const size_t tableEnd = offsetTablePos + offsetsBytes;
+  size_t minEntryOffset = std::numeric_limits<size_t>::max();
+  for (const auto &ptr : entryPointers) {
+    minEntryOffset = std::min(minEntryOffset, ptr.offset);
+  }
+
+  bool hasExplicitRemapOffset = false;
+  size_t explicitRemapOffset = 0;
+  if (tableEnd + sizeof(uint16_t) <= raw.size() &&
+      minEntryOffset >= tableEnd + sizeof(uint16_t)) {
+    const uint16_t candidate =
+        read_u16(raw, tableEnd, bigEndian);
+    if (candidate <= raw.size() && candidate >= minEntryOffset) {
+      hasExplicitRemapOffset = true;
+      explicitRemapOffset = candidate;
+    }
+  }
+
+  std::stable_sort(entryPointers.begin(), entryPointers.end(),
+                   [](const EntryPointer &a, const EntryPointer &b) {
+                     if (a.offset == b.offset) {
+                       return a.index < b.index;
+                     }
+                     return a.offset < b.offset;
+                   });
+
   bool firstEntry = true;
   uint16_t firstStart = 0;
   uint16_t maxEnd = 0;
+  size_t lastEntryEnd = tableEnd;
 
-  for (uint8_t entryIndex = 0; entryIndex < numPalettes; ++entryIndex) {
-    if (raw.size() < offset + kEntryHeaderSize) {
+  for (const auto &entryPtr : entryPointers) {
+    const size_t offset = entryPtr.offset;
+    if (offset > raw.size() - kEntryHeaderSize) {
       throw std::runtime_error("Palette SCI HunkPalette tronquée");
     }
     auto entry = raw.subspan(offset);
@@ -940,11 +987,16 @@ RobotExtractor::parseHunkPalette(std::span<const std::byte> raw,
       parsed.sharedUsed = parsed.sharedUsed && sharedUsed;
     }
 
-    offset += kEntryHeaderSize + colorsBytes;
+    lastEntryEnd = std::max(lastEntryEnd, offset + kEntryHeaderSize + colorsBytes);
   }
 
-  if (offset < raw.size()) {
-    parsed.remapData.assign(raw.begin() + offset, raw.end());
+  size_t remapOffset = hasExplicitRemapOffset ? explicitRemapOffset : lastEntryEnd;
+  if (remapOffset < lastEntryEnd) {
+    throw std::runtime_error("Offset de remap avant la fin des entrées de palette");
+  }
+
+  if (remapOffset < raw.size()) {
+    parsed.remapData.assign(raw.begin() + remapOffset, raw.end());
     if (parsed.remapData.size() > kRawPaletteSize) {
       parsed.remapData.resize(kRawPaletteSize);
     }
