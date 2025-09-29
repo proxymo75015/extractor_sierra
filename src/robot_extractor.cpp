@@ -429,6 +429,8 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
 
   const int64_t doubledPos = static_cast<int64_t>(pos) * 2;
   const bool posIsEven = (static_cast<int64_t>(pos) & 1LL) == 0;
+  const int64_t baseOffset = posIsEven ? 0 : 2;
+  const bool startOffsetUninitialized = !m_audioStartOffsetInitialized;
 
   auto tryOffset = [&](int64_t offset, ChannelAudio *&channel,
                        bool &isEvenChannel, int64_t &halfPos,
@@ -522,8 +524,17 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     }
     attemptedOffsets.push_back(offset);
     AttemptResult attempt = evaluateOffset(offset);
-    if (attempt.status == AppendPlanStatus::Ok ||
-        attempt.status == AppendPlanStatus::Skip) {
+    AppendPlanStatus resultStatus = attempt.status;
+    const bool firstOffsetAttempt =
+        startOffsetUninitialized && offset == baseOffset && doubledPos >= 0;
+    if (firstOffsetAttempt &&
+        (resultStatus == AppendPlanStatus::Ok ||
+         resultStatus == AppendPlanStatus::Skip) &&
+        attempt.isEven != posIsEven) {
+      resultStatus = AppendPlanStatus::ParityMismatch;
+    }
+    if (resultStatus == AppendPlanStatus::Ok ||
+        resultStatus == AppendPlanStatus::Skip) {
       if (doubledPos >= 0) {
         const int64_t normalizedOffset = normalizeStartOffset(attempt.offset);
         if (!m_audioStartOffsetInitialized ||
@@ -533,18 +544,23 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
         m_audioStartOffsetInitialized = true;
       }
       finalizeChannelAppend(*attempt.channel, attempt.isEven, attempt.halfPos,
-                            samples, attempt.plan, attempt.status);
-      return {true, attempt.status};
+                            samples, attempt.plan, resultStatus);
+      return {true, resultStatus};
     }
+    attempt.status = resultStatus;
     recordFailure(attempt);
-    return {false, attempt.status};
+    return {false, resultStatus};
   };
 
   auto attemptWithAlternate =
-      [&](int64_t offset, bool onConflictOnly) -> bool {
+      [&](int64_t offset, bool onConflictOnly,
+          bool allowParityRetry) -> bool {
     auto [success, status] = processOffset(offset);
     if (success) {
       return true;
+    }
+    if (allowParityRetry && status == AppendPlanStatus::ParityMismatch) {
+      onConflictOnly = false;
     }
     if (onConflictOnly && status != AppendPlanStatus::Conflict) {
       return false;
@@ -557,19 +573,18 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     return false;
   };
 
-  const int64_t baseOffset = posIsEven ? 0 : 2;
   bool attemptedBase = false;
 
   if (!m_audioStartOffsetInitialized && doubledPos >= 0) {
     attemptedBase = true;
-    if (attemptWithAlternate(baseOffset, true)) {
+    if (attemptWithAlternate(baseOffset, true, true)) {
       return;
     }
   }
 
   if (!attemptedBase || m_audioStartOffsetInitialized || doubledPos < 0) {
     const bool onConflictOnly = !m_audioStartOffsetInitialized;
-    if (attemptWithAlternate(m_audioStartOffset, onConflictOnly)) {
+    if (attemptWithAlternate(m_audioStartOffset, onConflictOnly, false)) {
       return;
     }
   }
