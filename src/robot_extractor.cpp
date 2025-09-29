@@ -1056,6 +1056,7 @@ void RobotExtractor::readSizesAndCues() {
               m_options);
   }
 
+  const std::uintmax_t fileSize = m_fileSize;
   const std::streamoff expectedPos =
       m_postPrimerPos + static_cast<std::streamoff>(m_paletteSize);
   std::streamoff pos = m_fp.tellg();
@@ -1086,9 +1087,6 @@ void RobotExtractor::readSizesAndCues() {
       if (tmp < 2) {
         throw std::runtime_error("Frame size too small");
       }
-      if (tmp > kMaxFrameSize) {
-        throw std::runtime_error("Taille de frame excessive");
-      }
       m_frameSizes[i] = tmp;
       if (m_options.debug_index && i < kDebugCount) {
         log_error(m_srcPath,
@@ -1118,9 +1116,6 @@ void RobotExtractor::readSizesAndCues() {
       if (tmp < 2) {
         throw std::runtime_error("Frame size too small");
       }
-      if (tmp > kMaxFrameSize) {
-        throw std::runtime_error("Taille de frame excessive");
-      }
       m_frameSizes[i] = tmp;
       if (m_options.debug_index && i < kDebugCount) {
         log_error(m_srcPath,
@@ -1141,6 +1136,9 @@ void RobotExtractor::readSizesAndCues() {
     }
     break;
   }
+  std::uintmax_t totalFrameSize = 0;
+  std::uintmax_t totalPacketSize = 0;
+  constexpr std::uintmax_t maxUint = std::numeric_limits<std::uintmax_t>::max();  
   for (size_t i = 0; i < m_frameSizes.size(); ++i) {
     if (m_packetSizes[i] < m_frameSizes[i]) {
       log_warn(m_srcPath,
@@ -1150,7 +1148,6 @@ void RobotExtractor::readSizesAndCues() {
                    ") - ajustement à la taille de frame",
                m_options);
       m_packetSizes[i] = m_frameSizes[i];
-      continue;
     }
     uint64_t maxSize64 =
         static_cast<uint64_t>(m_frameSizes[i]) +
@@ -1178,6 +1175,18 @@ void RobotExtractor::readSizesAndCues() {
       throw std::runtime_error(
           "Packet size exceeds frame size + audio block size");
     }
+    const uint32_t frameSize = m_frameSizes[i];
+    const uint32_t packetSize = m_packetSizes[i];
+    if (frameSize > maxUint - totalFrameSize) {
+      throw std::runtime_error(
+          "Somme des tailles de frame dépasse la capacité maximale");
+    }
+    if (packetSize > maxUint - totalPacketSize) {
+      throw std::runtime_error(
+          "Somme des tailles de paquets dépasse la capacité maximale");
+    }
+    totalFrameSize += frameSize;
+    totalPacketSize += packetSize;    
   }
   for (auto &time : m_cueTimes) {
     time = read_scalar<int32_t>(m_fp, m_bigEndian);
@@ -1190,14 +1199,43 @@ void RobotExtractor::readSizesAndCues() {
   if (bytesRemaining != 0) {
     m_fp.seekg(2048 - bytesRemaining, std::ios::cur);
   }
+  std::streamoff frameDataPos = m_fp.tellg();
+  if (frameDataPos < 0) {
+    throw std::runtime_error("Position de début des frames invalide");
+  }
+  const std::uintmax_t frameDataOffset = static_cast<std::uintmax_t>(frameDataPos);
+  if (frameDataOffset > fileSize) {
+    throw std::runtime_error("Les tables d'index dépassent la taille du fichier");
+  }
+  const std::uintmax_t bytesAvailable = fileSize - frameDataOffset;
+  if (totalFrameSize > bytesAvailable) {
+    throw std::runtime_error(
+        "Somme des tailles de frame dépasse les données restantes du fichier");
+  }
+  if (totalPacketSize > bytesAvailable) {
+    throw std::runtime_error(
+        "Somme des tailles de paquets dépasse les données restantes du fichier");
+  }  
 }
 
 bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
   StreamExceptionGuard guard(m_fp);
-  if (m_frameSizes[frameNo] > kMaxFrameSize) {
-    throw std::runtime_error("Taille de frame excessive");
+  std::streamoff curPos = m_fp.tellg();
+  if (curPos < 0) {
+    throw std::runtime_error("Position de lecture des frames invalide");
   }
-  m_frameBuffer.resize(m_frameSizes[frameNo]);
+  const std::uintmax_t frameOffset = static_cast<std::uintmax_t>(curPos);
+  const std::uintmax_t fileSize = m_fileSize;
+  if (frameOffset > fileSize) {
+    throw std::runtime_error("Position de lecture des frames hors du fichier");
+  }
+  const std::uintmax_t bytesRemaining = fileSize - frameOffset;
+  const uint32_t frameSize = m_frameSizes[frameNo];
+  if (frameSize > bytesRemaining) {
+    throw std::runtime_error(
+        "Taille de frame dépasse les données restantes du fichier");
+  }
+  m_frameBuffer.resize(frameSize);
   read_exact(m_fp, m_frameBuffer.data(), m_frameBuffer.size());
   uint16_t numCels = read_scalar<uint16_t>(
       std::span(m_frameBuffer).subspan(0, 2), m_bigEndian);
@@ -1510,7 +1548,12 @@ size_t RobotExtractor::celPixelLimit() const {
   }
 
   if (limit == 0) {
-    limit = kMaxFrameSize;
+    const std::uintmax_t fileSize = m_fileSize;
+    if (fileSize >= static_cast<std::uintmax_t>(std::numeric_limits<size_t>::max())) {
+      limit = std::numeric_limits<size_t>::max();
+    } else {
+      limit = static_cast<size_t>(fileSize);
+    }
   }
 
   return limit;
