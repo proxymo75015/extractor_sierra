@@ -95,8 +95,7 @@ TEST_CASE("Primer reserved size matches channel sizes") {
     push16(data, 0); // cue values
 
   data.resize(((data.size() + 2047) / 2048) * 2048, 0);
-  data.push_back(0);
-  data.push_back(0);
+  data.insert(data.end(), static_cast<size_t>(5), 0);
 
   std::ofstream out(input, std::ios::binary);
   out.write(reinterpret_cast<const char *>(data.data()),
