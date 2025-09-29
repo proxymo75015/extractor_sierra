@@ -4,6 +4,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace test_palette {
@@ -105,6 +106,91 @@ build_hunk_palette(const std::vector<Color> &colors, uint8_t startColor = 0,
 
   if (!remapData.empty() && cursor < raw.size()) {
     std::copy(remapData.begin(), remapData.end(), raw.begin() + cursor);
+  }
+
+  return raw;
+}
+
+struct EntrySpec {
+  uint16_t offset = 0;
+  uint8_t startColor = 0;
+  bool sharedUsed = false;
+  bool defaultUsed = true;
+  uint32_t version = 1;
+  std::vector<Color> colors;
+};
+
+inline std::vector<std::byte>
+build_hunk_palette_with_offsets(const std::vector<EntrySpec> &entries,
+                                std::vector<std::byte> remapData = {},
+                                std::optional<uint16_t> remapOffset = std::nullopt,
+                                bool bigEndian = false) {
+  const uint8_t numEntries = static_cast<uint8_t>(entries.size());
+  size_t headerSize = kHunkPaletteHeaderSize + static_cast<size_t>(numEntries) * 2;
+  if (remapOffset.has_value()) {
+    headerSize += 2;
+  }
+
+  size_t maxEntryEnd = headerSize;
+  for (const auto &entry : entries) {
+    const size_t perColorBytes = 3 + (entry.sharedUsed ? 0 : 1);
+    const size_t colorsBytes = entry.colors.size() * perColorBytes;
+    const size_t entryEnd = static_cast<size_t>(entry.offset) +
+                            kEntryHeaderSize + colorsBytes;
+    if (entryEnd > maxEntryEnd) {
+      maxEntryEnd = entryEnd;
+    }
+  }
+
+  const size_t remapStart = remapOffset.has_value()
+                                ? static_cast<size_t>(*remapOffset)
+                                : maxEntryEnd;
+  size_t totalSize = std::max(headerSize, maxEntryEnd);
+  totalSize = std::max(totalSize, remapStart + remapData.size());
+
+  std::vector<std::byte> raw(totalSize, std::byte{0});
+  raw[kNumPaletteEntriesOffset] = std::byte{numEntries};
+
+  for (size_t i = 0; i < entries.size(); ++i) {
+    write_u16(raw, kHunkPaletteHeaderSize + i * 2, entries[i].offset, bigEndian);
+  }
+
+  if (remapOffset.has_value()) {
+    write_u16(raw,
+              kHunkPaletteHeaderSize + static_cast<size_t>(numEntries) * 2,
+              *remapOffset, bigEndian);
+  }
+
+  for (const auto &entry : entries) {
+    const size_t perColorBytes = 3 + (entry.sharedUsed ? 0 : 1);
+    size_t cursor = entry.offset;
+    if (cursor + kEntryHeaderSize > raw.size()) {
+      raw.resize(cursor + kEntryHeaderSize);
+    }
+    raw[cursor + kEntryStartColorOffset] = std::byte{entry.startColor};
+    write_u16(raw, cursor + kEntryNumColorsOffset,
+              static_cast<uint16_t>(entry.colors.size()), bigEndian);
+    raw[cursor + kEntryUsedOffset] = std::byte{entry.defaultUsed ? 1 : 0};
+    raw[cursor + kEntrySharedUsedOffset] = std::byte{entry.sharedUsed ? 1 : 0};
+    write_u32(raw, cursor + kEntryVersionOffset, entry.version, bigEndian);
+
+    cursor += kEntryHeaderSize;
+    const size_t requiredSize = cursor + entry.colors.size() * perColorBytes;
+    if (requiredSize > raw.size()) {
+      raw.resize(requiredSize);
+    }
+    for (const auto &color : entry.colors) {
+      if (!entry.sharedUsed) {
+        raw[cursor++] = std::byte{color.used ? 1 : 0};
+      }
+      raw[cursor++] = std::byte{color.r};
+      raw[cursor++] = std::byte{color.g};
+      raw[cursor++] = std::byte{color.b};
+    }
+  }
+
+  if (!remapData.empty() && remapStart < raw.size()) {
+    std::copy(remapData.begin(), remapData.end(), raw.begin() + remapStart);
   }
 
   return raw;
