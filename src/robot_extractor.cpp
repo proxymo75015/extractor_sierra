@@ -101,7 +101,7 @@ void RobotExtractor::readHeader() {
 
   m_postHeaderPos = m_fp.tellg();
   
-  if (m_version < 4 || m_version > 6) {
+  if (m_version < 5 || m_version > 6) {
     throw std::runtime_error("Version Robot non supportée: " +
                              std::to_string(m_version));
   }
@@ -132,7 +132,7 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   }
 
   m_version = read_scalar<uint16_t>(m_fp, m_bigEndian);
-  if (m_version < 4 || m_version > 6) {
+  if (m_version < 5 || m_version > 6) {
     throw std::runtime_error("Version Robot non supportée: " +
                              std::to_string(m_version));
   }
@@ -221,9 +221,6 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_isHiRes = read_scalar<int16_t>(m_fp, m_bigEndian) != 0;
   m_maxSkippablePackets = read_scalar<int16_t>(m_fp, m_bigEndian);
   m_maxCelsPerFrame = read_scalar<int16_t>(m_fp, m_bigEndian);
-  if (m_version == 4) {
-    m_maxCelsPerFrame = 1;
-  }
   if (m_maxCelsPerFrame < 1) {
     log_warn(m_srcPath,
              "Nombre de cels par frame non positif: " +
@@ -238,16 +235,12 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   }
   m_fixedCelSizes.fill(0);
   m_reservedHeaderSpace.fill(0);
-  // Champs supplémentaires présents uniquement dans les versions >= 5. Les
-  // fichiers v4 n'en disposent pas : nous conservons donc des valeurs par
-  // défaut à zéro et laissons le flux sur les tables d'index.
-  if (m_version >= 5) {
-    for (auto &size : m_fixedCelSizes) {
-      size = read_scalar<uint32_t>(m_fp, m_bigEndian);
-    }
-    for (auto &reserved : m_reservedHeaderSpace) {
-      reserved = read_scalar<uint32_t>(m_fp, m_bigEndian);
-    }
+  // Champs supplémentaires présents dans les versions prises en charge (5 et 6).
+  for (auto &size : m_fixedCelSizes) {
+    size = read_scalar<uint32_t>(m_fp, m_bigEndian);
+  }
+  for (auto &reserved : m_reservedHeaderSpace) {
+    reserved = read_scalar<uint32_t>(m_fp, m_bigEndian);
   }
 }
 
