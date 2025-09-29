@@ -143,7 +143,6 @@ private:
 #endif
   static constexpr uint16_t kRobotSig = 0x16;
   static constexpr uint16_t kMaxFrames = 10000;
-  static constexpr size_t kMaxFrameSize = 10 * 1024 * 1024;
   static constexpr uint16_t kMaxAudioBlockSize = 65535;
   static constexpr size_t kMaxCuePoints = 256;
   static constexpr size_t kCelHeaderSize = 22;
@@ -299,9 +298,6 @@ struct RobotExtractorTester {
   }
   static constexpr uint16_t maxAudioBlockSize() {
     return RobotExtractor::kMaxAudioBlockSize;
-  }
-  static constexpr size_t maxFrameSize() {
-    return RobotExtractor::kMaxFrameSize;
   }
   static constexpr uint16_t maxFrames() { return RobotExtractor::kMaxFrames; }
   static void readHeader(RobotExtractor &r) { r.readHeader(); }
