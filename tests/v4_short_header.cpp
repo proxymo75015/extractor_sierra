@@ -1,4 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/matchers/catch_matchers_exception.hpp>
+#include <catch2/matchers/catch_matchers_string.hpp>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -22,7 +24,7 @@ static void push32(std::vector<uint8_t> &v, uint32_t x) {
     v.push_back(static_cast<uint8_t>((x >> 24) & 0xFF));
 }
 
-TEST_CASE("Version 4 header keeps index tables aligned") {
+TEST_CASE("Version 4 header is rejected") {
     fs::path tmpDir = fs::temp_directory_path();
     fs::path input = tmpDir / "v4_short_header.rbt";
     fs::path outDir = tmpDir / "v4_short_header_out";
@@ -66,23 +68,7 @@ TEST_CASE("Version 4 header keeps index tables aligned") {
 
     RobotExtractor extractor(input, outDir, false);
 
-    REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
-    REQUIRE(RobotExtractorTester::postHeaderPos(extractor) ==
-            static_cast<std::streamoff>(headerSize));
-
-    REQUIRE_NOTHROW(RobotExtractorTester::readPrimer(extractor));
-    REQUIRE(RobotExtractorTester::postPrimerPos(extractor) ==
-            RobotExtractorTester::postHeaderPos(extractor));
-
-    REQUIRE_NOTHROW(RobotExtractorTester::readPalette(extractor));
-    auto &file = RobotExtractorTester::file(extractor);
-    REQUIRE(file.tellg() == static_cast<std::streamoff>(headerSize));
-
-    REQUIRE_NOTHROW(RobotExtractorTester::readSizesAndCues(extractor));
-    const auto &frames = RobotExtractorTester::frameSizes(extractor);
-    REQUIRE(frames.size() == 1);
-    REQUIRE(frames[0] == 2);
-    const auto &packets = RobotExtractorTester::packetSizes(extractor);
-    REQUIRE(packets.size() == 1);
-    REQUIRE(packets[0] == 2);
+    REQUIRE_THROWS_MATCHES(
+        RobotExtractorTester::readHeader(extractor), std::runtime_error,
+        Catch::Matchers::Message("Version Robot non supportée: 4"));
 }
