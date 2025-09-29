@@ -80,6 +80,9 @@ TEST_CASE("Primer reserved size only covers channel data") {
   std::vector<uint8_t> evenPrimer(evenSize, 0);
   std::vector<uint8_t> oddPrimer(oddSize, 0);
 
+  data.insert(data.end(), evenPrimer.begin(), evenPrimer.end());
+  data.insert(data.end(), oddPrimer.begin(), oddPrimer.end());
+  
   std::vector<uint8_t> tail;
   push16(tail, 2); // frame size
   push16(tail, 2); // packet size
@@ -88,27 +91,8 @@ TEST_CASE("Primer reserved size only covers channel data") {
   for (int i = 0; i < 256; ++i)
     push16(tail, 0); // cue values
 
-  const size_t headerSize = kPrimerHeaderSize;
-  const size_t reservedSize = evenSize + oddSize;
-  const size_t primerLength = evenPrimer.size() + oddPrimer.size();
-  size_t pointerOffset = reservedSize > headerSize ? reservedSize - headerSize : 0;
-  pointerOffset = std::min(pointerOffset, primerLength);
-  const size_t overlap = std::min(tail.size(), primerLength - pointerOffset);
-
-  for (size_t i = 0; i < overlap; ++i) {
-    size_t idx = pointerOffset + i;
-    if (idx < evenPrimer.size()) {
-      evenPrimer[idx] = tail[i];
-    } else {
-      oddPrimer[idx - evenPrimer.size()] = tail[i];
-    }
-  }
-
-  data.insert(data.end(), evenPrimer.begin(), evenPrimer.end());
-  data.insert(data.end(), oddPrimer.begin(), oddPrimer.end());
-  data.insert(data.end(), tail.begin() + static_cast<std::ptrdiff_t>(overlap),
-              tail.end());
-
+  data.insert(data.end(), tail.begin(), tail.end());
+  
   data.resize(((data.size() + 2047) / 2048) * 2048, 0);
   data.push_back(0);
   data.push_back(0);
@@ -128,5 +112,5 @@ TEST_CASE("Primer reserved size only covers channel data") {
   REQUIRE(dataStart ==
           primerStart + static_cast<std::streamoff>(kPrimerHeaderSize));
   REQUIRE(postPrimer ==
-          primerStart + static_cast<std::streamoff>(evenSize + oddSize));
+          dataStart + static_cast<std::streamoff>(evenSize + oddSize));
 }
