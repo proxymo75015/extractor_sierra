@@ -87,6 +87,16 @@ inline T read_scalar(std::span<const std::byte> data, bool bigEndian) {
         reinterpret_cast<const uint8_t *>(data.data()), bigEndian);
 }
 
+template <Integral T>
+T read_scalar_le(std::ifstream &f) {
+    return read_scalar<T>(f, false);
+}
+
+template <Integral T>
+inline T read_scalar_le(std::span<const std::byte> data) {
+    return read_scalar<T>(data, false);
+}
+
 class StreamExceptionGuard {
 public:
     explicit StreamExceptionGuard(std::ifstream &stream)
