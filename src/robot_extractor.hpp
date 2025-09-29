@@ -1,6 +1,7 @@
 #pragma once
 
 #include "utilities.hpp"
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -8,11 +9,11 @@
 #include <filesystem>
 #include <fstream>
 #include <nlohmann/json.hpp>
+#include <limits>
 #include <span>
 #include <stdexcept>
 #include <string>
 #include <vector>
-
 namespace robot {
 
 inline constexpr size_t kRobotZeroCompressSize = 2048;
@@ -142,7 +143,6 @@ private:
 #endif
   static constexpr uint16_t kRobotSig = 0x16;
   static constexpr uint16_t kMaxFrames = 10000;
-  static constexpr size_t kMaxCelPixels = 1024 * 1024;
   static constexpr size_t kMaxFrameSize = 10 * 1024 * 1024;
   static constexpr uint16_t kMaxAudioBlockSize = 65535;
   static constexpr size_t kMaxCuePoints = 256;
@@ -161,6 +161,8 @@ private:
                 size_t blockIndex, bool isEvenChannel);
   void appendChannelSamples(bool isEven, int64_t halfPos,
                             const std::vector<int16_t> &samples);
+  size_t celPixelLimit() const;
+  size_t rgbaBufferLimit() const;
   struct ChannelAudio;
   struct AppendPlan {
     size_t skipSamples = 0;
@@ -283,7 +285,18 @@ struct RobotExtractorTester {
   static std::vector<std::byte> &rgbaBuffer(RobotExtractor &r) {
     return r.m_rgbaBuffer;
   }
-  static constexpr size_t maxCelPixels() { return RobotExtractor::kMaxCelPixels; }
+  static std::array<uint32_t, 4> &fixedCelSizes(RobotExtractor &r) {
+    return r.m_fixedCelSizes;
+  }
+  static std::vector<std::byte> &celBuffer(RobotExtractor &r) {
+    return r.m_celBuffer;
+  }
+  static size_t celPixelLimit(const RobotExtractor &r) {
+    return r.celPixelLimit();
+  }
+  static size_t rgbaBufferLimit(const RobotExtractor &r) {
+    return r.rgbaBufferLimit();
+  }
   static constexpr uint16_t maxAudioBlockSize() {
     return RobotExtractor::kMaxAudioBlockSize;
   }
