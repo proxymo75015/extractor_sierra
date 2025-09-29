@@ -335,9 +335,6 @@ void RobotExtractor::readPrimer() {
         reservedSpan > fileSize - primerHeaderPosMax) {
       throw std::runtime_error("Primer hors limites");
     }
-    const std::streamoff reservedEnd =
-        primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
-    
     m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
     m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
     if (m_evenPrimerSize > 0) {
@@ -361,10 +358,18 @@ void RobotExtractor::readPrimer() {
       }
     }
     const std::streamoff afterPrimerDataPos = m_fp.tellg();
-    if (reservedEnd != afterPrimerDataPos) {
-      m_fp.seekg(reservedEnd, std::ios::beg);
+    const bool primerSizesMatchReserved =
+        primerSizesSum == static_cast<std::uint64_t>(m_primerReservedSize);
+    if (!primerSizesMatchReserved) {
+      const std::streamoff reservedEnd =
+          primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
+      if (reservedEnd != afterPrimerDataPos) {
+        m_fp.seekg(reservedEnd, std::ios::beg);
+      }
+      m_postPrimerPos = m_fp.tellg();
+    } else {
+      m_postPrimerPos = afterPrimerDataPos;
     }
-    m_postPrimerPos = m_fp.tellg();
     if (m_options.debug_index) {
       log_error(m_srcPath,
                 "readPrimer: position après seekg = " +
