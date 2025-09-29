@@ -7,8 +7,6 @@
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
-using robot::RobotExtractorTester;
-
 static void push16(std::vector<uint8_t> &v, uint16_t x) {
     v.push_back(static_cast<uint8_t>(x & 0xFF));
     v.push_back(static_cast<uint8_t>(x >> 8));
@@ -53,7 +51,16 @@ TEST_CASE("La taille de frame excessive déclenche une erreur") {
     fs::create_directories(outDir);
 
     auto data = build_header_v6();
-    push32(data, static_cast<uint32_t>(RobotExtractorTester::maxFrameSize() + 1));
+    const uint32_t frameSize = 16 * 1024 * 1024;
+    push32(data, frameSize);  // frame size table
+    push32(data, frameSize);  // packet size table
+    for (int i = 0; i < 256; ++i)
+        push32(data, 0);  // cue times
+    for (int i = 0; i < 256; ++i)
+        push16(data, 0);  // cue values
+
+    const size_t padding = (2048 - (data.size() % 2048)) % 2048;
+    data.insert(data.end(), padding, 0);
 
     std::ofstream out(input, std::ios::binary);
     out.write(reinterpret_cast<const char *>(data.data()),
@@ -65,6 +72,8 @@ TEST_CASE("La taille de frame excessive déclenche une erreur") {
         extractor.extract();
         FAIL("No exception thrown");
     } catch (const std::runtime_error &e) {
-        REQUIRE(std::string(e.what()).find("Taille de frame excessive") != std::string::npos);
+        REQUIRE(std::string(e.what()).find(
+                    "Somme des tailles de frame dépasse les données restantes du fichier") !=
+                std::string::npos);
     }
 }
