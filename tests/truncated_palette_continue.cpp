@@ -63,6 +63,7 @@ TEST_CASE("Truncated palette no longer interrupts extraction") {
 
   size_t pad = (2048 - (data.size() % 2048)) % 2048;
   data.insert(data.end(), pad, 0); // alignment padding
+  data.insert(data.end(), static_cast<size_t>(39), 0);
 
   {
     std::ofstream out(input, std::ios::binary);
