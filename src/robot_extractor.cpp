@@ -1229,7 +1229,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
   if (m_hasPalette) {
     parsedPalette = parseHunkPalette(m_palette, m_bigEndian);
   }
-
+  
+  const size_t celLimit = celPixelLimit();
+  const size_t rgbaLimit = rgbaBufferLimit();
+  
   for (int i = 0; i < numCels; ++i) {
     if (offset + kCelHeaderSize > m_frameBuffer.size()) {
       throw std::runtime_error("En-tête de cel invalide");
@@ -1256,7 +1259,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       throw std::runtime_error("Multiplication w*h dépasse SIZE_MAX");
     }
     size_t pixel_count = static_cast<size_t>(w) * h;
-    if (pixel_count > kMaxCelPixels) {
+    if (pixel_count > celLimit) {
       throw std::runtime_error("Dimensions de cel invalides");
     }
     if (static_cast<size_t>(sourceHeight) > SIZE_MAX / static_cast<size_t>(w)) {
@@ -1265,7 +1268,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     }
     size_t expected =
         static_cast<size_t>(w) * static_cast<size_t>(sourceHeight);
-    if (expected > kMaxCelPixels) {
+    if (expected > celLimit) {
       throw std::runtime_error("Cel décompressé dépasse la taille maximale");
     }
     m_celBuffer.clear();
@@ -1346,7 +1349,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             "Débordement lors du calcul de la taille du tampon");
       }
       size_t required = static_cast<size_t>(h) * row_size;
-      if (required > kMaxCelPixels * 4) {
+      if (required > rgbaLimit) {
         throw std::runtime_error("Tampon RGBA dépasse la limite");
       }
       if (required > m_rgbaBuffer.capacity()) {
@@ -1490,6 +1493,35 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     }
   }
   return true;
+}
+
+size_t RobotExtractor::celPixelLimit() const {
+  size_t limit = 0;
+  for (uint32_t area : m_fixedCelSizes) {
+    limit = std::max(limit, static_cast<size_t>(area));
+  }
+
+  if (limit == 0 && m_xRes > 0 && m_yRes > 0) {
+    const auto width = static_cast<size_t>(m_xRes);
+    const auto height = static_cast<size_t>(m_yRes);
+    if (height <= SIZE_MAX / width) {
+      limit = width * height;
+    }
+  }
+
+  if (limit == 0) {
+    limit = kMaxFrameSize;
+  }
+
+  return limit;
+}
+
+size_t RobotExtractor::rgbaBufferLimit() const {
+  const size_t pixelLimit = celPixelLimit();
+  if (pixelLimit > SIZE_MAX / 4) {
+    return SIZE_MAX / 4;
+  }
+  return pixelLimit * 4;
 }
 
 void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
