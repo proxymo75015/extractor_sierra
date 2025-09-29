@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -25,7 +26,9 @@ static void push32(std::vector<uint8_t> &v, uint32_t x) {
   v.push_back(static_cast<uint8_t>((x >> 24) & 0xFF));
 }
 
-static std::vector<uint8_t> build_header(uint16_t primerSize) {
+static std::vector<uint8_t> build_header(uint16_t primerReservedSize,
+                                         uint16_t paletteSize,
+                                         bool hasPalette) {
   std::vector<uint8_t> h;
   push16(h, 0x16); // signature
   h.insert(h.end(), {'S', 'O', 'L', '\0'});
@@ -34,11 +37,11 @@ static std::vector<uint8_t> build_header(uint16_t primerSize) {
   push16(h, 0);          // primerZeroCompressFlag
   push16(h, 0);          // skip
   push16(h, 1);          // numFrames
-  push16(h, 0);          // paletteSize
-  push16(h, primerSize); // primerReservedSize
+  push16(h, paletteSize);
+  push16(h, primerReservedSize);
   push16(h, 1);          // xRes
   push16(h, 1);          // yRes
-  h.push_back(0);        // hasPalette
+  h.push_back(hasPalette ? 1 : 0);
   h.push_back(1);        // hasAudio
   push16(h, 0);          // skip
   push16(h, 60);         // frameRate
@@ -68,17 +71,24 @@ TEST_CASE("Primer reserved size matches channel sizes") {
   fs::path outDir = tmpDir / "primer_equal_sizes_out";
   fs::create_directories(outDir);
 
-  auto data = build_header(static_cast<uint16_t>(
-      kPrimerHeaderSize + robot::kRobotRunwayBytes));
+  constexpr uint16_t kPaletteSize = 4;
+  const std::vector<uint8_t> paletteData = {0x11, 0x22, 0x33, 0x44};
+  REQUIRE(paletteData.size() == kPaletteSize);
+
+  const uint16_t primerReservedSize =
+      static_cast<uint16_t>(robot::kRobotRunwayBytes);
+
+  auto data = build_header(primerReservedSize, kPaletteSize, true);
   auto primer = build_primer_header(kPrimerHeaderSize +
                                         robot::kRobotRunwayBytes,
                                     static_cast<uint32_t>(robot::kRobotRunwayBytes),
                                     0);
   data.insert(data.end(), primer.begin(), primer.end());
   data.insert(data.end(), robot::kRobotRunwayBytes, 0); // even primer data
+  data.insert(data.end(), paletteData.begin(), paletteData.end());
 
-  push16(data, 2); // frame size
-  push16(data, 2); // packet size
+  push16(data, 4); // frame size
+  push16(data, 5); // packet size
   for (int i = 0; i < 256; ++i)
     push32(data, 0); // cue times
   for (int i = 0; i < 256; ++i)
@@ -94,13 +104,28 @@ TEST_CASE("Primer reserved size matches channel sizes") {
   out.close();
 
   RobotExtractor extractor(input, outDir, false);
-  REQUIRE_NOTHROW(extractor.extract());
+  REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
+  REQUIRE_NOTHROW(RobotExtractorTester::readPrimer(extractor));
 
+  const auto primerDataStart = RobotExtractorTester::primerPosition(extractor);
+  const auto postPrimer = RobotExtractorTester::postPrimerPos(extractor);
+  REQUIRE(postPrimer ==
+          primerDataStart +
+              static_cast<std::streamoff>(robot::kRobotRunwayBytes));
+
+  REQUIRE_NOTHROW(RobotExtractorTester::readPalette(extractor));
+  const auto &palette = RobotExtractorTester::palette(extractor);
+  REQUIRE(palette.size() == paletteData.size());
+  for (size_t i = 0; i < paletteData.size(); ++i) {
+    REQUIRE(std::to_integer<uint8_t>(palette[i]) == paletteData[i]);
+  }
+
+  REQUIRE_NOTHROW(RobotExtractorTester::readSizesAndCues(extractor));
   const auto &frames = RobotExtractorTester::frameSizes(extractor);
   REQUIRE(frames.size() == 1);
-  REQUIRE(frames[0] == 2);
+  REQUIRE(frames[0] == 4);
 
   const auto &packets = RobotExtractorTester::packetSizes(extractor);
   REQUIRE(packets.size() == 1);
-  REQUIRE(packets[0] == 2);
+  REQUIRE(packets[0] == 5);
 }
