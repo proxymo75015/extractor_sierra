@@ -934,20 +934,21 @@ RobotExtractor::parseHunkPalette(std::span<const std::byte> raw,
     const bool defaultUsed = read_u8(entry, kEntryUsedOffset) != 0;
     const bool sharedUsed = read_u8(entry, kEntrySharedUsedOffset) != 0;
     const uint32_t version = read_u32(entry, kEntryVersionOffset, bigEndian);
-    const uint32_t endColor = static_cast<uint32_t>(startColor) + numColors;
-    if (endColor > 256) {
-      throw std::runtime_error("Palette SCI HunkPalette déborde 256 entrées");
-    }
-
     const size_t perColorBytes = 3 + (sharedUsed ? 0 : 1);
-    const size_t colorsBytes = static_cast<size_t>(numColors) * perColorBytes;
-    if (entry.size() < kEntryHeaderSize + colorsBytes) {
-      throw std::runtime_error("Palette SCI HunkPalette tronquée");
-    }
+    const size_t payloadBytes =
+        entry.size() > kEntryHeaderSize ? entry.size() - kEntryHeaderSize : 0;
+    const size_t paletteCapacity = 256 - startColor;
+    const size_t availableRecords = payloadBytes / perColorBytes;
+    const size_t requestedColors = static_cast<size_t>(numColors);
+    const size_t actualColors =
+        std::min({requestedColors, paletteCapacity, availableRecords});
 
-    auto colorData = entry.subspan(kEntryHeaderSize, colorsBytes);
+    const size_t consumedColorBytes =
+        std::min(payloadBytes, requestedColors * perColorBytes);
+    auto colorData = entry.subspan(kEntryHeaderSize, consumedColorBytes);
+
     size_t pos = 0;
-    for (uint16_t i = 0; i < numColors; ++i) {
+    for (size_t i = 0; i < actualColors; ++i) {
       const size_t paletteIndex = static_cast<size_t>(startColor) + i;
       auto &dest = parsed.entries[paletteIndex];
       dest.present = true;
@@ -961,9 +962,18 @@ RobotExtractor::parseHunkPalette(std::span<const std::byte> raw,
       dest.b = std::to_integer<uint8_t>(colorData[pos++]);
     }
 
+    if (actualColors == 0) {
+      lastEntryEnd = std::max(lastEntryEnd, offset + kEntryHeaderSize +
+                                              consumedColorBytes);
+      continue;
+    }
+
+    const uint32_t endColor =
+        static_cast<uint32_t>(startColor) + static_cast<uint32_t>(actualColors);
+    
     if (firstEntry) {
       parsed.startColor = startColor;
-      parsed.colorCount = numColors;
+      parsed.colorCount = static_cast<uint16_t>(actualColors);
       parsed.sharedUsed = sharedUsed;
       parsed.defaultUsed = defaultUsed;
       parsed.version = version;
@@ -987,7 +997,8 @@ RobotExtractor::parseHunkPalette(std::span<const std::byte> raw,
       parsed.sharedUsed = parsed.sharedUsed && sharedUsed;
     }
 
-    lastEntryEnd = std::max(lastEntryEnd, offset + kEntryHeaderSize + colorsBytes);
+    lastEntryEnd =
+        std::max(lastEntryEnd, offset + kEntryHeaderSize + consumedColorBytes);
   }
 
   size_t remapOffset = hasExplicitRemapOffset ? explicitRemapOffset : lastEntryEnd;
