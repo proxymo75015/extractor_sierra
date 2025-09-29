@@ -210,9 +210,7 @@ private:
   bool m_isHiRes;
   int16_t m_maxSkippablePackets;
   int16_t m_maxCelsPerFrame;
-  // Header fields introduced in Robot version 5+. Earlier versions do not
-  // store them, so we keep the cached values at zero and avoid consuming
-  // bytes from the stream when parsing v4 headers.
+  // Header fields present in Robot versions 5 and 6.
   std::array<uint32_t, 4> m_fixedCelSizes{};
   std::array<uint32_t, 2> m_reservedHeaderSpace{};
   std::vector<uint32_t> m_frameSizes;
