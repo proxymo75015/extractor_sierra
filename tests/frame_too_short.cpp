@@ -30,7 +30,8 @@ TEST_CASE("Frame trop courte") {
         RobotExtractorTester::exportFrame(extractor, 0, frameJson);
         FAIL("Aucune exception levée");
     } catch (const std::runtime_error &e) {
-        REQUIRE(std::string(e.what()).find("Lecture incomplète") !=
+        REQUIRE(std::string(e.what()).find(
+                    "Taille de frame dépasse les données restantes du fichier") !=
                 std::string::npos);
     }
 }
