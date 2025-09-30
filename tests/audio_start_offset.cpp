@@ -33,7 +33,22 @@ void push32(std::vector<uint8_t> &v, uint32_t x) {
   v.push_back(static_cast<uint8_t>((x >> 24) & 0xFF));
 }
 
-std::vector<uint8_t> build_header() {
+std::vector<int16_t>
+decompress_primer_block(const std::vector<uint8_t> &rawBytes) {
+  std::vector<std::byte> bytes(rawBytes.size());
+  for (size_t i = 0; i < rawBytes.size(); ++i) {
+    bytes[i] = std::byte{rawBytes[i]};
+  }
+  int16_t predictor = 0;
+  auto samples = robot::dpcm16_decompress(std::span(bytes), predictor);
+  if (samples.size() <= kRunwaySamples) {
+    return {};
+  }
+  return {samples.begin() + static_cast<std::ptrdiff_t>(kRunwaySamples),
+          samples.end()};
+}
+
+std::vector<uint8_t> build_header(uint16_t primerReserved) {
   std::vector<uint8_t> h;
   push16(h, 0x16); // signature
   h.insert(h.end(), {'S', 'O', 'L', '\0'});
@@ -43,7 +58,7 @@ std::vector<uint8_t> build_header() {
   push16(h, 0);   // skip
   push16(h, kNumFrames); // numFrames
   push16(h, 0);          // paletteSize
-  push16(h, static_cast<uint16_t>(kPrimerHeaderSize));
+  push16(h, primerReserved);
   push16(h, 1); // xRes
   push16(h, 1); // yRes
   h.push_back(0); // hasPalette
@@ -60,12 +75,13 @@ std::vector<uint8_t> build_header() {
   return h;
 }
 
-std::vector<uint8_t> build_primer_header() {
+std::vector<uint8_t> build_primer_header(uint32_t total, uint32_t evenSize,
+                                         uint32_t oddSize) {
   std::vector<uint8_t> p;
-  push32(p, kPrimerHeaderSize);
+  push32(p, total);
   push16(p, 0); // compType
-  push32(p, 0); // even size
-  push32(p, 0); // odd size
+  push32(p, evenSize);
+  push32(p, oddSize);
   return p;
 }
 
@@ -124,9 +140,16 @@ TEST_CASE("Audio start offset routed using doubled positions") {
   }
   fs::create_directories(outDir);
 
-  auto data = build_header();
-  auto primer = build_primer_header();
+  std::vector<uint8_t> primerData = {0, 0, 0, 0, 0, 0, 0, 0, 10, 20, 30};
+  auto primerSamples = decompress_primer_block(primerData);
+  REQUIRE(primerSamples.size() >= 2);
+  auto data = build_header(static_cast<uint16_t>(kPrimerHeaderSize +
+                                                 primerData.size()));
+  auto primer =
+      build_primer_header(kPrimerHeaderSize + static_cast<uint32_t>(primerData.size()),
+                          0, static_cast<uint32_t>(primerData.size()));
   data.insert(data.end(), primer.begin(), primer.end());
+  data.insert(data.end(), primerData.begin(), primerData.end());
 
   for (uint16_t i = 0; i < kNumFrames; ++i) {
     push16(data, 2); // frame size without audio
@@ -146,8 +169,7 @@ TEST_CASE("Audio start offset routed using doubled positions") {
   blocks[0].position = 3;
   blocks[0].raw = {0x12, 0x34, 0x56, 0x78, 0x9A};
   blocks[0].samples = decompress_truncated_block(blocks[0].raw);
-
-  blocks[1].position = 4;
+  blocks[1].position = 4096;
   blocks[1].raw = {0xAB, 0xCD, 0xEF, 0x10, 0x24};
   blocks[1].samples = decompress_truncated_block(blocks[1].raw);
 
@@ -168,10 +190,26 @@ TEST_CASE("Audio start offset routed using doubled positions") {
   out.close();
 
   robot::RobotExtractor extractor(input, outDir, true);
-  REQUIRE_NOTHROW(extractor.extract());
+  REQUIRE_NOTHROW(robot::RobotExtractorTester::readHeader(extractor));
+  REQUIRE_NOTHROW(robot::RobotExtractorTester::readPrimer(extractor));
+  REQUIRE_NOTHROW(robot::RobotExtractorTester::readSizesAndCues(extractor));
+
+  for (const auto &block : blocks) {
+    std::vector<std::byte> payload(kZeroPrefixBytes + block.raw.size(),
+                                   std::byte{0});
+    for (size_t i = 0; i < block.raw.size(); ++i) {
+      payload[kZeroPrefixBytes + i] = std::byte{block.raw[i]};
+    }
+    CAPTURE(block.position);
+    REQUIRE_NOTHROW(robot::RobotExtractorTester::processAudioBlock(
+        extractor, payload, block.position));
+  }
 
   REQUIRE(robot::RobotExtractorTester::audioStartOffsetInitialized(extractor));
-  REQUIRE(robot::RobotExtractorTester::audioStartOffset(extractor) == 0);
+  const int64_t audioStartOffset =
+      robot::RobotExtractorTester::audioStartOffset(extractor);
+  REQUIRE((audioStartOffset & 1LL) == 0);
+  REQUIRE(((audioStartOffset % 4) + 4) % 4 == 2);
 
   const auto evenStream =
       robot::RobotExtractorTester::buildChannelStream(extractor, true);
@@ -187,13 +225,9 @@ TEST_CASE("Audio start offset routed using doubled positions") {
   REQUIRE_FALSE(firstBlock.samples.empty());
   auto firstEvenIndex = find_alignment(evenStream, firstBlock.samples);
   auto firstOddIndex = find_alignment(oddStream, firstBlock.samples);
-  REQUIRE_FALSE(firstEvenIndex.has_value());
-  REQUIRE(firstOddIndex.has_value());
+  REQUIRE(firstEvenIndex.has_value());
+  REQUIRE_FALSE(firstOddIndex.has_value());
   
-  const int64_t audioStartOffset =
-      robot::RobotExtractorTester::audioStartOffset(extractor);
-  REQUIRE(audioStartOffset % 4 == 0);
-
   for (const auto &block : blocks) {
     const auto &samples = block.samples;
     if (samples.empty()) {
