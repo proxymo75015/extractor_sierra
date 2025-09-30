@@ -10,6 +10,7 @@
 #include "robot_extractor.hpp"
 
 using robot::RobotExtractor;
+using robot::RobotExtractorTester;
 
 #include <catch2/matchers/catch_matchers_string.hpp>
 
@@ -99,6 +100,12 @@ TEST_CASE("Robot with audio but no primer fails with flag error") {
   }
 
   RobotExtractor extractor(input, outDir, true);
-  REQUIRE_THROWS_WITH(extractor.extract(),
-                      Catch::Matchers::ContainsSubstring("Flags corrupt"));
+  REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
+  REQUIRE_NOTHROW(RobotExtractorTester::readPrimer(extractor));
+
+  std::vector<std::byte> dummyBlock(robot::kRobotRunwayBytes, std::byte{0});
+  REQUIRE_THROWS_WITH(
+      RobotExtractorTester::processAudioBlock(extractor, dummyBlock,
+                                              kBlockPosition),
+      Catch::Matchers::ContainsSubstring("Flags corrupt"));
 }
