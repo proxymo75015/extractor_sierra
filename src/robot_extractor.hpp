@@ -152,6 +152,7 @@ private:
   void parseHeaderFields(bool bigEndian);
   void readPrimer();
   void readPalette();
+  void ensurePrimerProcessed();
   void processPrimerChannel(std::vector<std::byte> &primer, bool isEven);
   void process_audio_block(std::span<const std::byte> block, int32_t pos);
   void readSizesAndCues();
@@ -227,6 +228,8 @@ private:
   std::streamoff m_primerPosition = 0;
   std::vector<std::byte> m_evenPrimer;
   std::vector<std::byte> m_oddPrimer;
+  bool m_primerInvalid = false;
+  bool m_primerProcessed = false;
   std::vector<std::byte> m_frameBuffer;
   std::vector<std::byte> m_celBuffer;
   std::vector<std::byte> m_rgbaBuffer;
