@@ -461,8 +461,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   }
 
   const int64_t doubledPos = static_cast<int64_t>(pos) * 2;
-  const bool posIsEven = (static_cast<int64_t>(pos) & 1LL) == 0;
-  const int64_t baseOffset = posIsEven ? 0 : 2;
+  const int64_t initialStartOffset = m_audioStartOffset;
   const bool startOffsetUninitialized = !m_audioStartOffsetInitialized;
 
   auto tryOffset = [&](int64_t offset, ChannelAudio *&channel,
@@ -558,13 +557,18 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     attemptedOffsets.push_back(offset);
     AttemptResult attempt = evaluateOffset(offset);
     AppendPlanStatus resultStatus = attempt.status;
-    const bool firstOffsetAttempt =
-        startOffsetUninitialized && offset == baseOffset && doubledPos >= 0;
+    const bool firstOffsetAttempt = startOffsetUninitialized &&
+                                    offset == initialStartOffset &&
+                                    doubledPos >= 0;
     if (firstOffsetAttempt &&
         (resultStatus == AppendPlanStatus::Ok ||
-         resultStatus == AppendPlanStatus::Skip) &&
-        attempt.isEven != posIsEven) {
-      resultStatus = AppendPlanStatus::ParityMismatch;
+         resultStatus == AppendPlanStatus::Skip)) {
+      // Derive the target channel directly from the parity of the adjusted
+      // position for this start offset candidate.
+      const bool expectedEvenChannel = ((doubledPos - offset) & 3LL) == 0;
+      if (attempt.isEven != expectedEvenChannel) {
+        resultStatus = AppendPlanStatus::ParityMismatch;
+      }
     }
     if (resultStatus == AppendPlanStatus::Ok ||
         resultStatus == AppendPlanStatus::Skip) {
@@ -610,7 +614,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
 
   if (!m_audioStartOffsetInitialized && doubledPos >= 0) {
     attemptedBase = true;
-    if (attemptWithAlternate(baseOffset, true, true)) {
+    if (attemptWithAlternate(initialStartOffset, true, true)) {
       return;
     }
   }
