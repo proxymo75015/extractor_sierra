@@ -1044,6 +1044,11 @@ RobotExtractor::parseHunkPalette(std::span<const std::byte> raw,
       }
       if (endColor > maxEnd) {
         maxEnd = static_cast<uint16_t>(endColor);
+        if (maxEnd >= parsed.startColor) {
+          parsed.colorCount = static_cast<uint16_t>(maxEnd - parsed.startColor);
+        } else {
+          parsed.colorCount = 0;
+        }        
       }
       parsed.sharedUsed = parsed.sharedUsed && sharedUsed;
     }
