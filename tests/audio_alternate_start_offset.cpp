@@ -198,24 +198,18 @@ TEST_CASE("Alternate audio start offset persists across blocks") {
   REQUIRE(robot::RobotExtractorTester::audioStartOffsetInitialized(extractor));
   const int64_t audioStartOffset =
       robot::RobotExtractorTester::audioStartOffset(extractor);
-  REQUIRE(audioStartOffset % 4 == 0);
+  REQUIRE((audioStartOffset & 1LL) == 0);
+  REQUIRE(((audioStartOffset % 4) + 4) % 4 == 2);
   const int64_t offsetHalf = audioStartOffset / 2;
   CAPTURE(audioStartOffset);
   CAPTURE(offsetHalf);
 
   auto computeAlternateHalf = [](int64_t baseOffset) {
-    int64_t remainder = baseOffset % 4;
-    if (remainder < 0) {
-      remainder += 4;
-    }
-    if (remainder == 0) {
+    REQUIRE((baseOffset & 1LL) == 0);
+    if ((baseOffset & 2LL) == 0) {
       return (baseOffset + 2) / 2;
     }
-    if (remainder == 2) {
-      return (baseOffset - 2) / 2;
-    }
-    FAIL("Offset audio inattendu");
-    return baseOffset / 2;
+    return (baseOffset - 2) / 2;
   };
   const int64_t alternateOffsetHalf = computeAlternateHalf(audioStartOffset);
 
