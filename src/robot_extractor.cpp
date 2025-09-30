@@ -441,7 +441,6 @@ void RobotExtractor::ensurePrimerProcessed() {
 
   releasePrimers();
   m_primerProcessed = true;
-  }
 }
 
 void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
@@ -529,14 +528,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     throw std::runtime_error("Position audio incohérente");
   };
 
-    auto normalizeStartOffset = [](int64_t offset) {
-    int64_t remainder = offset % 4;
-    if (remainder < 0) {
-      remainder += 4;
-    }
-    return offset - remainder;
-  };
-
   struct AttemptResult {
     int64_t offset = 0;  
     AppendPlanStatus status = AppendPlanStatus::Conflict;
@@ -602,10 +593,9 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     if (resultStatus == AppendPlanStatus::Ok ||
         resultStatus == AppendPlanStatus::Skip) {
       if (doubledPos >= 0) {
-        const int64_t normalizedOffset = normalizeStartOffset(attempt.offset);
         if (!m_audioStartOffsetInitialized ||
-            m_audioStartOffset != normalizedOffset) {
-          m_audioStartOffset = normalizedOffset;
+            m_audioStartOffset != attempt.offset) {
+          m_audioStartOffset = attempt.offset;
         }
         m_audioStartOffsetInitialized = true;
       }
