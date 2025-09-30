@@ -183,6 +183,13 @@ TEST_CASE("Audio start offset routed using doubled positions") {
   CAPTURE(evenStream.size());
   CAPTURE(oddStream.size());
 
+  const auto &firstBlock = blocks[0];
+  REQUIRE_FALSE(firstBlock.samples.empty());
+  auto firstEvenIndex = find_alignment(evenStream, firstBlock.samples);
+  auto firstOddIndex = find_alignment(oddStream, firstBlock.samples);
+  REQUIRE_FALSE(firstEvenIndex.has_value());
+  REQUIRE(firstOddIndex.has_value());
+  
   const int64_t audioStartOffset =
       robot::RobotExtractorTester::audioStartOffset(extractor);
   REQUIRE(audioStartOffset % 4 == 0);
