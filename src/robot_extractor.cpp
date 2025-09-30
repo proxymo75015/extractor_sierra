@@ -247,6 +247,8 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
 }
 
 void RobotExtractor::readPrimer() {
+  m_primerInvalid = false;
+  m_primerProcessed = false;  
   const std::uintmax_t fileSize = m_fileSize;
   if (!m_hasAudio) {
     std::streamoff curPos = m_fp.tellg();
@@ -255,7 +257,8 @@ void RobotExtractor::readPrimer() {
       throw std::runtime_error("Primer hors limites");
     }
     m_fp.seekg(m_primerReservedSize, std::ios::cur);
-    m_postPrimerPos = m_fp.tellg();    
+    m_postPrimerPos = m_fp.tellg();
+    m_primerProcessed = true;
     if (m_options.debug_index) {
       log_error(m_srcPath,
                 "readPrimer: position après seekg = " +
@@ -383,10 +386,41 @@ void RobotExtractor::readPrimer() {
     m_oddPrimer.assign(static_cast<size_t>(m_oddPrimerSize), std::byte{0});
     m_postPrimerPos = m_fp.tellg();
   } else {
+    m_primerInvalid = true;
+    m_postPrimerPos = m_fp.tellg();
+  }
+
+  if (m_options.debug_index) {
+    log_error(m_srcPath,
+              "readPrimer: position après seekg = " +
+                  std::to_string(m_fp.tellg()),
+              m_options);
+  }
+}
+
+void RobotExtractor::ensurePrimerProcessed() {
+  if (m_primerProcessed) {
+    return;
+  }
+
+  auto releasePrimers = [this]() {
+    m_evenPrimer.clear();
+    m_evenPrimer.shrink_to_fit();
+    m_oddPrimer.clear();
+    m_oddPrimer.shrink_to_fit();
+  };
+
+  if (!m_extractAudio || !m_hasAudio) {
+    m_primerProcessed = true;
+    releasePrimers();
+    return;
+  }
+
+  if (m_primerInvalid) {    
     throw std::runtime_error("ReadPrimerData - Flags corrupt");
   }
 
-  // Décompresser les buffers primer pour initialiser les prédicteurs audio
+  // Décompresser les buffers primer pour initialiser les prédicteurs audio.
   if (m_evenPrimerSize > 0) {
     try {
       processPrimerChannel(m_evenPrimer, true);
@@ -404,15 +438,9 @@ void RobotExtractor::readPrimer() {
           m_srcPath.string());
     }
   }
-  m_evenPrimer.clear();
-  m_evenPrimer.shrink_to_fit();
-  m_oddPrimer.clear();
-  m_oddPrimer.shrink_to_fit();
-  if (m_options.debug_index) {
-    log_error(m_srcPath,
-              "readPrimer: position après seekg = " +
-                  std::to_string(m_fp.tellg()),
-              m_options);
+
+  releasePrimers();
+  m_primerProcessed = true;
   }
 }
 
@@ -443,6 +471,7 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
 
 void RobotExtractor::process_audio_block(std::span<const std::byte> block,
                                          int32_t pos) {
+  ensurePrimerProcessed();  
   if (block.size() < kRobotRunwayBytes) {
     throw std::runtime_error("Bloc audio inutilisable");
   }
@@ -845,6 +874,7 @@ void RobotExtractor::finalizeAudio() {
   if (!m_extractAudio) {
     return;
   }
+  ensurePrimerProcessed();  
   auto evenStream = buildChannelStream(true);
   if (!evenStream.empty()) {
     writeWav(evenStream, kSampleRate, 0, true);
