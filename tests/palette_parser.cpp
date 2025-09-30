@@ -189,3 +189,59 @@ TEST_CASE("Hunk palette clamps entries that exceed palette capacity") {
   REQUIRE(parsed.entries[255].g == colors[5].g);
   REQUIRE(parsed.entries[255].b == colors[5].b);
 }
+
+TEST_CASE(
+    "Hunk palette recomputes color count when later entry widens earlier span") {
+  fs::path tmpDir = fs::temp_directory_path() / "palette_parser";
+  fs::create_directories(tmpDir);
+  fs::path input = tmpDir / "overlap_span.rbt";
+  fs::path outDir = tmpDir / "overlap_span_out";
+  fs::create_directories(outDir);
+  if (!fs::exists(input)) {
+    std::ofstream out(input, std::ios::binary);
+  }
+
+  test_palette::EntrySpec firstEntry;
+  firstEntry.offset = 40;
+  firstEntry.startColor = 70;
+  firstEntry.sharedUsed = false;
+  firstEntry.defaultUsed = true;
+  firstEntry.version = 1;
+  firstEntry.colors = {
+      {true, 10, 20, 30},
+      {false, 40, 50, 60},
+      {true, 70, 80, 90},
+      {true, 100, 110, 120},
+      {false, 130, 140, 150},
+  };
+
+  test_palette::EntrySpec secondEntry;
+  secondEntry.offset = 120;
+  secondEntry.startColor = 60;
+  secondEntry.sharedUsed = false;
+  secondEntry.defaultUsed = true;
+  secondEntry.version = 2;
+  secondEntry.colors.clear();
+  for (int i = 0; i < 20; ++i) {
+    const uint8_t base = static_cast<uint8_t>(i * 5);
+    secondEntry.colors.push_back(
+        test_palette::Color{(i % 2) == 0, static_cast<uint8_t>(base + 1),
+                            static_cast<uint8_t>(base + 2),
+                            static_cast<uint8_t>(base + 3)});
+  }
+
+  auto raw = test_palette::build_hunk_palette_with_offsets(
+      {firstEntry, secondEntry});
+
+  robot::RobotExtractor extractor(input, outDir, false);
+  RobotExtractorTester::palette(extractor) = raw;
+  RobotExtractorTester::bigEndian(extractor) = false;
+  auto parsed = RobotExtractorTester::parsePalette(extractor);
+
+  REQUIRE(parsed.startColor == 60);
+  REQUIRE(parsed.colorCount == 20);
+  REQUIRE(parsed.entries[60].present);
+  REQUIRE(parsed.entries[79].present);
+  REQUIRE(parsed.entries[74].present);
+  REQUIRE(parsed.entries[74].r == 1 + (14 * 5));
+}
