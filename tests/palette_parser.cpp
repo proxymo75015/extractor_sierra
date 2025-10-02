@@ -29,6 +29,8 @@ TEST_CASE("Hunk palette with per-color used flags is parsed") {
   RobotExtractorTester::bigEndian(extractor) = false;
   auto parsed = RobotExtractorTester::parsePalette(extractor);
 
+  REQUIRE(parsed.valid);
+  
   REQUIRE(parsed.startColor == 3);
   REQUIRE(parsed.entries[3].present);
   REQUIRE(parsed.entries[3].used);
@@ -65,6 +67,8 @@ TEST_CASE("Hunk palette big-endian offsets are parsed") {
   REQUIRE_NOTHROW(RobotExtractorTester::parsePalette(extractor));
   auto parsed = RobotExtractorTester::parsePalette(extractor);
 
+  REQUIRE(parsed.valid);
+  
   REQUIRE(parsed.startColor == 7);
   REQUIRE(parsed.colorCount == static_cast<uint16_t>(colors.size()));
   REQUIRE_FALSE(parsed.sharedUsed);
@@ -104,6 +108,7 @@ TEST_CASE(
 
   REQUIRE_NOTHROW(RobotExtractorTester::parsePalette(extractor));
   auto parsed = RobotExtractorTester::parsePalette(extractor);
+  REQUIRE(parsed.valid);  
   REQUIRE(parsed.startColor == 4);
   REQUIRE(parsed.entries[4].present);
   REQUIRE(parsed.entries[4].used);
@@ -140,6 +145,8 @@ TEST_CASE("Hunk palette preserves remap data and shared flags") {
   RobotExtractorTester::bigEndian(extractor) = false;
   auto parsed = RobotExtractorTester::parsePalette(extractor);
 
+  REQUIRE(parsed.valid);
+  
   REQUIRE(parsed.startColor == 10);
   REQUIRE(parsed.sharedUsed);
   REQUIRE_FALSE(parsed.defaultUsed);
@@ -186,6 +193,8 @@ TEST_CASE("Hunk palette respects offset table ordering and explicit remap") {
   RobotExtractorTester::bigEndian(extractor) = false;
   auto parsed = RobotExtractorTester::parsePalette(extractor);
 
+  REQUIRE(parsed.valid);
+  
   REQUIRE(parsed.startColor == 5);
   REQUIRE(parsed.colorCount == 17);
   REQUIRE_FALSE(parsed.sharedUsed);
@@ -312,6 +321,8 @@ TEST_CASE(
   RobotExtractorTester::bigEndian(extractor) = false;
   auto parsed = RobotExtractorTester::parsePalette(extractor);
 
+  REQUIRE(parsed.valid);
+  
   REQUIRE(parsed.startColor == 60);
   REQUIRE(parsed.colorCount == 20);
   REQUIRE(parsed.entries[60].present);
