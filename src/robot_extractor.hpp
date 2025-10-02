@@ -244,6 +244,9 @@ private:
   ChannelAudio m_oddChannelAudio;
   int64_t m_audioStartOffset = 0;
   bool m_audioStartOffsetInitialized = false;
+#ifdef ROBOT_EXTRACTOR_TESTING
+  bool m_forceParityMismatchForNextAttempt = false;
+#endif
 };
 
 #ifdef ROBOT_EXTRACTOR_TESTING
@@ -324,6 +327,9 @@ struct RobotExtractorTester {
   }
   static bool &audioStartOffsetInitialized(RobotExtractor &r) {
     return r.m_audioStartOffsetInitialized;
+  }
+  static bool &forceParityMismatchForNextAttempt(RobotExtractor &r) {
+    return r.m_forceParityMismatchForNextAttempt;
   }
   static RobotExtractor::ParsedPalette parsePalette(const RobotExtractor &r) {
     return RobotExtractor::parseHunkPalette(r.m_palette);
