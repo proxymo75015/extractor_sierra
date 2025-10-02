@@ -42,8 +42,8 @@ Output
 
 PNG files for each cel (frame_XXXXX_N.png)
 WAV files for audio tracks (if --audio is specified):
-frame_XXXXX_even.wav: Even channel (mono, 16-bit, 11.025 kHz)
-frame_XXXXX_odd.wav: Odd channel (mono, 16-bit, 11.025 kHz)
+frame_XXXXX_even.wav: Even channel (mono, 16-bit, 22.05 kHz)
+frame_XXXXX_odd.wav: Odd channel (mono, 16-bit, 22.05 kHz)
 
 Robot files that contain audio must also provide a valid audio primer.
 Either a primer block must be reserved in the header or the
@@ -53,7 +53,7 @@ with an error to match ScummVM's behaviour.
 metadata.json containing frame and cel metadata
 
 Format Audio
-The exported WAV files are in mono 16-bit 11.025 kHz format. For stereo audio in the original files, the channels are separated:
+The exported WAV files are in mono 16-bit 22.05 kHz format. For stereo audio in the original files, the channels are separated:
 
 frame_XXXXX_even.wav: Even channel
 frame_XXXXX_odd.wav: Odd channel
@@ -66,6 +66,7 @@ Earlier revisions of this project bundled a legacy standalone extractor at `src/
 License
 
 BSD 3-Clause License
+
 
 
 
