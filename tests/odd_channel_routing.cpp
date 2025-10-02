@@ -44,7 +44,12 @@ decompress_truncated_block(const std::vector<uint8_t> &raw) {
           samples.end()};
 }
 
-static std::vector<int16_t> read_wav_samples(const fs::path &path) {
+struct StereoSamples {
+  std::vector<int16_t> even;
+  std::vector<int16_t> odd;
+};
+
+static StereoSamples read_wav_samples(const fs::path &path) {
   std::ifstream wav(path, std::ios::binary);
   REQUIRE(wav);
   wav.seekg(40, std::ios::beg);
@@ -56,15 +61,23 @@ static std::vector<int16_t> read_wav_samples(const fs::path &path) {
                        (static_cast<uint32_t>(dataSizeBytes[1]) << 8) |
                        (static_cast<uint32_t>(dataSizeBytes[2]) << 16) |
                        (static_cast<uint32_t>(dataSizeBytes[3]) << 24);
-  REQUIRE(dataBytes % 2 == 0);
+  REQUIRE(dataBytes % 4 == 0);
   wav.seekg(44, std::ios::beg);
-  std::vector<int16_t> samples(dataBytes / 2);
-  if (!samples.empty()) {
-    wav.read(reinterpret_cast<char *>(samples.data()),
+  std::vector<int16_t> interleaved(dataBytes / 2);
+  if (!interleaved.empty()) {
+    wav.read(reinterpret_cast<char *>(interleaved.data()),
              static_cast<std::streamsize>(dataBytes));
     REQUIRE(wav.gcount() == static_cast<std::streamsize>(dataBytes));
   }
-  return samples;
+  StereoSamples result;
+  const size_t frameCount = interleaved.size() / 2;
+  result.even.reserve(frameCount);
+  result.odd.reserve(frameCount);
+  for (size_t i = 0; i < frameCount; ++i) {
+    result.even.push_back(interleaved[i * 2]);
+    result.odd.push_back(interleaved[i * 2 + 1]);
+  }
+  return result;
 }
 
 static std::vector<uint8_t> build_header() {
@@ -203,14 +216,11 @@ TEST_CASE("Audio blocks are routed according to parity") {
     }
   }
 
+  const auto stereoPath = outDir / "frame_00000.wav";
+  REQUIRE(fs::exists(stereoPath));
+  REQUIRE_FALSE(fs::exists(outDir / "frame_00001.wav"));
 
-  const auto evenPath = outDir / "frame_00000_even.wav";
-  const auto oddPath = outDir / "frame_00000_odd.wav";
-  REQUIRE(fs::exists(evenPath));
-  REQUIRE(fs::exists(oddPath));
-  REQUIRE_FALSE(fs::exists(outDir / "frame_00001_even.wav"));
-  REQUIRE_FALSE(fs::exists(outDir / "frame_00001_odd.wav"));
-
-  REQUIRE(read_wav_samples(evenPath) == evenStream);
-  REQUIRE(read_wav_samples(oddPath) == oddStream);
+  auto stereoSamples = read_wav_samples(stereoPath);
+  REQUIRE(stereoSamples.even == evenStream);
+  REQUIRE(stereoSamples.odd == oddStream);
 }
