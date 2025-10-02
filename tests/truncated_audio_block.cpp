@@ -157,7 +157,7 @@ TEST_CASE("Truncated audio block triggers error") {
 
   REQUIRE(evenStream == expected);
 
-  fs::path wavPath = outDir / "frame_00000_even.wav";
+  fs::path wavPath = outDir / "frame_00000.wav";
   REQUIRE(fs::exists(wavPath));
 
   std::ifstream wav(wavPath, std::ios::binary);
@@ -171,14 +171,20 @@ TEST_CASE("Truncated audio block triggers error") {
                        (static_cast<uint32_t>(dataSizeBytes[1]) << 8) |
                        (static_cast<uint32_t>(dataSizeBytes[2]) << 16) |
                        (static_cast<uint32_t>(dataSizeBytes[3]) << 24);
-  REQUIRE(dataBytes % 2 == 0);
+  REQUIRE(dataBytes % 4 == 0);
   wav.seekg(44, std::ios::beg);
-  std::vector<int16_t> wavSamples(dataBytes / 2);
-  if (!wavSamples.empty()) {
-    wav.read(reinterpret_cast<char *>(wavSamples.data()),
+  std::vector<int16_t> interleaved(dataBytes / 2);
+  if (!interleaved.empty()) {
+    wav.read(reinterpret_cast<char *>(interleaved.data()),
              static_cast<std::streamsize>(dataBytes));
     REQUIRE(wav.gcount() == static_cast<std::streamsize>(dataBytes));
   }
 
-  REQUIRE(wavSamples == evenStream);
+  std::vector<int16_t> evenSamples;
+  evenSamples.reserve(interleaved.size() / 2);
+  for (size_t i = 0; i < interleaved.size(); i += 2) {
+    evenSamples.push_back(interleaved[i]);
+  }
+
+  REQUIRE(evenSamples == evenStream);
 }
