@@ -100,14 +100,17 @@ TEST_CASE("Primer WAV excludes runway samples") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
-  auto wavPath = outDir / "frame_00000_even.wav";
+  auto wavPath = outDir / "frame_00000.wav";
   REQUIRE(fs::exists(wavPath));
-  REQUIRE(fs::file_size(wavPath) == 48); // 44 header + 4 data bytes
+  REQUIRE(fs::file_size(wavPath) == 52); // 44 header + 8 data bytes (stéréo)
 
   std::ifstream wav(wavPath, std::ios::binary);
   REQUIRE(wav);
   std::array<uint8_t, 44> header{};
   wav.read(reinterpret_cast<char *>(header.data()), header.size());
+  uint16_t channels = header[22] |
+                      (static_cast<uint16_t>(header[23]) << 8);
+  REQUIRE(channels == 2);  
   uint32_t rate = header[24] | (static_cast<uint32_t>(header[25]) << 8) |
                   (static_cast<uint32_t>(header[26]) << 16) |
                   (static_cast<uint32_t>(header[27]) << 24);
@@ -116,8 +119,8 @@ TEST_CASE("Primer WAV excludes runway samples") {
   uint32_t byteRate = header[28] | (static_cast<uint32_t>(header[29]) << 8) |
                       (static_cast<uint32_t>(header[30]) << 16) |
                       (static_cast<uint32_t>(header[31]) << 24);
-  REQUIRE(byteRate == 22050u * 2u);
+  REQUIRE(byteRate == 22050u * 2u * 2u);
 
   uint16_t blockAlign = header[32] | (static_cast<uint16_t>(header[33]) << 8);
-  REQUIRE(blockAlign == 2);
+  REQUIRE(blockAlign == 4);
 }
