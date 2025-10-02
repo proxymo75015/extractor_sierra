@@ -128,6 +128,7 @@ public:
   };
 
   struct ParsedPalette {
+    bool valid = false;
     uint8_t startColor = 0;
     uint16_t colorCount = 0;
     bool sharedUsed = false;
@@ -147,6 +148,7 @@ private:
   static constexpr size_t kMaxCuePoints = 256;
   static constexpr size_t kCelHeaderSize = 22;
   static constexpr uint32_t kSampleRate = 11025;
+  static constexpr const char *kPaletteFallbackFilename = "palette.raw";
 
   void readHeader();
   void parseHeaderFields(bool bigEndian);
@@ -232,6 +234,8 @@ private:
   std::vector<std::byte> m_frameBuffer;
   std::vector<std::byte> m_celBuffer;
   std::vector<std::byte> m_rgbaBuffer;
+  bool m_paletteParseFailed = false;
+  bool m_paletteFallbackDumped = false;
   struct ChannelAudio {
     std::vector<int16_t> samples;
     std::vector<uint8_t> occupied;
