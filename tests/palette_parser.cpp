@@ -43,6 +43,80 @@ TEST_CASE("Hunk palette with per-color used flags is parsed") {
   REQUIRE(parsed.entries[4].b == 60);
 }
 
+TEST_CASE("Hunk palette big-endian offsets are parsed") {
+  fs::path tmpDir = fs::temp_directory_path() / "palette_parser";
+  fs::create_directories(tmpDir);
+  fs::path input = tmpDir / "be_offsets.rbt";
+  fs::path outDir = tmpDir / "be_offsets_out";
+  fs::create_directories(outDir);
+  if (!fs::exists(input)) {
+    std::ofstream out(input, std::ios::binary);
+  }
+
+  std::vector<test_palette::Color> colors{{true, 12, 34, 56},
+                                          {false, 78, 90, 12}};
+  auto raw =
+      test_palette::build_hunk_palette(colors, 7, false, true, {}, true);
+
+  robot::RobotExtractor extractor(input, outDir, false);
+  RobotExtractorTester::palette(extractor) = raw;
+  RobotExtractorTester::bigEndian(extractor) = true;
+
+  REQUIRE_NOTHROW(RobotExtractorTester::parsePalette(extractor));
+  auto parsed = RobotExtractorTester::parsePalette(extractor);
+
+  REQUIRE(parsed.startColor == 7);
+  REQUIRE(parsed.colorCount == static_cast<uint16_t>(colors.size()));
+  REQUIRE_FALSE(parsed.sharedUsed);
+  REQUIRE(parsed.defaultUsed);
+  REQUIRE(parsed.entries[7].present);
+  REQUIRE(parsed.entries[7].used);
+  REQUIRE(parsed.entries[7].r == colors[0].r);
+  REQUIRE(parsed.entries[7].g == colors[0].g);
+  REQUIRE(parsed.entries[7].b == colors[0].b);
+  REQUIRE(parsed.entries[8].present);
+  REQUIRE_FALSE(parsed.entries[8].used);
+  REQUIRE(parsed.entries[8].r == colors[1].r);
+  REQUIRE(parsed.entries[8].g == colors[1].g);
+  REQUIRE(parsed.entries[8].b == colors[1].b);
+}
+
+TEST_CASE(
+    "Hunk palette big-endian payloads are accepted on little-endian containers") {
+  fs::path tmpDir = fs::temp_directory_path() / "palette_parser";
+  fs::create_directories(tmpDir);
+  fs::path input = tmpDir / "be_payload.rbt";
+  fs::path outDir = tmpDir / "be_payload_out";
+  fs::create_directories(outDir);
+  if (!fs::exists(input)) {
+    std::ofstream out(input, std::ios::binary);
+  }
+
+  std::vector<test_palette::Color> colors{
+      {true, 5, 15, 25},
+      {false, 35, 45, 55},
+  };
+  auto raw = test_palette::build_hunk_palette(colors, 4, false, true, {}, true);
+
+  robot::RobotExtractor extractor(input, outDir, false);
+  RobotExtractorTester::palette(extractor) = raw;
+  RobotExtractorTester::bigEndian(extractor) = false;
+
+  REQUIRE_NOTHROW(RobotExtractorTester::parsePalette(extractor));
+  auto parsed = RobotExtractorTester::parsePalette(extractor);
+  REQUIRE(parsed.startColor == 4);
+  REQUIRE(parsed.entries[4].present);
+  REQUIRE(parsed.entries[4].used);
+  REQUIRE(parsed.entries[4].r == colors[0].r);
+  REQUIRE(parsed.entries[4].g == colors[0].g);
+  REQUIRE(parsed.entries[4].b == colors[0].b);
+  REQUIRE(parsed.entries[5].present);
+  REQUIRE_FALSE(parsed.entries[5].used);
+  REQUIRE(parsed.entries[5].r == colors[1].r);
+  REQUIRE(parsed.entries[5].g == colors[1].g);
+  REQUIRE(parsed.entries[5].b == colors[1].b);
+}
+
 TEST_CASE("Hunk palette preserves remap data and shared flags") {
   fs::path tmpDir = fs::temp_directory_path() / "palette_parser";
   fs::create_directories(tmpDir);
