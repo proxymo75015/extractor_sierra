@@ -147,7 +147,8 @@ private:
   static constexpr uint16_t kMaxAudioBlockSize = 65535;
   static constexpr size_t kMaxCuePoints = 256;
   static constexpr size_t kCelHeaderSize = 22;
-  static constexpr uint32_t kSampleRate = 11025;
+  static constexpr uint32_t kChannelSampleRate = 11025;
+  static constexpr uint32_t kSampleRate = 22050;
   static constexpr const char *kPaletteFallbackFilename = "palette.raw";
 
   void readHeader();
