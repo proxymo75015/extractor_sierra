@@ -92,7 +92,12 @@ std::vector<int16_t> decompress_without_runway(const std::vector<uint8_t> &bytes
   return samples;
 }
 
-std::vector<int16_t> read_wav_samples(const fs::path &wavPath) {
+struct StereoSamples {
+  std::vector<int16_t> even;
+  std::vector<int16_t> odd;
+};
+
+StereoSamples read_wav_samples(const fs::path &wavPath) {
   std::ifstream wav(wavPath, std::ios::binary);
   REQUIRE(wav);
   wav.seekg(40, std::ios::beg);
@@ -104,15 +109,23 @@ std::vector<int16_t> read_wav_samples(const fs::path &wavPath) {
                        (static_cast<uint32_t>(dataSizeBytes[1]) << 8) |
                        (static_cast<uint32_t>(dataSizeBytes[2]) << 16) |
                        (static_cast<uint32_t>(dataSizeBytes[3]) << 24);
-  REQUIRE(dataBytes % 2 == 0);
+  REQUIRE(dataBytes % 4 == 0);
   wav.seekg(44, std::ios::beg);
-  std::vector<int16_t> samples(dataBytes / 2);
-  if (!samples.empty()) {
-    wav.read(reinterpret_cast<char *>(samples.data()),
+  std::vector<int16_t> interleaved(dataBytes / 2);
+  if (!interleaved.empty()) {
+    wav.read(reinterpret_cast<char *>(interleaved.data()),
              static_cast<std::streamsize>(dataBytes));
     REQUIRE(wav.gcount() == static_cast<std::streamsize>(dataBytes));
   }
-  return samples;
+  StereoSamples result;
+  const size_t frameCount = interleaved.size() / 2;
+  result.even.reserve(frameCount);
+  result.odd.reserve(frameCount);
+  for (size_t i = 0; i < frameCount; ++i) {
+    result.even.push_back(interleaved[i * 2]);
+    result.odd.push_back(interleaved[i * 2 + 1]);
+  }
+  return result;
 }
 
 void fill_gap(std::vector<int16_t> &buffer, size_t gapStart, size_t gapEnd,
@@ -216,9 +229,9 @@ TEST_CASE("Audio stream fills gaps with interpolation") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
-  auto wavPath = outDir / "frame_00000_even.wav";
+  auto wavPath = outDir / "frame_00000.wav";
   REQUIRE(fs::exists(wavPath));
-  auto actualSamples = read_wav_samples(wavPath);
+  auto stereoSamples = read_wav_samples(wavPath);
 
   const size_t blockAStart = primerSamples;
   const size_t blockBStart = primerSamples + blockASamples + gapSamples;
@@ -243,7 +256,8 @@ TEST_CASE("Audio stream fills gaps with interpolation") {
               expected.begin() + static_cast<std::ptrdiff_t>(blockBStart));
   }
 
-  REQUIRE(actualSamples == expected);
+  REQUIRE(stereoSamples.even == expected);
+  REQUIRE(stereoSamples.odd.size() == stereoSamples.even.size());
 }
 
 TEST_CASE("Audio blocks honor absolute positions when reordered") {
@@ -326,9 +340,9 @@ TEST_CASE("Audio blocks honor absolute positions when reordered") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
-  auto wavPath = outDir / "frame_00000_even.wav";
+  auto wavPath = outDir / "frame_00000.wav";
   REQUIRE(fs::exists(wavPath));
-  auto actualSamples = read_wav_samples(wavPath);
+  auto stereoSamples = read_wav_samples(wavPath);
 
   const size_t totalSamples = highStartSample + expectedHigh.size();
   std::vector<int16_t> expected(totalSamples, 0);
@@ -344,5 +358,6 @@ TEST_CASE("Audio blocks honor absolute positions when reordered") {
               expected.begin() + static_cast<std::ptrdiff_t>(highStartSample));
   }
 
-  REQUIRE(actualSamples == expected);
+  REQUIRE(stereoSamples.even == expected);
+  REQUIRE(stereoSamples.odd.size() == stereoSamples.even.size());
 }
