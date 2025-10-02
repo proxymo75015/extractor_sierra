@@ -173,7 +173,7 @@ TEST_CASE("Retransmitted audio blocks append only fresh data") {
   REQUIRE(jsonDoc["frames"].is_array());
   REQUIRE(jsonDoc["frames"].size() == kNumFrames);
 
-  fs::path wavPath = outDir / "frame_00000_even.wav";
+  fs::path wavPath = outDir / "frame_00000.wav";
   REQUIRE(fs::exists(wavPath));
 
   auto readSamples = [](const fs::path &path) {
@@ -188,13 +188,19 @@ TEST_CASE("Retransmitted audio blocks append only fresh data") {
                          (static_cast<uint32_t>(dataSizeBytes[1]) << 8) |
                          (static_cast<uint32_t>(dataSizeBytes[2]) << 16) |
                          (static_cast<uint32_t>(dataSizeBytes[3]) << 24);
-    std::vector<int16_t> samples(dataBytes / sizeof(int16_t));
-    if (!samples.empty()) {
-      wav.read(reinterpret_cast<char *>(samples.data()),
+    REQUIRE(dataBytes % 4 == 0);
+    std::vector<int16_t> interleaved(dataBytes / sizeof(int16_t));
+    if (!interleaved.empty()) {
+      wav.read(reinterpret_cast<char *>(interleaved.data()),
                static_cast<std::streamsize>(dataBytes));
     }
     REQUIRE(wav);
-    return samples;
+    std::vector<int16_t> evenSamples;
+    evenSamples.reserve(interleaved.size() / 2);
+    for (size_t i = 0; i < interleaved.size(); i += 2) {
+      evenSamples.push_back(interleaved[i]);
+    }
+    return evenSamples;
   };
 
   auto expectedBlock1 = decode_block(block1);
