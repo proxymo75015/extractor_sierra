@@ -188,8 +188,7 @@ private:
   void finalizeAudio();
   std::vector<int16_t> buildChannelStream(bool isEven) const;
 
-  static ParsedPalette parseHunkPalette(std::span<const std::byte> raw,
-                                        bool bigEndian);
+  static ParsedPalette parseHunkPalette(std::span<const std::byte> raw);
 
   std::filesystem::path m_srcPath;
   std::filesystem::path m_dstDir;
@@ -323,7 +322,7 @@ struct RobotExtractorTester {
     return r.m_audioStartOffsetInitialized;
   }
   static RobotExtractor::ParsedPalette parsePalette(const RobotExtractor &r) {
-    return RobotExtractor::parseHunkPalette(r.m_palette, r.m_bigEndian);
+    return RobotExtractor::parseHunkPalette(r.m_palette);
   }
   static void processAudioBlock(RobotExtractor &r,
                                 std::span<const std::byte> block, int32_t pos) {
