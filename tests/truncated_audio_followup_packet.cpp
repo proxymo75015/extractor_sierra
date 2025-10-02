@@ -184,7 +184,7 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   REQUIRE(jsonDoc["frames"].is_array());
   REQUIRE(jsonDoc["frames"].size() == 2);
 
-  fs::path wavPath = outDir / "frame_00000_even.wav";
+  fs::path wavPath = outDir / "frame_00000.wav";
   REQUIRE(fs::exists(wavPath));
 
   auto readSamples = [](const fs::path &path) {
@@ -199,7 +199,7 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
                          (static_cast<uint32_t>(dataSizeBytes[1]) << 8) |
                          (static_cast<uint32_t>(dataSizeBytes[2]) << 16) |
                          (static_cast<uint32_t>(dataSizeBytes[3]) << 24);
-    REQUIRE(dataBytes % 2 == 0);
+    REQUIRE(dataBytes % 4 == 0);
     wav.seekg(44, std::ios::beg);
     std::vector<uint8_t> audioData(dataBytes);
     if (!audioData.empty()) {
@@ -208,11 +208,11 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
       REQUIRE(wav.gcount() == static_cast<std::streamsize>(audioData.size()));
     }
     std::vector<int16_t> samples;
-    samples.reserve(audioData.size() / 2);
-    for (size_t i = 0; i + 1 < audioData.size(); i += 2) {
-      uint16_t lo = audioData[i];
-      uint16_t hi = static_cast<uint16_t>(audioData[i + 1]) << 8;
-      samples.push_back(static_cast<int16_t>(lo | hi));
+    samples.reserve(audioData.size() / 4);
+    for (size_t i = 0; i + 3 < audioData.size(); i += 4) {
+      uint16_t evenLo = audioData[i];
+      uint16_t evenHi = static_cast<uint16_t>(audioData[i + 1]) << 8;
+      samples.push_back(static_cast<int16_t>(evenLo | evenHi));
     }
     return samples;
   };
