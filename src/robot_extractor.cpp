@@ -1666,7 +1666,13 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     if (m_packetSizes[frameNo] > m_frameSizes[frameNo]) {
       uint32_t audioBlkLen = m_packetSizes[frameNo] - m_frameSizes[frameNo];
       if (audioBlkLen < kRobotAudioHeaderSize) {
-        m_fp.seekg(static_cast<std::streamoff>(audioBlkLen), std::ios::cur);
+        log_error(m_srcPath,
+                  "Bloc audio trop court: " +
+                      std::to_string(static_cast<unsigned long long>(audioBlkLen)) +
+                      " < taille d'en-tête "+
+                      std::to_string(static_cast<unsigned long long>(kRobotAudioHeaderSize)),
+                  m_options);
+        throw std::runtime_error("Bloc audio trop court");
       } else {
         const int64_t expectedAudioBlockSize =
             static_cast<int64_t>(m_audioBlkSize) -
