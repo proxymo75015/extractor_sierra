@@ -212,3 +212,71 @@ TEST_CASE("Audio block with position -1 is adjusted without corruption") {
   REQUIRE(evenStream.empty());
   REQUIRE(oddStream == expectedOdd);
 }
+
+TEST_CASE("Negative audio parity mismatch triggers alternate offset") {
+  fs::path tmpDir = fs::temp_directory_path();
+  fs::path input = tmpDir / "neg_audio_pos_parity.rbt";
+  fs::path outDir = tmpDir / "neg_audio_pos_parity_out";
+  if (fs::exists(outDir)) {
+    fs::remove_all(outDir);
+  }
+  fs::create_directories(outDir);
+
+  auto header = build_header();
+  auto primer = build_primer_header();
+  header.insert(header.end(), primer.begin(), primer.end());
+  for (uint32_t i = 0; i < kRunwayBytes; ++i) {
+    header.push_back(static_cast<uint8_t>(0x10 + i));
+  }
+
+  push16(header, 2);
+  push16(header, 26);
+
+  for (int i = 0; i < 256; ++i)
+    push32(header, 0);
+  for (int i = 0; i < 256; ++i)
+    push16(header, 0);
+
+  header.resize(((header.size() + 2047) / 2048) * 2048, 0);
+
+  header.push_back(0);
+  header.push_back(0);
+
+  std::vector<uint8_t> blockData = {0x01, 0x23, 0x45, 0x67,
+                                    0x89, 0xAB, 0xCD, 0xEF};
+  std::vector<uint8_t> runway;
+  runway.reserve(kRunwayBytes);
+  for (uint32_t i = 0; i < kRunwayBytes; ++i) {
+    runway.push_back(static_cast<uint8_t>(0x30 + i));
+  }
+  std::vector<uint8_t> fullBlock(runway);
+  fullBlock.insert(fullBlock.end(), blockData.begin(), blockData.end());
+
+  push32(header, static_cast<uint32_t>(-1));
+  push32(header, static_cast<uint32_t>(fullBlock.size()));
+  header.insert(header.end(), fullBlock.begin(), fullBlock.end());
+  if (fullBlock.size() < 16) {
+    header.insert(header.end(), 16 - fullBlock.size(), 0);
+  }
+
+  std::ofstream out(input, std::ios::binary);
+  out.write(reinterpret_cast<const char *>(header.data()),
+            static_cast<std::streamsize>(header.size()));
+  out.close();
+
+  robot::RobotExtractor extractor(input, outDir, true);
+  robot::RobotExtractorTester::forceParityMismatchForNextAttempt(extractor) =
+      true;
+
+  REQUIRE_NOTHROW(extractor.extract());
+
+  REQUIRE(robot::RobotExtractorTester::audioStartOffsetInitialized(extractor));
+  REQUIRE(robot::RobotExtractorTester::audioStartOffset(extractor) == 2);
+
+  const auto evenStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, true);
+  const auto oddStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, false);
+  REQUIRE_FALSE(evenStream.empty());
+  REQUIRE(oddStream.empty());
+}
