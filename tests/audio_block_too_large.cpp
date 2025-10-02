@@ -67,7 +67,7 @@ std::vector<uint8_t> build_primer_header() {
 
 } // namespace
 
-TEST_CASE("Oversized audio block triggers explicit exception") {
+TEST_CASE("Oversized audio block is truncated gracefully") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "audio_block_too_large.rbt";
   fs::path outDir = tmpDir / "audio_block_too_large_out";
@@ -116,10 +116,10 @@ TEST_CASE("Oversized audio block triggers explicit exception") {
   REQUIRE_NOTHROW(robot::RobotExtractorTester::readSizesAndCues(extractor));
 
   nlohmann::json frameJson;
-  try {
-    robot::RobotExtractorTester::exportFrame(extractor, 0, frameJson);
-    FAIL("Expected oversized audio block to throw");
-  } catch (const std::runtime_error &e) {
-    REQUIRE(std::string(e.what()).find("Bloc audio trop grand") != std::string::npos);
-  }
+  REQUIRE_NOTHROW(robot::RobotExtractorTester::exportFrame(extractor, 0, frameJson));
+  REQUIRE_NOTHROW(robot::RobotExtractorTester::finalizeAudio(extractor));
+
+  const fs::path wavPath = outDir / "frame_00000.wav";
+  REQUIRE(fs::exists(wavPath));
+  REQUIRE(fs::file_size(wavPath) >= 44);
 }
