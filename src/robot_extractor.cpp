@@ -5,9 +5,11 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <limits>
+#include <new>
 #include <optional>
 #include <span>
 #include <sstream>
@@ -73,7 +75,12 @@ uint32_t read_u32_be(std::span<const std::byte> data, size_t offset) {
   const uint32_t b1 = std::to_integer<uint8_t>(data[offset + 1]);
   const uint32_t b2 = std::to_integer<uint8_t>(data[offset + 2]);
   const uint32_t b3 = std::to_integer<uint8_t>(data[offset + 3]);
-uint32_t read_u32_be(std::span<const std::byte> data, size_t offset) {
+  return (b0 << 24) | (b1 << 16) | (b2 << 8) | b3;
+}
+
+void write_span_le16(std::vector<std::byte> &data, size_t offset, uint16_t value) {
+  if (offset + 1 >= data.size()) {
+    return;
   }
   data[offset] = std::byte{static_cast<uint8_t>(value & 0xFF)};
   data[offset + 1] = std::byte{static_cast<uint8_t>(value >> 8)};
@@ -415,6 +422,10 @@ void RobotExtractor::readPrimer() {
     m_postPrimerPos = m_fp.tellg();
   }
 
+  if (!m_extractAudio) {
+    ensurePrimerProcessed();
+  }
+  
   if (m_options.debug_index) {
     log_error(m_srcPath,
               "readPrimer: position après seekg = " +
@@ -902,273 +913,288 @@ void RobotExtractor::finalizeAudio() {
 
 RobotExtractor::ParsedPalette
 RobotExtractor::parseHunkPalette(std::span<const std::byte> raw) {
-  ParsedPalette parsed;
-  if (raw.empty()) {
-    return parsed;
-  }
-  if (raw.size() < kHunkPaletteHeaderSize) {
-    throw std::runtime_error("Palette SCI HunkPalette trop courte");
-  }
+  auto parseImpl = [raw]() mutable -> ParsedPalette {
+    ParsedPalette parsed;
+    if (raw.empty()) {
+      parsed.valid = true;
+      return parsed;
+    }
+    if (raw.size() < kHunkPaletteHeaderSize) {
+      throw std::runtime_error("Palette SCI HunkPalette trop courte");
+    }
 
-  const uint8_t numPalettes = read_u8(raw, kNumPaletteEntriesOffset);
-  const size_t offsetTablePos = kHunkPaletteHeaderSize;
-  if (numPalettes == 0) {
-    if (offsetTablePos < raw.size()) {
-      parsed.remapData.assign(raw.begin() + offsetTablePos, raw.end());
+    const uint8_t numPalettes = read_u8(raw, kNumPaletteEntriesOffset);
+    const size_t offsetTablePos = kHunkPaletteHeaderSize;
+    if (numPalettes == 0) {
+      if (offsetTablePos < raw.size()) {
+        parsed.remapData.assign(raw.begin() + offsetTablePos, raw.end());
+        if (parsed.remapData.size() > kRawPaletteSize) {
+          parsed.remapData.resize(kRawPaletteSize);
+        }
+      }
+      parsed.valid = true;
+      return parsed;
+    }
+    
+    const size_t offsetsBytes = static_cast<size_t>(2 * numPalettes);
+    if (raw.size() < offsetTablePos + offsetsBytes) {
+      throw std::runtime_error("Table d'offset de palette incomplète");
+    }
+
+    const size_t tableEnd = offsetTablePos + offsetsBytes;
+
+    auto readOffsets = [&](bool assumeBigEndian)
+        -> std::optional<std::vector<size_t>> {
+      std::vector<size_t> offsets;
+      offsets.reserve(numPalettes);
+      for (uint8_t i = 0; i < numPalettes; ++i) {
+        const size_t pos = offsetTablePos + static_cast<size_t>(i) * 2;
+        const uint16_t entryOffset =
+            assumeBigEndian ? read_u16_be(raw, pos) : read_u16(raw, pos);
+        if (entryOffset < offsetTablePos + offsetsBytes ||
+            entryOffset > raw.size()) {
+          return std::nullopt;
+        }
+        offsets.push_back(static_cast<size_t>(entryOffset));
+      }
+      return offsets;
+    };
+
+    auto offsetsOpt = readOffsets(false);
+    bool paletteBigEndian = false;
+    if (!offsetsOpt) {
+      offsetsOpt = readOffsets(true);
+      if (!offsetsOpt) {
+        throw std::runtime_error("Offset de palette invalide");
+      }
+      paletteBigEndian = true;
+    }
+    
+    std::vector<std::byte> converted;
+    if (paletteBigEndian) {
+      converted.assign(raw.begin(), raw.end());
+      for (size_t i = 0; i < offsetsOpt->size(); ++i) {
+        write_span_le16(converted, offsetTablePos + i * 2,
+                       static_cast<uint16_t>((*offsetsOpt)[i]));
+      }
+      size_t conversionMinEntryOffset = std::numeric_limits<size_t>::max();
+      for (const auto offset : *offsetsOpt) {
+        conversionMinEntryOffset = std::min(conversionMinEntryOffset, offset);
+      }
+      if (tableEnd + sizeof(uint16_t) <= raw.size() &&
+          conversionMinEntryOffset >= tableEnd + sizeof(uint16_t)) {
+        const uint16_t candidate = read_u16_be(raw, tableEnd);
+        if (candidate <= raw.size() && candidate >= conversionMinEntryOffset) {
+          write_span_le16(converted, tableEnd, candidate);
+        }
+      }
+      for (const auto offset : *offsetsOpt) {
+        if (offset + kEntryHeaderSize > raw.size()) {
+          continue;
+        }
+        const uint16_t numColors =
+            read_u16_be(raw, offset + kEntryNumColorsOffset);
+        write_span_le16(converted, offset + kEntryNumColorsOffset, numColors);
+        const uint32_t version =
+            read_u32_be(raw, offset + kEntryVersionOffset);
+        write_span_le32(converted, offset + kEntryVersionOffset, version);
+      }
+      raw = converted;
+    }
+
+    struct EntryPointer {
+      size_t offset;
+      uint8_t index;
+    };
+
+    std::vector<EntryPointer> entryPointers;
+    entryPointers.reserve(numPalettes);
+    for (uint8_t i = 0; i < numPalettes; ++i) {
+      const size_t pos = offsetTablePos + static_cast<size_t>(i) * 2;
+      const uint16_t entryOffset = read_u16(raw, pos);
+      if (entryOffset < offsetTablePos + offsetsBytes ||
+          entryOffset > raw.size()) {
+        throw std::runtime_error("Offset de palette invalide");
+      }
+      entryPointers.push_back(EntryPointer{static_cast<size_t>(entryOffset), i});
+    }
+    
+    size_t minEntryOffset = std::numeric_limits<size_t>::max();
+    for (const auto &ptr : entryPointers) {
+      minEntryOffset = std::min(minEntryOffset, ptr.offset);
+    }
+
+    bool hasExplicitRemapOffset = false;
+    size_t explicitRemapOffset = 0;
+    if (tableEnd + sizeof(uint16_t) <= raw.size() &&
+        minEntryOffset >= tableEnd + sizeof(uint16_t)) {
+      const uint16_t candidate = read_u16(raw, tableEnd);
+      if (candidate <= raw.size() && candidate >= minEntryOffset) {
+        hasExplicitRemapOffset = true;
+        explicitRemapOffset = candidate;
+      }
+    }
+    
+    std::stable_sort(entryPointers.begin(), entryPointers.end(),
+                     [](const EntryPointer &a, const EntryPointer &b) {
+                       if (a.offset == b.offset) {
+                         return a.index < b.index;
+                       }
+                       return a.offset < b.offset;
+                     });
+
+    bool firstEntry = true;
+    uint16_t firstStart = 0;
+    uint16_t maxEnd = 0;
+    size_t lastEntryEnd = tableEnd;
+
+    for (size_t entryIndex = 0; entryIndex < entryPointers.size(); ++entryIndex) {
+      const auto &entryPtr = entryPointers[entryIndex];
+      const size_t offset = entryPtr.offset;
+      if (offset > raw.size() - kEntryHeaderSize) {
+        throw std::runtime_error("Palette SCI HunkPalette tronquée");
+      }
+      auto entry = raw.subspan(offset);
+      size_t entryLimit = raw.size();
+      if (entryIndex + 1 < entryPointers.size()) {
+        entryLimit = entryPointers[entryIndex + 1].offset;
+      } else if (hasExplicitRemapOffset) {
+        entryLimit = explicitRemapOffset;
+      }
+      if (entryLimit > raw.size()) {
+        entryLimit = raw.size();
+      }
+      if (entryLimit < offset) {
+        throw std::runtime_error(
+            "Borne de palette avant l'offset de l'entrée");
+      }
+      size_t entryExtent = entryLimit - offset;
+      size_t maxPayloadBytes =
+          entryExtent > kEntryHeaderSize ? entryExtent - kEntryHeaderSize : 0;
+      const uint8_t startColor = read_u8(entry, kEntryStartColorOffset);
+      const uint16_t numColors = read_u16(entry, kEntryNumColorsOffset);
+      const bool defaultUsed = read_u8(entry, kEntryUsedOffset) != 0;
+      const bool sharedUsed = read_u8(entry, kEntrySharedUsedOffset) != 0;
+      const uint32_t version = read_u32(entry, kEntryVersionOffset);
+      const size_t perColorBytes = 3 + (sharedUsed ? 0 : 1);
+      const size_t paletteCapacity = 256 - startColor;
+      size_t availableRecords = maxPayloadBytes / perColorBytes;
+      const size_t requestedColors = static_cast<size_t>(numColors);
+      const size_t requiredBytes =
+          kEntryHeaderSize + requestedColors * perColorBytes;
+      if (requestedColors > availableRecords) {
+        size_t limitCandidate = raw.size();
+        if (hasExplicitRemapOffset) {
+          limitCandidate = std::min(limitCandidate, explicitRemapOffset);
+        }
+        if (offset + requiredBytes <= limitCandidate) {
+          entryLimit = std::max(entryLimit, offset + requiredBytes);
+          if (entryLimit > limitCandidate) {
+            entryLimit = limitCandidate;
+          }
+          entryExtent = entryLimit - offset;
+          maxPayloadBytes =
+              entryExtent > kEntryHeaderSize ? entryExtent - kEntryHeaderSize : 0;
+          availableRecords = maxPayloadBytes / perColorBytes;
+        }
+      }
+      if (requestedColors > availableRecords) {
+        throw std::runtime_error(
+            "Entrée de palette déclare plus de couleurs que de données disponibles");
+      }
+      const size_t actualColors =
+          std::min({requestedColors, paletteCapacity, availableRecords});
+
+      const size_t consumedColorBytes =
+          std::min(maxPayloadBytes, requestedColors * perColorBytes);
+      auto colorData = entry.subspan(kEntryHeaderSize,
+                                     actualColors * perColorBytes);
+
+      size_t pos = 0;
+      for (size_t i = 0; i < actualColors; ++i) {
+        const size_t paletteIndex = static_cast<size_t>(startColor) + i;
+        auto &dest = parsed.entries[paletteIndex];
+        dest.present = true;
+        if (sharedUsed) {
+          dest.used = defaultUsed;
+        } else {
+          dest.used = std::to_integer<uint8_t>(colorData[pos++]) != 0;
+        }
+        dest.r = std::to_integer<uint8_t>(colorData[pos++]);
+        dest.g = std::to_integer<uint8_t>(colorData[pos++]);
+        dest.b = std::to_integer<uint8_t>(colorData[pos++]);
+      }
+
+      const size_t entryConsumedBytes =
+          std::min(entryExtent, kEntryHeaderSize + consumedColorBytes);
+
+      if (actualColors == 0) {
+        lastEntryEnd = std::max(lastEntryEnd, offset + entryConsumedBytes);
+        continue;
+      }
+      
+      const uint32_t endColor =
+          static_cast<uint32_t>(startColor) + static_cast<uint32_t>(actualColors);
+
+      if (firstEntry) {
+        parsed.startColor = startColor;
+        parsed.colorCount = static_cast<uint16_t>(actualColors);
+        parsed.sharedUsed = sharedUsed;
+        parsed.defaultUsed = defaultUsed;
+        parsed.version = version;
+        firstEntry = false;
+        firstStart = startColor;
+        maxEnd = static_cast<uint16_t>(endColor);
+      } else {
+        if (startColor < firstStart) {
+          parsed.startColor = startColor;
+          parsed.colorCount = static_cast<uint16_t>(maxEnd - startColor);
+          firstStart = startColor;
+        } else {
+          const uint16_t span = static_cast<uint16_t>(endColor - firstStart);
+          if (span > parsed.colorCount) {
+            parsed.colorCount = span;
+          }
+        }
+        if (endColor > maxEnd) {
+          maxEnd = static_cast<uint16_t>(endColor);
+          if (maxEnd >= parsed.startColor) {
+            parsed.colorCount = static_cast<uint16_t>(maxEnd - parsed.startColor);
+          } else {
+            parsed.colorCount = 0;
+          }
+        }
+        parsed.sharedUsed = parsed.sharedUsed && sharedUsed;
+      }
+      
+      lastEntryEnd = std::max(lastEntryEnd, offset + entryConsumedBytes);
+    }
+
+    size_t remapOffset =
+        hasExplicitRemapOffset ? explicitRemapOffset : lastEntryEnd;
+    if (remapOffset < lastEntryEnd) {
+      throw std::runtime_error(
+          "Offset de remap avant la fin des entrées de palette");
+    }
+
+    if (remapOffset < raw.size()) {
+      parsed.remapData.assign(raw.begin() + remapOffset, raw.end());
       if (parsed.remapData.size() > kRawPaletteSize) {
         parsed.remapData.resize(kRawPaletteSize);
       }
     }
+
+    parsed.valid = true;
     return parsed;
-  }
-
-  const size_t offsetsBytes = static_cast<size_t>(2 * numPalettes);
-  if (raw.size() < offsetTablePos + offsetsBytes) {
-    throw std::runtime_error("Table d'offset de palette incomplète");
-  }
-
-  const size_t tableEnd = offsetTablePos + offsetsBytes;
-
-  auto readOffsets = [&](bool assumeBigEndian)
-      -> std::optional<std::vector<size_t>> {
-    std::vector<size_t> offsets;
-    offsets.reserve(numPalettes);
-    for (uint8_t i = 0; i < numPalettes; ++i) {
-      const size_t pos = offsetTablePos + static_cast<size_t>(i) * 2;
-      const uint16_t entryOffset =
-          assumeBigEndian ? read_u16_be(raw, pos) : read_u16(raw, pos);
-      if (entryOffset < offsetTablePos + offsetsBytes ||
-          entryOffset > raw.size()) {
-        return std::nullopt;
-      }
-      offsets.push_back(static_cast<size_t>(entryOffset));
-    }
-    return offsets;
   };
 
-  auto offsetsOpt = readOffsets(false);
-  bool paletteBigEndian = false;
-  if (!offsetsOpt) {
-    offsetsOpt = readOffsets(true);
-    if (!offsetsOpt) {
-      throw std::runtime_error("Offset de palette invalide");
-    }
-    paletteBigEndian = true;
+  try {
+    return parseImpl();
+  } catch (const std::bad_alloc &) {
+    throw;
+  } catch (const std::exception &) {
+    return ParsedPalette{};
   }
-
-  std::vector<std::byte> converted;
-  if (paletteBigEndian) {
-    converted.assign(raw.begin(), raw.end());
-    for (size_t i = 0; i < offsetsOpt->size(); ++i) {
-      write_span_le16(converted, offsetTablePos + i * 2,
-                 static_cast<uint16_t>((*offsetsOpt)[i]));
-    }
-    size_t conversionMinEntryOffset = std::numeric_limits<size_t>::max();
-    for (const auto offset : *offsetsOpt) {
-      conversionMinEntryOffset = std::min(conversionMinEntryOffset, offset);
-    }
-    if (tableEnd + sizeof(uint16_t) <= raw.size() &&
-        conversionMinEntryOffset >= tableEnd + sizeof(uint16_t)) {
-      const uint16_t candidate = read_u16_be(raw, tableEnd);
-      if (candidate <= raw.size() && candidate >= conversionMinEntryOffset) {
-        write_span_le16(converted, tableEnd, candidate);
-      }
-    }
-    for (const auto offset : *offsetsOpt) {
-      if (offset + kEntryHeaderSize > raw.size()) {
-        continue;
-      }
-      const uint16_t numColors =
-          read_u16_be(raw, offset + kEntryNumColorsOffset);
-      write_span_le16(converted, offset + kEntryNumColorsOffset, numColors);
-      const uint32_t version =
-          read_u32_be(raw, offset + kEntryVersionOffset);
-      write_span_le32(converted, offset + kEntryVersionOffset, version);
-    }
-    raw = converted;
-  }
-  
-  struct EntryPointer {
-    size_t offset;
-    uint8_t index;
-  };
-
-  std::vector<EntryPointer> entryPointers;
-  entryPointers.reserve(numPalettes);
-  for (uint8_t i = 0; i < numPalettes; ++i) {
-    const size_t pos = offsetTablePos + static_cast<size_t>(i) * 2;
-    const uint16_t entryOffset = read_u16(raw, pos);
-    if (entryOffset < offsetTablePos + offsetsBytes ||
-        entryOffset > raw.size()) {
-      throw std::runtime_error("Offset de palette invalide");
-    }
-    entryPointers.push_back(EntryPointer{static_cast<size_t>(entryOffset), i});
-  }
-
-  size_t minEntryOffset = std::numeric_limits<size_t>::max();
-  for (const auto &ptr : entryPointers) {
-    minEntryOffset = std::min(minEntryOffset, ptr.offset);
-  }
-
-  bool hasExplicitRemapOffset = false;
-  size_t explicitRemapOffset = 0;
-  if (tableEnd + sizeof(uint16_t) <= raw.size() &&
-      minEntryOffset >= tableEnd + sizeof(uint16_t)) {
-    const uint16_t candidate = read_u16(raw, tableEnd);
-    if (candidate <= raw.size() && candidate >= minEntryOffset) {
-      hasExplicitRemapOffset = true;
-      explicitRemapOffset = candidate;
-    }
-  }
-
-  std::stable_sort(entryPointers.begin(), entryPointers.end(),
-                   [](const EntryPointer &a, const EntryPointer &b) {
-                     if (a.offset == b.offset) {
-                       return a.index < b.index;
-                     }
-                     return a.offset < b.offset;
-                   });
-
-  bool firstEntry = true;
-  uint16_t firstStart = 0;
-  uint16_t maxEnd = 0;
-  size_t lastEntryEnd = tableEnd;
-
-  for (size_t entryIndex = 0; entryIndex < entryPointers.size(); ++entryIndex) {
-    const auto &entryPtr = entryPointers[entryIndex];
-    const size_t offset = entryPtr.offset;
-    if (offset > raw.size() - kEntryHeaderSize) {
-      throw std::runtime_error("Palette SCI HunkPalette tronquée");
-    }
-    auto entry = raw.subspan(offset);
-    size_t entryLimit = raw.size();
-    if (entryIndex + 1 < entryPointers.size()) {
-      entryLimit = entryPointers[entryIndex + 1].offset;
-    } else if (hasExplicitRemapOffset) {
-      entryLimit = explicitRemapOffset;
-    }
-    if (entryLimit > raw.size()) {
-      entryLimit = raw.size();
-    }
-    if (entryLimit < offset) {
-      throw std::runtime_error(
-          "Borne de palette avant l'offset de l'entrée");
-    }
-    size_t entryExtent = entryLimit - offset;
-    size_t maxPayloadBytes =
-        entryExtent > kEntryHeaderSize ? entryExtent - kEntryHeaderSize : 0;
-    const uint8_t startColor = read_u8(entry, kEntryStartColorOffset);
-    const uint16_t numColors = read_u16(entry, kEntryNumColorsOffset);
-    const bool defaultUsed = read_u8(entry, kEntryUsedOffset) != 0;
-    const bool sharedUsed = read_u8(entry, kEntrySharedUsedOffset) != 0;
-    const uint32_t version = read_u32(entry, kEntryVersionOffset);
-    const size_t perColorBytes = 3 + (sharedUsed ? 0 : 1);
-    const size_t paletteCapacity = 256 - startColor;
-    size_t availableRecords = maxPayloadBytes / perColorBytes;
-    const size_t requestedColors = static_cast<size_t>(numColors);
-    const size_t requiredBytes =
-        kEntryHeaderSize + requestedColors * perColorBytes;
-    if (requestedColors > availableRecords) {
-      size_t limitCandidate = raw.size();
-      if (hasExplicitRemapOffset) {
-        limitCandidate = std::min(limitCandidate, explicitRemapOffset);
-      }
-      if (offset + requiredBytes <= limitCandidate) {
-        entryLimit = std::max(entryLimit, offset + requiredBytes);
-        if (entryLimit > limitCandidate) {
-          entryLimit = limitCandidate;
-        }
-        entryExtent = entryLimit - offset;
-        maxPayloadBytes =
-            entryExtent > kEntryHeaderSize ? entryExtent - kEntryHeaderSize : 0;
-        availableRecords = maxPayloadBytes / perColorBytes;
-      }
-    }
-    if (requestedColors > availableRecords) {
-      throw std::runtime_error(
-          "Entrée de palette déclare plus de couleurs que de données disponibles");
-    }
-    const size_t actualColors =
-        std::min({requestedColors, paletteCapacity, availableRecords});
-
-    const size_t consumedColorBytes =
-        std::min(maxPayloadBytes, requestedColors * perColorBytes);
-    auto colorData = entry.subspan(kEntryHeaderSize,
-                                   actualColors * perColorBytes);
-
-    size_t pos = 0;
-    for (size_t i = 0; i < actualColors; ++i) {
-      const size_t paletteIndex = static_cast<size_t>(startColor) + i;
-      auto &dest = parsed.entries[paletteIndex];
-      dest.present = true;
-      if (sharedUsed) {
-        dest.used = defaultUsed;
-      } else {
-        dest.used = std::to_integer<uint8_t>(colorData[pos++]) != 0;
-      }
-      dest.r = std::to_integer<uint8_t>(colorData[pos++]);
-      dest.g = std::to_integer<uint8_t>(colorData[pos++]);
-      dest.b = std::to_integer<uint8_t>(colorData[pos++]);
-    }
-    
-    const size_t entryConsumedBytes =
-        std::min(entryExtent, kEntryHeaderSize + consumedColorBytes);
-    
-    if (actualColors == 0) {
-      lastEntryEnd = std::max(lastEntryEnd, offset + entryConsumedBytes);
-      continue;
-    }
-
-    const uint32_t endColor =
-        static_cast<uint32_t>(startColor) + static_cast<uint32_t>(actualColors);
-    
-    if (firstEntry) {
-      parsed.startColor = startColor;
-      parsed.colorCount = static_cast<uint16_t>(actualColors);
-      parsed.sharedUsed = sharedUsed;
-      parsed.defaultUsed = defaultUsed;
-      parsed.version = version;
-      firstEntry = false;
-      firstStart = startColor;
-      maxEnd = static_cast<uint16_t>(endColor);
-    } else {
-      if (startColor < firstStart) {
-        parsed.startColor = startColor;
-        parsed.colorCount = static_cast<uint16_t>(maxEnd - startColor);
-        firstStart = startColor;
-      } else {
-        const uint16_t span = static_cast<uint16_t>(endColor - firstStart);
-        if (span > parsed.colorCount) {
-          parsed.colorCount = span;
-        }
-      }
-      if (endColor > maxEnd) {
-        maxEnd = static_cast<uint16_t>(endColor);
-        if (maxEnd >= parsed.startColor) {
-          parsed.colorCount = static_cast<uint16_t>(maxEnd - parsed.startColor);
-        } else {
-          parsed.colorCount = 0;
-        }        
-      }
-      parsed.sharedUsed = parsed.sharedUsed && sharedUsed;
-    }
-
-    lastEntryEnd = std::max(lastEntryEnd, offset + entryConsumedBytes);
-  }
-
-  size_t remapOffset = hasExplicitRemapOffset ? explicitRemapOffset : lastEntryEnd;
-  if (remapOffset < lastEntryEnd) {
-    throw std::runtime_error("Offset de remap avant la fin des entrées de palette");
-  }
-
-  if (remapOffset < raw.size()) {
-    parsed.remapData.assign(raw.begin() + remapOffset, raw.end());
-    if (parsed.remapData.size() > kRawPaletteSize) {
-      parsed.remapData.resize(kRawPaletteSize);
-    }
-  }
-
-  return parsed;
 }
 
 void RobotExtractor::readPalette() {
@@ -1406,16 +1432,57 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
   frameJson["cels"] = nlohmann::json::array();
 
   size_t offset = 2;
+  ParsedPalette parsedPalette;
+  bool paletteUsable = false;
+  auto dumpPaletteFallback = [&]() {
+    if (m_paletteFallbackDumped) {
+      return;
+    }
+    auto fallbackPath = m_dstDir / kPaletteFallbackFilename;
+    std::ofstream rawOut(fallbackPath, std::ios::binary);
+    if (!rawOut) {
+      throw std::runtime_error(
+          std::string("Échec de l'ouverture du fichier de palette brut: ") +
+          fallbackPath.string());
+    }
+    if (!m_palette.empty()) {
+      rawOut.write(reinterpret_cast<const char *>(m_palette.data()),
+                   checked_streamsize(m_palette.size()));
+    }
+    rawOut.flush();
+    if (!rawOut) {
+      throw std::runtime_error(
+          std::string("Échec de l'écriture de la palette brute: ") +
+          fallbackPath.string());
+    }
+    m_paletteFallbackDumped = true;
+  };
+  
   if (!m_hasPalette) {
     frameJson["palette_required"] = true;
     log_warn(m_srcPath,
              "Palette manquante, décodage des cels sans PNG pour la frame " +
                  std::to_string(frameNo),
              m_options);
-  }
-  ParsedPalette parsedPalette;
-  if (m_hasPalette) {
+  } else if (m_paletteParseFailed) {
+    frameJson["palette_required"] = true;
+    frameJson["palette_parse_failed"] = true;
+    frameJson["palette_raw"] = kPaletteFallbackFilename;
+    dumpPaletteFallback();
+  } else {
     parsedPalette = parseHunkPalette(m_palette);
+    if (!parsedPalette.valid) {
+      log_warn(m_srcPath,
+               "Palette HunkPalette invalide, export brut de la palette",
+               m_options);
+      m_paletteParseFailed = true;
+      frameJson["palette_required"] = true;
+      frameJson["palette_parse_failed"] = true;
+      frameJson["palette_raw"] = kPaletteFallbackFilename;
+      dumpPaletteFallback();
+    } else {
+      paletteUsable = true;
+    }
   }
   
   const size_t celLimit = celPixelLimit();
@@ -1527,7 +1594,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       m_celBuffer = std::move(expanded);
     }
 
-    if (m_hasPalette) {
+    if (paletteUsable) {
       // Taille d'une ligne en octets (largeur en pixels * 4 octets RGBA)
       size_t row_size = static_cast<size_t>(w) * 4;
       // Vérifie qu'on peut multiplier la hauteur par la taille d'une ligne
@@ -1571,7 +1638,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     celJson["width"] = w;
     celJson["height"] = h;
     celJson["vertical_scale"] = verticalScale;
-    if (!m_hasPalette) {
+    if (!paletteUsable) {
       celJson["palette_required"] = true;
     }
     frameJson["cels"].push_back(celJson);
