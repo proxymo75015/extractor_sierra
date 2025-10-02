@@ -224,6 +224,58 @@ TEST_CASE("Hunk palette respects offset table ordering and explicit remap") {
   REQUIRE(parsed.remapData == remap);
 }
 
+TEST_CASE("Hunk palette clamps entries that overrun their payload") {
+  fs::path tmpDir = fs::temp_directory_path() / "palette_parser";
+  fs::create_directories(tmpDir);
+  fs::path input = tmpDir / "clamped_payload.rbt";
+  fs::path outDir = tmpDir / "clamped_payload_out";
+  fs::create_directories(outDir);
+  if (!fs::exists(input)) {
+    std::ofstream out(input, std::ios::binary);
+  }
+
+  test_palette::EntrySpec entry;
+  entry.offset = static_cast<uint16_t>(test_palette::kHunkPaletteHeaderSize + 2);
+  entry.startColor = 50;
+  entry.sharedUsed = false;
+  entry.defaultUsed = true;
+  entry.version = 1;
+  entry.colors = {{true, 10, 20, 30},
+                  {false, 40, 50, 60},
+                  {true, 70, 80, 90}};
+
+  auto raw = test_palette::build_hunk_palette_with_offsets({entry});
+  const size_t perColorBytes = 3 + (entry.sharedUsed ? 0 : 1);
+  const size_t entryHeaderEnd =
+      static_cast<size_t>(entry.offset) + test_palette::kEntryHeaderSize;
+  REQUIRE(raw.size() >=
+          entryHeaderEnd + entry.colors.size() * perColorBytes);
+  raw.resize(entryHeaderEnd + perColorBytes * 2 + 2);
+
+  robot::RobotExtractor extractor(input, outDir, false);
+  RobotExtractorTester::palette(extractor) = raw;
+  RobotExtractorTester::bigEndian(extractor) = false;
+  auto parsed = RobotExtractorTester::parsePalette(extractor);
+
+  REQUIRE(parsed.valid);
+  REQUIRE(parsed.startColor == entry.startColor);
+  REQUIRE(parsed.colorCount == 2);
+
+  REQUIRE(parsed.entries[entry.startColor].present);
+  REQUIRE(parsed.entries[entry.startColor].used);
+  REQUIRE(parsed.entries[entry.startColor].r == 10);
+  REQUIRE(parsed.entries[entry.startColor].g == 20);
+  REQUIRE(parsed.entries[entry.startColor].b == 30);
+
+  REQUIRE(parsed.entries[entry.startColor + 1].present);
+  REQUIRE_FALSE(parsed.entries[entry.startColor + 1].used);
+  REQUIRE(parsed.entries[entry.startColor + 1].r == 40);
+  REQUIRE(parsed.entries[entry.startColor + 1].g == 50);
+  REQUIRE(parsed.entries[entry.startColor + 1].b == 60);
+
+  REQUIRE_FALSE(parsed.entries[entry.startColor + 2].present);
+}
+
 TEST_CASE("Hunk palette clamps entries that exceed palette capacity") {
   fs::path tmpDir = fs::temp_directory_path() / "palette_parser";
   fs::create_directories(tmpDir);
