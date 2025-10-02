@@ -1109,15 +1109,24 @@ RobotExtractor::parseHunkPalette(std::span<const std::byte> raw) {
           availableRecords = maxPayloadBytes / perColorBytes;
         }
       }
-      if (requestedColors > availableRecords) {
-        throw std::runtime_error(
-            "Entrée de palette déclare plus de couleurs que de données disponibles");
-      }
+      [[maybe_unused]] const bool truncatedByPayload =
+          requestedColors > availableRecords;
       const size_t actualColors =
           std::min({requestedColors, paletteCapacity, availableRecords});
 
       const size_t consumedColorBytes =
-          std::min(maxPayloadBytes, requestedColors * perColorBytes);
+          std::min(maxPayloadBytes, actualColors * perColorBytes);
+#if defined(ROBOT_EXTRACTOR_ENABLE_PALETTE_CLAMP_LOG)
+      if (truncatedByPayload && actualColors < requestedColors) {
+        std::ostringstream oss;
+        oss << "Palette HunkPalette entrée "
+            << static_cast<unsigned int>(entryPtr.index)
+            << " tronquée: " << requestedColors << " couleurs demandées, "
+            << actualColors << " disponibles";
+        log_warn(std::filesystem::path("HunkPalette"), oss.str(),
+                 ExtractorOptions{});
+      }
+#endif
       auto colorData = entry.subspan(kEntryHeaderSize,
                                      actualColors * perColorBytes);
 
