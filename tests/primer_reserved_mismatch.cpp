@@ -117,12 +117,66 @@ TEST_CASE("Primer mismatch realigns stream and preserves primer data") {
 
   RobotExtractorTester::finalizeAudio(extractor);
 
-  fs::path evenWav = outDir / "frame_00000_even.wav";
-  fs::path oddWav = outDir / "frame_00000_odd.wav";
-  REQUIRE(fs::exists(evenWav));
-  REQUIRE(fs::exists(oddWav));
-  REQUIRE(fs::file_size(evenWav) == 52);
-  REQUIRE(fs::file_size(oddWav) == 52);
+  const auto evenStream =
+      RobotExtractorTester::buildChannelStream(extractor, true);
+  const auto oddStream =
+      RobotExtractorTester::buildChannelStream(extractor, false);
+
+  fs::path stereoWav = outDir / "frame_00000.wav";
+  REQUIRE(fs::exists(stereoWav));
+
+  std::ifstream wav(stereoWav, std::ios::binary);
+  REQUIRE(wav);
+  std::array<uint8_t, 44> header{};
+  wav.read(reinterpret_cast<char *>(header.data()), header.size());
+  REQUIRE(wav.gcount() == static_cast<std::streamsize>(header.size()));
+  uint16_t channels = header[22] |
+                      (static_cast<uint16_t>(header[23]) << 8);
+  REQUIRE(channels == 2);
+  uint32_t byteRate = header[28] | (static_cast<uint32_t>(header[29]) << 8) |
+                      (static_cast<uint32_t>(header[30]) << 16) |
+                      (static_cast<uint32_t>(header[31]) << 24);
+  REQUIRE(byteRate == 22050u * 2u * 2u);
+  uint32_t dataBytes = header[40] | (static_cast<uint32_t>(header[41]) << 8) |
+                       (static_cast<uint32_t>(header[42]) << 16) |
+                       (static_cast<uint32_t>(header[43]) << 24);
+
+  const size_t expectedFrames =
+      std::max(evenStream.size(), oddStream.size());
+  REQUIRE(dataBytes == expectedFrames * 2 * sizeof(int16_t));
+
+  std::vector<int16_t> interleaved(dataBytes / sizeof(int16_t));
+  if (!interleaved.empty()) {
+    wav.read(reinterpret_cast<char *>(interleaved.data()),
+             static_cast<std::streamsize>(dataBytes));
+    REQUIRE(wav.gcount() == static_cast<std::streamsize>(dataBytes));
+  }
+
+  std::vector<int16_t> evenFromWav;
+  std::vector<int16_t> oddFromWav;
+  evenFromWav.reserve(expectedFrames);
+  oddFromWav.reserve(expectedFrames);
+  for (size_t i = 0; i < expectedFrames; ++i) {
+    evenFromWav.push_back(interleaved[i * 2]);
+    oddFromWav.push_back(interleaved[i * 2 + 1]);
+  }
+
+  REQUIRE(evenFromWav.size() == expectedFrames);
+  REQUIRE(oddFromWav.size() == expectedFrames);
+  REQUIRE(evenStream.size() <= evenFromWav.size());
+  REQUIRE(oddStream.size() <= oddFromWav.size());
+  for (size_t i = 0; i < evenStream.size(); ++i) {
+    REQUIRE(evenFromWav[i] == evenStream[i]);
+  }
+  for (size_t i = evenStream.size(); i < evenFromWav.size(); ++i) {
+    REQUIRE(evenFromWav[i] == 0);
+  }
+  for (size_t i = 0; i < oddStream.size(); ++i) {
+    REQUIRE(oddFromWav[i] == oddStream[i]);
+  }
+  for (size_t i = oddStream.size(); i < oddFromWav.size(); ++i) {
+    REQUIRE(oddFromWav[i] == 0);
+  }
 
   int nextByte = file.peek();
   REQUIRE(nextByte == 0xCC);
