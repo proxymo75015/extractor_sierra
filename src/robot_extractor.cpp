@@ -904,15 +904,22 @@ void RobotExtractor::finalizeAudio() {
   if (!m_extractAudio) {
     return;
   }
-  ensurePrimerProcessed();  
+  ensurePrimerProcessed();
   auto evenStream = buildChannelStream(true);
-  if (!evenStream.empty()) {
-    writeWav(evenStream, kSampleRate, 0, true);
-  }
   auto oddStream = buildChannelStream(false);
-  if (!oddStream.empty()) {
-    writeWav(oddStream, kSampleRate, 0, false);
+  if (evenStream.empty() && oddStream.empty()) {
+    return;
   }
+  const size_t maxSamples = std::max(evenStream.size(), oddStream.size());
+  std::vector<int16_t> interleaved;
+  interleaved.reserve(maxSamples * 2);
+  for (size_t i = 0; i < maxSamples; ++i) {
+    const int16_t evenSample = i < evenStream.size() ? evenStream[i] : 0;
+    const int16_t oddSample = i < oddStream.size() ? oddStream[i] : 0;
+    interleaved.push_back(evenSample);
+    interleaved.push_back(oddSample);
+  }
+  writeWav(interleaved, kSampleRate, 0, true, 2);
 }
 
 RobotExtractor::ParsedPalette
@@ -1790,13 +1797,19 @@ size_t RobotExtractor::rgbaBufferLimit() const {
 
 void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
                               uint32_t sampleRate, size_t blockIndex,
-                              bool isEvenChannel) {
+                              bool isEvenChannel, uint16_t numChannels) {
   if (sampleRate == 0) {
     throw std::runtime_error("Fréquence d'échantillonnage nulle");
+  }
+  if (numChannels == 0) {
+    throw std::runtime_error("Nombre de canaux audio nul");
   }
   if (samples.size() > std::numeric_limits<size_t>::max() / sizeof(int16_t)) {
     throw std::runtime_error("Nombre d'échantillons audio dépasse la limite, "
                              "fichier WAV corrompu potentiel");
+  }
+  if (samples.size() % numChannels != 0) {
+    throw std::runtime_error("Flux PCM intercalé mal formé");
   }
   size_t data_size = samples.size() * sizeof(int16_t);
   if (data_size > 0xFFFFFFFFu - 36) {
@@ -1804,9 +1817,9 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
         "Taille de données audio trop grande pour un fichier WAV: " +
         std::to_string(data_size));
   }
-  constexpr uint16_t kNumChannels = 1;
   constexpr uint16_t kBitsPerSample = 16;
-  constexpr uint16_t kBlockAlign =
+  const uint16_t kNumChannels = numChannels;
+  const uint16_t kBlockAlign =
       static_cast<uint16_t>((kNumChannels * kBitsPerSample) / 8);
 
   if (sampleRate > std::numeric_limits<uint32_t>::max() / kBlockAlign) {
@@ -1846,7 +1859,9 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
   write_le32(header.data() + 40, static_cast<uint32_t>(data_size));
   std::ostringstream wavName;
   wavName << "frame_" << std::setw(5) << std::setfill('0') << blockIndex
-          << (isEvenChannel ? "_even" : "_odd") << ".wav";
+          << (kNumChannels == 1 ? (isEvenChannel ? "_even" : "_odd")
+                                : "")
+          << ".wav";
   auto outPath = m_dstDir / wavName.str();
   auto [fsOutPath, outPathStr] = to_long_path(outPath);
   std::ofstream wavFile(fsOutPath, std::ios::binary);
