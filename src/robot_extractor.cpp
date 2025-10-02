@@ -1804,12 +1804,18 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
         "Taille de données audio trop grande pour un fichier WAV: " +
         std::to_string(data_size));
   }
-  if (sampleRate > std::numeric_limits<uint32_t>::max() / 2) {
+  constexpr uint16_t kNumChannels = 1;
+  constexpr uint16_t kBitsPerSample = 16;
+  constexpr uint16_t kBlockAlign =
+      static_cast<uint16_t>((kNumChannels * kBitsPerSample) / 8);
+
+  if (sampleRate > std::numeric_limits<uint32_t>::max() / kBlockAlign) {
     throw std::runtime_error("Fréquence d'échantillonnage trop élevée: " +
                              std::to_string(sampleRate));
   }
+
+  uint32_t byte_rate = sampleRate * kBlockAlign;
   uint32_t riff_size = 36 + static_cast<uint32_t>(data_size);
-  uint32_t byte_rate = sampleRate * 2;
 
   std::array<char, 44> header{};
 
@@ -1828,11 +1834,11 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
   header[15] = ' ';
   write_le32(header.data() + 16, 16); // fmt chunk size
   write_le16(header.data() + 20, 1);  // PCM
-  write_le16(header.data() + 22, 1);  // Mono
+  write_le16(header.data() + 22, kNumChannels);
   write_le32(header.data() + 24, sampleRate);
   write_le32(header.data() + 28, byte_rate);
-  write_le16(header.data() + 32, 2);  // Block align
-  write_le16(header.data() + 34, 16); // Bits per sample
+  write_le16(header.data() + 32, kBlockAlign);
+  write_le16(header.data() + 34, kBitsPerSample);
   header[36] = 'd';
   header[37] = 'a';
   header[38] = 't';
