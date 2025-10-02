@@ -111,5 +111,13 @@ TEST_CASE("Primer WAV excludes runway samples") {
   uint32_t rate = header[24] | (static_cast<uint32_t>(header[25]) << 8) |
                   (static_cast<uint32_t>(header[26]) << 16) |
                   (static_cast<uint32_t>(header[27]) << 24);
-  REQUIRE(rate == 11025);
+  REQUIRE(rate == 22050);
+
+  uint32_t byteRate = header[28] | (static_cast<uint32_t>(header[29]) << 8) |
+                      (static_cast<uint32_t>(header[30]) << 16) |
+                      (static_cast<uint32_t>(header[31]) << 24);
+  REQUIRE(byteRate == 22050u * 2u);
+
+  uint16_t blockAlign = header[32] | (static_cast<uint16_t>(header[33]) << 8);
+  REQUIRE(blockAlign == 2);
 }
