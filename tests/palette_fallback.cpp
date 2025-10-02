@@ -55,17 +55,10 @@ TEST_CASE("Malformed palettes fall back to raw dump") {
                                           {true, 40, 50, 60}};
   auto rawPalette = test_palette::build_hunk_palette(colors, 0, false);
 
-  const size_t offsetTable = test_palette::kHunkPaletteHeaderSize;
-  const uint16_t entryOffset =
-      static_cast<uint16_t>(std::to_integer<uint8_t>(rawPalette[offsetTable]) |
-                            (static_cast<uint16_t>(
-                                 std::to_integer<uint8_t>(
-                                     rawPalette[offsetTable + 1]))
-                             << 8));
-  test_palette::write_u16(rawPalette,
-                          static_cast<size_t>(entryOffset) +
-                              test_palette::kEntryNumColorsOffset,
-                          400, false);
+  const uint16_t invalidOffset =
+      static_cast<uint16_t>(rawPalette.size() + 64);
+  test_palette::write_u16(rawPalette, test_palette::kHunkPaletteHeaderSize,
+                          invalidOffset, false);
 
   fs::path tmpDir = fs::temp_directory_path() / "palette_fallback";
   fs::create_directories(tmpDir);
