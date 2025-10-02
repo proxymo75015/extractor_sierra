@@ -612,6 +612,12 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     }
     attemptedOffsets.push_back(offset);
     AttemptResult attempt = evaluateOffset(offset);
+#ifdef ROBOT_EXTRACTOR_TESTING
+    if (m_forceParityMismatchForNextAttempt && doubledPos < 0) {
+      attempt.status = AppendPlanStatus::ParityMismatch;
+      m_forceParityMismatchForNextAttempt = false;
+    }
+#endif    
     AppendPlanStatus resultStatus = attempt.status;
     const bool firstOffsetAttempt = startOffsetUninitialized &&
                                     offset == initialStartOffset &&
@@ -628,13 +634,11 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     }
     if (resultStatus == AppendPlanStatus::Ok ||
         resultStatus == AppendPlanStatus::Skip) {
-      if (doubledPos >= 0) {
-        if (!m_audioStartOffsetInitialized ||
-            m_audioStartOffset != attempt.offset) {
-          m_audioStartOffset = attempt.offset;
-        }
-        m_audioStartOffsetInitialized = true;
+      if (!m_audioStartOffsetInitialized ||
+          m_audioStartOffset != attempt.offset) {
+        m_audioStartOffset = attempt.offset;
       }
+      m_audioStartOffsetInitialized = true;
       finalizeChannelAppend(*attempt.channel, attempt.isEven, attempt.halfPos,
                             samples, attempt.plan, resultStatus);
       return {true, resultStatus};
@@ -676,7 +680,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
 
   if (!attemptedBase || m_audioStartOffsetInitialized || doubledPos < 0) {
     const bool onConflictOnly = !m_audioStartOffsetInitialized;
-    if (attemptWithAlternate(m_audioStartOffset, onConflictOnly, false)) {
+    if (attemptWithAlternate(m_audioStartOffset, onConflictOnly, true)) {
       return;
     }
   }
