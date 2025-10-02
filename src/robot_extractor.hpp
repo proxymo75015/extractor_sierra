@@ -161,7 +161,8 @@ private:
   void readSizesAndCues();
   bool exportFrame(int frameNo, nlohmann::json &frameJson);
   void writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate,
-                size_t blockIndex, bool isEvenChannel);
+                size_t blockIndex, bool isEvenChannel,
+                uint16_t numChannels = 1);
   void appendChannelSamples(bool isEven, int64_t halfPos,
                             const std::vector<int16_t> &samples);
   size_t celPixelLimit() const;
@@ -341,8 +342,8 @@ struct RobotExtractorTester {
   }
   static void writeWav(RobotExtractor &r, const std::vector<int16_t> &samples,
                        uint32_t sampleRate, size_t blockIndex,
-                       bool isEvenChannel) {
-    r.writeWav(samples, sampleRate, blockIndex, isEvenChannel);
+                       bool isEvenChannel, uint16_t numChannels = 1) {
+    r.writeWav(samples, sampleRate, blockIndex, isEvenChannel, numChannels);
   }
 };
 #endif
