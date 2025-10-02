@@ -135,11 +135,10 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
     REQUIRE_FALSE(oddStream.empty());
   }
 
-  const auto selectedPath =
-      useEven ? outDir / "frame_00000_even.wav" : outDir / "frame_00000_odd.wav";
-  REQUIRE(fs::exists(selectedPath));
+  fs::path stereoPath = outDir / "frame_00000.wav";
+  REQUIRE(fs::exists(stereoPath));
 
-  std::ifstream wavFile(selectedPath, std::ios::binary);
+  std::ifstream wavFile(stereoPath, std::ios::binary);
   REQUIRE(wavFile.is_open());
 
   std::array<char, 44> header{};
@@ -157,15 +156,41 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
                        << 16) |
                       (static_cast<uint32_t>(static_cast<uint8_t>(header[43]))
                        << 24);
-  std::vector<int16_t> samples(dataSize / 2);
+  REQUIRE(dataSize % 4 == 0);
+  std::vector<int16_t> interleaved(dataSize / 2);
   if (dataSize > 0) {
-    wavFile.read(reinterpret_cast<char *>(samples.data()),
+    wavFile.read(reinterpret_cast<char *>(interleaved.data()),
                  static_cast<std::streamsize>(dataSize));
     REQUIRE(wavFile.gcount() == static_cast<std::streamsize>(dataSize));
   }
 
+  std::vector<int16_t> evenSamples;
+  std::vector<int16_t> oddSamples;
+  evenSamples.reserve(interleaved.size() / 2);
+  oddSamples.reserve(interleaved.size() / 2);
+  for (size_t i = 0; i < interleaved.size(); i += 2) {
+    evenSamples.push_back(interleaved[i]);
+    oddSamples.push_back(interleaved[i + 1]);
+  }
+  
   const auto &expectedStream = useEven ? evenStream : oddStream;
-  REQUIRE(expectedStream == samples);
+  const auto &actualSamples = useEven ? evenSamples : oddSamples;
+  REQUIRE(expectedStream == actualSamples);
+  const auto &otherSamples = useEven ? oddSamples : evenSamples;
+  const auto &otherStream = useEven ? oddStream : evenStream;
+  if (otherStream.empty()) {
+    for (int16_t sample : otherSamples) {
+      REQUIRE(sample == 0);
+    }
+  } else {
+    REQUIRE(otherSamples.size() >= otherStream.size());
+    for (size_t i = 0; i < otherStream.size(); ++i) {
+      REQUIRE(otherSamples[i] == otherStream[i]);
+    }
+    for (size_t i = otherStream.size(); i < otherSamples.size(); ++i) {
+      REQUIRE(otherSamples[i] == 0);
+    }
+  }
   
   std::vector<std::byte> zeroPrefix(kZeroPrefix, std::byte{0});
   std::vector<std::byte> payloadBytes(payload.size());
@@ -186,7 +211,7 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
   std::vector<int16_t> expected(
       decoded.begin() + static_cast<std::ptrdiff_t>(runwaySamples),
       decoded.end());
-  REQUIRE(expected == samples);
+  REQUIRE(expected == actualSamples);
 
   int16_t runwayPredictor = 0;
   auto runwaySpan =
@@ -203,14 +228,15 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
 
   auto payloadSamplesVector =
       robot::dpcm16_decompress(std::span(payloadBytes), runwayPredictor);
-  REQUIRE(samples.size() == silentSamples.size() + payloadSamplesVector.size());
+  REQUIRE(actualSamples.size() ==
+          silentSamples.size() + payloadSamplesVector.size());
   std::vector<int16_t> actualSilent(
-      samples.begin(),
-      samples.begin() + static_cast<std::ptrdiff_t>(silentSamples.size()));
+      actualSamples.begin(),
+      actualSamples.begin() + static_cast<std::ptrdiff_t>(silentSamples.size()));
   REQUIRE(actualSilent == silentSamples);
   std::vector<int16_t> actualPayload(
-      samples.begin() + static_cast<std::ptrdiff_t>(silentSamples.size()),
-      samples.end());
+      actualSamples.begin() + static_cast<std::ptrdiff_t>(silentSamples.size()),
+      actualSamples.end());
   REQUIRE(actualPayload == payloadSamplesVector);
   std::vector<int16_t> recombined = runwaySamplesVector;
   recombined.insert(recombined.end(), silentSamples.begin(),
@@ -251,8 +277,6 @@ TEST_CASE("Audio block with zero position is skipped") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
-  auto wavEven = outDir / "frame_00000_even.wav";
-  auto wavOdd = outDir / "frame_00000_odd.wav";
-  REQUIRE_FALSE(fs::exists(wavEven));
-  REQUIRE_FALSE(fs::exists(wavOdd));
+  auto wavStereo = outDir / "frame_00000.wav";
+  REQUIRE_FALSE(fs::exists(wavStereo));
 }
