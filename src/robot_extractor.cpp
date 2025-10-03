@@ -860,6 +860,54 @@ std::vector<int16_t> RobotExtractor::buildChannelStream(bool isEven) const {
   std::vector<uint8_t> occupied(channel.occupied.begin(),
                                 channel.occupied.begin() +
                                     static_cast<std::ptrdiff_t>(outputSize));
+  const ChannelAudio &otherChannel =
+      isEven ? m_oddChannelAudio : m_evenChannelAudio;
+  std::vector<int16_t> oppositeSamples(outputSize, 0);
+  std::vector<uint8_t> oppositeOccupied(outputSize, 0);
+  const size_t oppositeSamplesLimit =
+      std::min<size_t>(outputSize, otherChannel.samples.size());
+  const size_t oppositeOccupiedLimit =
+      std::min<size_t>(outputSize, otherChannel.occupied.size());
+  for (size_t i = 0; i < oppositeSamplesLimit; ++i) {
+    oppositeSamples[i] = otherChannel.samples[i];
+  }
+  for (size_t i = 0; i < oppositeOccupiedLimit; ++i) {
+    oppositeOccupied[i] = otherChannel.occupied[i];
+  }
+  auto fetchOppositeSample = [&](size_t index) -> std::optional<int16_t> {
+    if (index < oppositeOccupied.size() && oppositeOccupied[index]) {
+      return oppositeSamples[index];
+    }
+    return std::nullopt;
+  };
+  auto interpolateGap = [&](size_t gapStart, size_t gapEnd) {
+    if (gapStart == 0) {
+      return;
+    }
+    int16_t previousOpposite =
+        fetchOppositeSample(gapStart - 1)
+            .value_or(working[gapStart - 1]);
+    int16_t lastSample = working[gapStart - 1];
+    for (size_t i = gapStart; i < gapEnd; ++i) {
+      int16_t currentOpposite =
+          fetchOppositeSample(i).value_or(previousOpposite);
+      const int32_t averaged =
+          (static_cast<int32_t>(currentOpposite) +
+           static_cast<int32_t>(previousOpposite)) >> 1;
+      const int32_t clamped = std::clamp<int32_t>(
+          averaged, std::numeric_limits<int16_t>::min(),
+          std::numeric_limits<int16_t>::max());
+      const int16_t sample = static_cast<int16_t>(clamped);
+      working[i] = sample;
+      occupied[i] = 1;
+      lastSample = sample;
+      previousOpposite = currentOpposite;
+    }
+    if (!isEven && gapEnd < outputSize && !occupied[gapEnd]) {
+      working[gapEnd] = lastSample;
+      occupied[gapEnd] = 1;
+    }
+  };  
   for (size_t i = 0; i < firstOccupied; ++i) {
     working[i] = 0;
     occupied[i] = 1;
@@ -871,34 +919,11 @@ std::vector<int16_t> RobotExtractor::buildChannelStream(bool isEven) const {
       continue;
     }
     const size_t gapStart = idx;
-    const size_t prevIndex = gapStart - 1;
-    const int16_t prevSample = working[prevIndex];
     size_t gapEnd = gapStart;
     while (gapEnd < outputSize && occupied[gapEnd] == 0) {
       ++gapEnd;
     }
-    if (gapEnd >= outputSize) {
-      for (size_t i = gapStart; i < outputSize; ++i) {
-        working[i] = 0;
-        occupied[i] = 1;
-      }
-      break;
-    }
-    const int16_t nextSample = working[gapEnd];
-    const size_t span = gapEnd - prevIndex;
-    for (size_t i = gapStart; i < gapEnd; ++i) {
-      double t = static_cast<double>(i - prevIndex) / static_cast<double>(span);
-      double value = static_cast<double>(prevSample) +
-                     (static_cast<double>(nextSample) - prevSample) * t;
-      int32_t rounded = static_cast<int32_t>(std::lrint(value));
-      if (rounded < -32768) {
-        rounded = -32768;
-      } else if (rounded > 32767) {
-        rounded = 32767;
-      }
-      working[i] = static_cast<int16_t>(rounded);
-      occupied[i] = 1;
-    }
+    interpolateGap(gapStart, gapEnd);
     idx = gapEnd;
   }
   std::copy(working.begin(), working.end(), stream.begin());
