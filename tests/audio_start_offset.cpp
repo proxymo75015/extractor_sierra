@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <optional>
 #include <span>
 #include <vector>
@@ -247,4 +248,47 @@ TEST_CASE("Audio start offset routed using doubled positions") {
       REQUIRE(stream[startSample + i] == samples[i]);
     }
   }
+
+  REQUIRE(evenStream.size() >= 4);
+  const auto oddStreamBefore = oddStream;
+
+  std::vector<uint8_t> offsetBlockRaw = {0x21, 0x43, 0x65, 0x87,
+                                         0xA9, 0xCB, 0xED, 0x0F};
+  auto offsetBlockSamples = decompress_truncated_block(offsetBlockRaw);
+  REQUIRE(offsetBlockSamples.size() >= 4);
+
+  std::vector<std::byte> offsetPayload(kZeroPrefixBytes + offsetBlockRaw.size(),
+                                       std::byte{0});
+  for (size_t i = 0; i < offsetBlockRaw.size(); ++i) {
+    offsetPayload[kZeroPrefixBytes + i] = std::byte{offsetBlockRaw[i]};
+  }
+
+  const size_t evenStartIndex = evenStream.size() - 4;
+  const int64_t newOffset = audioStartOffset + 8;
+  const int64_t newOffsetHalf = newOffset / 2;
+  const int64_t halfPos = static_cast<int64_t>(evenStartIndex) * 2;
+  const int64_t newPos = halfPos + newOffsetHalf;
+  REQUIRE(newPos >= std::numeric_limits<int32_t>::min());
+  REQUIRE(newPos <= std::numeric_limits<int32_t>::max());
+
+  CAPTURE(newOffset);
+  CAPTURE(newPos);
+  CAPTURE(evenStartIndex);
+
+  REQUIRE_NOTHROW(robot::RobotExtractorTester::processAudioBlock(
+      extractor, offsetPayload, static_cast<int32_t>(newPos)));
+
+  REQUIRE(robot::RobotExtractorTester::audioStartOffset(extractor) == newOffset);
+
+  const auto evenStreamAfter =
+      robot::RobotExtractorTester::buildChannelStream(extractor, true);
+  const auto oddStreamAfter =
+      robot::RobotExtractorTester::buildChannelStream(extractor, false);
+
+  REQUIRE(oddStreamAfter == oddStreamBefore);
+  REQUIRE(evenStreamAfter.size() >= evenStartIndex + offsetBlockSamples.size());
+  for (size_t i = 0; i < offsetBlockSamples.size(); ++i) {
+    CAPTURE(i);
+    REQUIRE(evenStreamAfter[evenStartIndex + i] == offsetBlockSamples[i]);
+  }  
 }
