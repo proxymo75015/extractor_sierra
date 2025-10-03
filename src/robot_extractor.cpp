@@ -941,15 +941,17 @@ void RobotExtractor::finalizeAudio() {
     return;
   }
   const size_t maxSamples = std::max(evenStream.size(), oddStream.size());
-  std::vector<int16_t> interleaved;
-  interleaved.reserve(maxSamples * 2);
+  std::vector<int16_t> mono;
+  mono.reserve(maxSamples * 2);
   for (size_t i = 0; i < maxSamples; ++i) {
     const int16_t evenSample = i < evenStream.size() ? evenStream[i] : 0;
-    const int16_t oddSample = i < oddStream.size() ? oddStream[i] : 0;
-    interleaved.push_back(evenSample);
-    interleaved.push_back(oddSample);
+    mono.push_back(evenSample);
+    if (i < oddStream.size()) {
+      // Conserver l'ordre pair puis impair tel que décrit dans ScummVM/robot.h.
+      mono.push_back(oddStream[i]);
+    }
   }
-  writeWav(interleaved, kSampleRate, 0, true, 2);
+  writeWav(mono, kSampleRate, 0, true, 1);
 }
 
 RobotExtractor::ParsedPalette
