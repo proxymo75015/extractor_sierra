@@ -209,10 +209,12 @@ TEST_CASE("Audio block with no payload triggers an error") {
   REQUIRE_NOTHROW(robot::RobotExtractorTester::readSizesAndCues(extractor));
 
   nlohmann::json frameJson;
-  const std::string expectedMessage =
-      "Taille de bloc audio attendue non positive pour la frame 0: 0";
-  REQUIRE_THROWS_MATCHES(robot::RobotExtractorTester::exportFrame(extractor, 0,
-                                                                  frameJson),
-                         std::runtime_error,
-                         Catch::Matchers::Message(expectedMessage));
+  REQUIRE_NOTHROW(
+      robot::RobotExtractorTester::exportFrame(extractor, 0, frameJson));
+  REQUIRE_FALSE(
+      robot::RobotExtractorTester::audioStartOffsetInitialized(extractor));
+  REQUIRE_NOTHROW(robot::RobotExtractorTester::finalizeAudio(extractor));
+
+  fs::path wavPath = outDir / "frame_00000.wav";
+  REQUIRE_FALSE(fs::exists(wavPath));
 }
