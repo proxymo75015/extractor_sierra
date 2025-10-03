@@ -550,22 +550,8 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     return planChannelAppend(*channel, isEvenChannel, halfPos, samples, plan);
   };
 
-  auto computeAlternateOffset = [](int64_t offset) {
-    int64_t remainder = offset % 4;
-    if (remainder < 0) {
-      remainder += 4;
-    }
-    if (remainder == 0) {
-      return offset + 2;
-    }
-    if (remainder == 2) {
-      return offset - 2;
-    }
-    throw std::runtime_error("Position audio incohérente");
-  };
-
   struct AttemptResult {
-    int64_t offset = 0;  
+    int64_t offset = 0;
     AppendPlanStatus status = AppendPlanStatus::Conflict;
     AppendPlan plan{};
     bool isEven = false;
@@ -648,40 +634,64 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     return {false, resultStatus};
   };
 
-  auto attemptWithAlternate =
-      [&](int64_t offset, bool onConflictOnly,
-          bool allowParityRetry) -> bool {
-    auto [success, status] = processOffset(offset);
-    if (success) {
-      return true;
+  std::vector<int64_t> candidateOffsets;
+  candidateOffsets.reserve(8);
+
+  auto addCandidateOffset = [&](int64_t offset) {
+    if ((offset & 1LL) != 0) {
+      return;
     }
-    if (allowParityRetry && status == AppendPlanStatus::ParityMismatch) {
-      onConflictOnly = false;
+    if (std::find(candidateOffsets.begin(), candidateOffsets.end(), offset) ==
+        candidateOffsets.end()) {
+      candidateOffsets.push_back(offset);
     }
-    if (onConflictOnly && status != AppendPlanStatus::Conflict) {
-      return false;
-    }
-    int64_t altOffset = computeAlternateOffset(offset);
-    auto [altSuccess, altStatus] = processOffset(altOffset);
-    if (altSuccess) {
-      return true;
-    }
-    return false;
   };
 
-  bool attemptedBase = false;
-
-  if (!m_audioStartOffsetInitialized && doubledPos >= 0) {
-    attemptedBase = true;
-    if (attemptWithAlternate(initialStartOffset, true, true)) {
-      return;
-    }
+  if (m_audioStartOffsetInitialized) {
+    addCandidateOffset(m_audioStartOffset);
+  } else if (doubledPos >= 0) {
+    addCandidateOffset(initialStartOffset);
   }
 
-  if (!attemptedBase || m_audioStartOffsetInitialized || doubledPos < 0) {
-    const bool onConflictOnly = !m_audioStartOffsetInitialized;
-    if (attemptWithAlternate(m_audioStartOffset, onConflictOnly, true)) {
+  auto generateOffsetsForChannel = [&](bool isEven) {
+    const ChannelAudio &channel =
+        isEven ? m_evenChannelAudio : m_oddChannelAudio;
+    const size_t channelSize = channel.samples.size();
+    const size_t maxOverlap =
+        std::min(samples.size(), static_cast<size_t>(channelSize));
+    const size_t startSampleBegin = channelSize - maxOverlap;
+    const int64_t parityHalf = isEven ? 0 : 1;
+    for (size_t startSample = startSampleBegin; startSample <= channelSize;
+         ++startSample) {
+      const int64_t halfPosCandidate =
+          static_cast<int64_t>(startSample) * 2 + parityHalf;
+      const int64_t offsetHalfCandidate =
+          static_cast<int64_t>(pos) - halfPosCandidate;
+      addCandidateOffset(offsetHalfCandidate * 2);
+    }
+    const size_t negLimit = samples.size();
+    for (size_t neg = 1; neg <= negLimit; ++neg) {
+      const int64_t halfPosCandidate = isEven
+                                          ? -static_cast<int64_t>(neg) * 2
+                                          : -static_cast<int64_t>(neg) * 2 + 1;
+      const int64_t offsetHalfCandidate =
+          static_cast<int64_t>(pos) - halfPosCandidate;
+      addCandidateOffset(offsetHalfCandidate * 2);
+    }
+  };
+
+  generateOffsetsForChannel(true);
+  generateOffsetsForChannel(false);
+
+  for (int64_t offset : candidateOffsets) {
+    auto [success, status] = processOffset(offset);
+    if (success) {
       return;
+    }
+    if (!m_audioStartOffsetInitialized && status == AppendPlanStatus::ParityMismatch) {
+      // Continue exploring remaining candidates; parity mismatches are tracked
+      // through recordFailure.
+      continue;
     }
   }
 
