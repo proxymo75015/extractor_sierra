@@ -1691,12 +1691,13 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         const int64_t expectedAudioBlockSize =
             static_cast<int64_t>(m_audioBlkSize) -
             static_cast<int64_t>(kRobotAudioHeaderSize);
-        if (expectedAudioBlockSize <= 0) {
+        if (expectedAudioBlockSize < 0) {
           throw std::runtime_error(
-              "Taille de bloc audio attendue non positive pour la frame " +
+              "Taille de bloc audio attendue négative pour la frame " +
               std::to_string(frameNo) + ": " +
               std::to_string(static_cast<long long>(expectedAudioBlockSize)));
-        }        
+        }
+        const bool silentAudioBlock = expectedAudioBlockSize == 0;
         int64_t consumed = 0;
         int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
         consumed += 4;
@@ -1711,7 +1712,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         if (size < 0) {
           throw std::runtime_error("Taille audio invalide");
         }
-        if (size > expectedAudioBlockSize) {
+        if (!silentAudioBlock && size > expectedAudioBlockSize) {
           const std::string logMessage =
               "Taille de bloc audio inattendue: " +
               std::to_string(size) + " (maximum " +
@@ -1723,7 +1724,17 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                      ? std::numeric_limits<int32_t>::max()
                      : static_cast<int32_t>(expectedAudioBlockSize);
         }
-        if (pos == 0) {
+        if (silentAudioBlock) {
+          int64_t bytesToSkip = static_cast<int64_t>(audioBlkLen) - consumed;
+          if (bytesToSkip < 0) {
+            throw std::runtime_error(
+                "Bloc audio consommé au-delà de sa taille déclarée");
+          }
+          if (bytesToSkip > 0) {
+            m_fp.seekg(static_cast<std::streamoff>(bytesToSkip), std::ios::cur);
+            consumed += bytesToSkip;
+          }
+        } else if (pos == 0) {
           int64_t bytesToSkip = static_cast<int64_t>(audioBlkLen) - consumed;
           if (bytesToSkip < 0) {
             throw std::runtime_error(
