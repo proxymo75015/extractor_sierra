@@ -197,13 +197,10 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   }
   m_audioBlkSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (m_audioBlkSize > kMaxAudioBlockSize) {
-    log_warn(m_srcPath,
-             "Taille de bloc audio inattendue dans l'en-tête: " +
-                 std::to_string(m_audioBlkSize) +
-                 " (maximum recommandé " +
-                 std::to_string(kMaxAudioBlockSize) + ")",
-             m_options);
-    m_audioBlkSize = kMaxAudioBlockSize;
+    throw std::runtime_error("Taille de bloc audio invalide dans l'en-tête: " +
+                             std::to_string(m_audioBlkSize) +
+                             " (maximum " +
+                             std::to_string(kMaxAudioBlockSize) + ")");
   }
   m_primerZeroCompressFlag = read_scalar<int16_t>(m_fp, m_bigEndian);
   if (m_primerZeroCompressFlag != 0 && m_primerZeroCompressFlag != 1) {
@@ -231,12 +228,10 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_hasPalette = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
   m_hasAudio = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
   if (m_hasAudio && m_audioBlkSize < kRobotAudioHeaderSize) {
-    log_warn(m_srcPath,
-             "Taille de bloc audio trop petite: " +
-                 std::to_string(m_audioBlkSize) + " (minimum " +
-                 std::to_string(kRobotAudioHeaderSize) + ")",
-             m_options);
-    m_audioBlkSize = static_cast<uint16_t>(kRobotAudioHeaderSize);
+    throw std::runtime_error("Taille de bloc audio trop petite dans l'en-tête: " +
+                             std::to_string(m_audioBlkSize) +
+                             " (minimum " +
+                             std::to_string(kRobotAudioHeaderSize) + ")");
   }
   m_fp.seekg(2, std::ios::cur);
   m_frameRate = read_scalar<int16_t>(m_fp, m_bigEndian);
@@ -1696,6 +1691,12 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         const int64_t expectedAudioBlockSize =
             static_cast<int64_t>(m_audioBlkSize) -
             static_cast<int64_t>(kRobotAudioHeaderSize);
+        if (expectedAudioBlockSize <= 0) {
+          throw std::runtime_error(
+              "Taille de bloc audio attendue non positive pour la frame " +
+              std::to_string(frameNo) + ": " +
+              std::to_string(static_cast<long long>(expectedAudioBlockSize)));
+        }        
         int64_t consumed = 0;
         int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
         consumed += 4;
