@@ -13,6 +13,7 @@
 
 #include "robot_extractor.hpp"
 #include "utilities.hpp"
+#include "wav_helpers.hpp"
 
 namespace fs = std::filesystem;
 
@@ -190,25 +191,17 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   auto readSamples = [](const fs::path &path) {
     std::ifstream wav(path, std::ios::binary);
     REQUIRE(wav);
-    wav.seekg(40, std::ios::beg);
-    std::array<unsigned char, 4> dataSizeBytes{};
-    wav.read(reinterpret_cast<char *>(dataSizeBytes.data()),
-             static_cast<std::streamsize>(dataSizeBytes.size()));
-    REQUIRE(wav);
-    uint32_t dataBytes = static_cast<uint32_t>(dataSizeBytes[0]) |
-                         (static_cast<uint32_t>(dataSizeBytes[1]) << 8) |
-                         (static_cast<uint32_t>(dataSizeBytes[2]) << 16) |
-                         (static_cast<uint32_t>(dataSizeBytes[3]) << 24);
-    REQUIRE(dataBytes % 4 == 0);
-    wav.seekg(44, std::ios::beg);
-    std::vector<uint8_t> audioData(dataBytes);
+    auto layout = read_wav_layout(wav);
+    REQUIRE(layout.dataSize % (layout.numChannels * sizeof(int16_t)) == 0);
+    std::vector<uint8_t> audioData(layout.dataSize);
     if (!audioData.empty()) {
       wav.read(reinterpret_cast<char *>(audioData.data()),
                static_cast<std::streamsize>(audioData.size()));
       REQUIRE(wav.gcount() == static_cast<std::streamsize>(audioData.size()));
     }
     std::vector<int16_t> samples;
-    samples.reserve(audioData.size() / 4);
+    samples.reserve(audioData.size() /
+                    (layout.numChannels * sizeof(int16_t)));
     for (size_t i = 0; i + 3 < audioData.size(); i += 4) {
       uint16_t evenLo = audioData[i];
       uint16_t evenHi = static_cast<uint16_t>(audioData[i + 1]) << 8;
