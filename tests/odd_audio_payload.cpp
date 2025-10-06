@@ -123,7 +123,9 @@ TEST_CASE("Odd-sized audio payload throws") {
 
   const auto evenStream =
       robot::RobotExtractorTester::buildChannelStream(extractor, true);
-
+  const auto oddStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, false);
+  
   std::vector<std::byte> primerBytes(kRunwayBytes,
                                      std::byte{static_cast<unsigned char>(0x88)});
   const auto primerSamples = decompress_without_runway(primerBytes);
@@ -171,11 +173,15 @@ TEST_CASE("Odd-sized audio payload throws") {
     REQUIRE(wav.gcount() == static_cast<std::streamsize>(dataBytes));
   }
 
-  std::vector<int16_t> evenSamples;
-  evenSamples.reserve(interleaved.size() / 2);
-  for (size_t i = 0; i < interleaved.size(); i += 2) {
-    evenSamples.push_back(interleaved[i]);
+  REQUIRE(interleaved.size() % 2 == 0);
+  const size_t interleavedPairs = interleaved.size() / 2;
+  const size_t maxSamples =
+      std::max(evenStream.size(), oddStream.size());
+  REQUIRE(interleavedPairs == maxSamples);
+  for (size_t i = 0; i < maxSamples; ++i) {
+    const int16_t expectedEven = i < evenStream.size() ? evenStream[i] : 0;
+    const int16_t expectedOdd = i < oddStream.size() ? oddStream[i] : 0;
+    REQUIRE(interleaved[i * 2] == expectedEven);
+    REQUIRE(interleaved[i * 2 + 1] == expectedOdd);
   }
-
-  REQUIRE(evenSamples == evenStream);
 }
