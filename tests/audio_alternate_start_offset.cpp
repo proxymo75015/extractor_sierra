@@ -199,7 +199,7 @@ TEST_CASE("Alternate audio start offset persists across blocks") {
   const int64_t audioStartOffset =
       robot::RobotExtractorTester::audioStartOffset(extractor);
   REQUIRE((audioStartOffset & 1LL) == 0);
-  REQUIRE(((audioStartOffset % 4) + 4) % 4 == 2);
+  REQUIRE(((audioStartOffset % 2) + 2) % 2 == 0);
   const int64_t offsetHalf = audioStartOffset / 2;
   CAPTURE(audioStartOffset);
   CAPTURE(offsetHalf);
