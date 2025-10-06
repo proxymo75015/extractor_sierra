@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "robot_extractor.hpp"
+#include "wav_helpers.hpp"
 
 using robot::RobotExtractor;
 using robot::RobotExtractorTester;
@@ -127,19 +128,9 @@ TEST_CASE("Primer mismatch realigns stream and preserves primer data") {
 
   std::ifstream wav(stereoWav, std::ios::binary);
   REQUIRE(wav);
-  std::array<uint8_t, 44> header{};
-  wav.read(reinterpret_cast<char *>(header.data()), header.size());
-  REQUIRE(wav.gcount() == static_cast<std::streamsize>(header.size()));
-  uint16_t channels = header[22] |
-                      (static_cast<uint16_t>(header[23]) << 8);
-  REQUIRE(channels == 2);
-  uint32_t byteRate = header[28] | (static_cast<uint32_t>(header[29]) << 8) |
-                      (static_cast<uint32_t>(header[30]) << 16) |
-                      (static_cast<uint32_t>(header[31]) << 24);
-  REQUIRE(byteRate == 22050u * 2u * 2u);
-  uint32_t dataBytes = header[40] | (static_cast<uint32_t>(header[41]) << 8) |
-                       (static_cast<uint32_t>(header[42]) << 16) |
-                       (static_cast<uint32_t>(header[43]) << 24);
+  auto layout = read_wav_layout(wav);
+  REQUIRE(layout.sampleRate == 22050u);
+  uint32_t dataBytes = layout.dataSize;
 
   const size_t expectedFrames =
       std::max(evenStream.size(), oddStream.size());
