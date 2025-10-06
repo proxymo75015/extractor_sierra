@@ -945,11 +945,10 @@ void RobotExtractor::finalizeAudio() {
   mono.reserve(maxSamples * 2);
   for (size_t i = 0; i < maxSamples; ++i) {
     const int16_t evenSample = i < evenStream.size() ? evenStream[i] : 0;
+    const int16_t oddSample = i < oddStream.size() ? oddStream[i] : 0;    
     mono.push_back(evenSample);
-    if (i < oddStream.size()) {
-      // Conserver l'ordre pair puis impair tel que décrit dans ScummVM/robot.h.
-      mono.push_back(oddStream[i]);
-    }
+    // Conserver l'ordre pair puis impair tel que décrit dans ScummVM/robot.h.
+    mono.push_back(oddSample);
   }
   writeWav(mono, kSampleRate, 0, true, 1);
 }
