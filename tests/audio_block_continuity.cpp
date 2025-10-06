@@ -236,6 +236,104 @@ TEST_CASE("Audio stream fills gaps with interpolation") {
   REQUIRE(stereoSamples.odd == expectedOddPadded);
 }
 
+TEST_CASE("Audio blocks remain contiguous after runway removal") {
+  fs::path tmpDir = fs::temp_directory_path();
+  fs::path input = tmpDir / "continuity_runway_gap.rbt";
+  fs::path outDir = tmpDir / "continuity_runway_gap_out";
+  if (fs::exists(outDir)) {
+    fs::remove_all(outDir);
+  }
+  fs::create_directories(outDir);
+
+  std::vector<uint8_t> primerData = {0x10, 0x32, 0x54, 0x76,
+                                     0x98, 0xBA, 0xDC, 0xFE};
+  auto expectedPrimer = decompress_without_runway(primerData);
+
+  std::vector<uint8_t> blockRunway = {0x08, 0x18, 0x28, 0x38,
+                                      0x48, 0x58, 0x68, 0x78};
+  std::vector<uint8_t> blockPayloadA = {0x21, 0x43, 0x65, 0x87,
+                                        0xA9, 0xCB, 0xED, 0x0F};
+  std::vector<uint8_t> blockDataA = blockRunway;
+  blockDataA.insert(blockDataA.end(), blockPayloadA.begin(), blockPayloadA.end());
+  auto expectedBlockA = decompress_without_runway(blockDataA);
+
+  std::vector<uint8_t> blockPayloadB = {0x11, 0x33, 0x55, 0x77,
+                                        0x99, 0xBB, 0xDD, 0xFF};
+  std::vector<uint8_t> blockDataB = blockRunway;
+  blockDataB.insert(blockDataB.end(), blockPayloadB.begin(), blockPayloadB.end());
+  auto expectedBlockB = decompress_without_runway(blockDataB);
+
+  const uint32_t primerReserved =
+      static_cast<uint32_t>(kPrimerHeaderSize + primerData.size());
+  auto data = build_header(static_cast<uint16_t>(primerReserved), 2);
+  auto primerHeader =
+      build_primer_header(kPrimerHeaderSize + static_cast<uint32_t>(primerData.size()),
+                          static_cast<uint32_t>(primerData.size()), 0);
+  data.insert(data.end(), primerHeader.begin(), primerHeader.end());
+  data.insert(data.end(), primerData.begin(), primerData.end());
+
+  push16(data, 2);
+  push16(data, 2);
+  push16(data, static_cast<uint16_t>(2 + kAudioBlockSize));
+  push16(data, static_cast<uint16_t>(2 + kAudioBlockSize));
+
+  for (int i = 0; i < 256; ++i)
+    push32(data, 0);
+  for (int i = 0; i < 256; ++i)
+    push16(data, 0);
+
+  data.resize(((data.size() + 2047) / 2048) * 2048, 0);
+
+  const size_t primerSamples = expectedPrimer.size();
+  const size_t blockASamples = expectedBlockA.size();
+  const size_t blockBSamples = expectedBlockB.size();
+
+  data.push_back(0);
+  data.push_back(0);
+  const uint32_t blockAPos = static_cast<uint32_t>(primerSamples * 2);
+  push32(data, blockAPos);
+  push32(data, static_cast<uint32_t>(blockDataA.size()));
+  data.insert(data.end(), blockDataA.begin(), blockDataA.end());
+
+  data.push_back(0);
+  data.push_back(0);
+  const uint32_t blockBPos =
+      static_cast<uint32_t>((primerSamples + blockASamples) * 2);
+  push32(data, blockBPos);
+  push32(data, static_cast<uint32_t>(blockDataB.size()));
+  data.insert(data.end(), blockDataB.begin(), blockDataB.end());
+
+  std::ofstream out(input, std::ios::binary);
+  out.write(reinterpret_cast<const char *>(data.data()),
+            static_cast<std::streamsize>(data.size()));
+  out.close();
+
+  robot::RobotExtractor extractor(input, outDir, true);
+  REQUIRE_NOTHROW(extractor.extract());
+
+  auto wavPath = outDir / "frame_00000.wav";
+  REQUIRE(fs::exists(wavPath));
+  auto stereoSamples = read_wav_samples(wavPath);
+
+  const size_t totalSamples = primerSamples + blockASamples + blockBSamples;
+  std::vector<int16_t> expected(totalSamples, 0);
+  if (!expectedPrimer.empty()) {
+    std::copy(expectedPrimer.begin(), expectedPrimer.end(), expected.begin());
+  }
+  if (!expectedBlockA.empty()) {
+    std::copy(expectedBlockA.begin(), expectedBlockA.end(),
+              expected.begin() + static_cast<std::ptrdiff_t>(primerSamples));
+  }
+  if (!expectedBlockB.empty()) {
+    std::copy(expectedBlockB.begin(), expectedBlockB.end(),
+              expected.begin() +
+                  static_cast<std::ptrdiff_t>(primerSamples + blockASamples));
+  }
+
+  REQUIRE(stereoSamples.even == expected);
+  REQUIRE(stereoSamples.odd.size() == stereoSamples.even.size());
+}
+
 TEST_CASE("Audio blocks honor absolute positions when reordered") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "continuity_reorder.rbt";
