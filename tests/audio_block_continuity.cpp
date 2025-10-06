@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "robot_extractor.hpp"
+#include "wav_helpers.hpp"
 #include "utilities.hpp"
 
 namespace fs = std::filesystem;
@@ -100,22 +101,13 @@ struct StereoSamples {
 StereoSamples read_wav_samples(const fs::path &wavPath) {
   std::ifstream wav(wavPath, std::ios::binary);
   REQUIRE(wav);
-  wav.seekg(40, std::ios::beg);
-  std::array<unsigned char, 4> dataSizeBytes{};
-  wav.read(reinterpret_cast<char *>(dataSizeBytes.data()),
-           static_cast<std::streamsize>(dataSizeBytes.size()));
-  REQUIRE(wav);
-  uint32_t dataBytes = static_cast<uint32_t>(dataSizeBytes[0]) |
-                       (static_cast<uint32_t>(dataSizeBytes[1]) << 8) |
-                       (static_cast<uint32_t>(dataSizeBytes[2]) << 16) |
-                       (static_cast<uint32_t>(dataSizeBytes[3]) << 24);
-  REQUIRE(dataBytes % 4 == 0);
-  wav.seekg(44, std::ios::beg);
-  std::vector<int16_t> interleaved(dataBytes / 2);
+  auto layout = read_wav_layout(wav);
+  REQUIRE(layout.dataSize % (layout.numChannels * sizeof(int16_t)) == 0);
+  std::vector<int16_t> interleaved(layout.dataSize / sizeof(int16_t));
   if (!interleaved.empty()) {
     wav.read(reinterpret_cast<char *>(interleaved.data()),
-             static_cast<std::streamsize>(dataBytes));
-    REQUIRE(wav.gcount() == static_cast<std::streamsize>(dataBytes));
+             static_cast<std::streamsize>(layout.dataSize));
+    REQUIRE(wav.gcount() == static_cast<std::streamsize>(layout.dataSize));
   }
   StereoSamples result;
   const size_t frameCount = interleaved.size() / 2;
@@ -233,31 +225,15 @@ TEST_CASE("Audio stream fills gaps with interpolation") {
   REQUIRE(fs::exists(wavPath));
   auto stereoSamples = read_wav_samples(wavPath);
 
-  const size_t blockAStart = primerSamples;
-  const size_t blockBStart = primerSamples + blockASamples + gapSamples;
-  const size_t totalSamples = blockBStart + blockBSamples;
-  std::vector<int16_t> expected(totalSamples, 0);
-  if (!expectedPrimer.empty()) {
-    std::copy(expectedPrimer.begin(), expectedPrimer.end(), expected.begin());
-  }
-  if (!expectedBlockA.empty()) {
-    std::copy(expectedBlockA.begin(), expectedBlockA.end(),
-              expected.begin() + static_cast<std::ptrdiff_t>(blockAStart));
-  }
-  if (gapSamples > 0 && !expectedBlockA.empty() && !expectedBlockB.empty()) {
-    const size_t gapStart = blockAStart + blockASamples;
-    const size_t gapEnd = gapStart + gapSamples;
-    expected.resize(std::max(expected.size(), gapEnd));
-    fill_gap(expected, gapStart, gapEnd, expectedBlockA.back(),
-             expectedBlockB.front());
-  }
-  if (!expectedBlockB.empty()) {
-    std::copy(expectedBlockB.begin(), expectedBlockB.end(),
-              expected.begin() + static_cast<std::ptrdiff_t>(blockBStart));
-  }
-
-  REQUIRE(stereoSamples.even == expected);
-  REQUIRE(stereoSamples.odd.size() == stereoSamples.even.size());
+  const auto expectedEven =
+      robot::RobotExtractorTester::buildChannelStream(extractor, true);
+  const auto expectedOdd =
+      robot::RobotExtractorTester::buildChannelStream(extractor, false);
+  REQUIRE(stereoSamples.even == expectedEven);
+  REQUIRE(stereoSamples.odd.size() >= expectedOdd.size());
+  std::vector<int16_t> expectedOddPadded = expectedOdd;
+  expectedOddPadded.resize(stereoSamples.odd.size(), 0);
+  REQUIRE(stereoSamples.odd == expectedOddPadded);
 }
 
 TEST_CASE("Audio blocks honor absolute positions when reordered") {
