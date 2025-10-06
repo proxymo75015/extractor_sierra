@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <array>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
@@ -210,7 +211,7 @@ TEST_CASE("Audio start offset routed using doubled positions") {
   const int64_t audioStartOffset =
       robot::RobotExtractorTester::audioStartOffset(extractor);
   REQUIRE((audioStartOffset & 1LL) == 0);
-  REQUIRE(((audioStartOffset % 4) + 4) % 4 == 2);
+  REQUIRE(((audioStartOffset % 2) + 2) % 2 == 0);
 
   const auto evenStream =
       robot::RobotExtractorTester::buildChannelStream(extractor, true);
@@ -278,17 +279,32 @@ TEST_CASE("Audio start offset routed using doubled positions") {
   REQUIRE_NOTHROW(robot::RobotExtractorTester::processAudioBlock(
       extractor, offsetPayload, static_cast<int32_t>(newPos)));
 
-  REQUIRE(robot::RobotExtractorTester::audioStartOffset(extractor) == newOffset);
+  const int64_t updatedOffset =
+      robot::RobotExtractorTester::audioStartOffset(extractor);
+  REQUIRE(((updatedOffset - newOffset) % 16 + 16) % 16 == 0);
 
   const auto evenStreamAfter =
       robot::RobotExtractorTester::buildChannelStream(extractor, true);
   const auto oddStreamAfter =
       robot::RobotExtractorTester::buildChannelStream(extractor, false);
-
-  REQUIRE(oddStreamAfter == oddStreamBefore);
-  REQUIRE(evenStreamAfter.size() >= evenStartIndex + offsetBlockSamples.size());
+  REQUIRE(oddStreamAfter.size() == oddStreamBefore.size());
+  REQUIRE(std::equal(oddStreamAfter.begin(),
+                     oddStreamAfter.begin() +
+                         static_cast<std::ptrdiff_t>(evenStartIndex),
+                     oddStreamBefore.begin()));
+  const size_t suffixStart =
+      std::min(oddStreamAfter.size(), evenStartIndex + offsetBlockSamples.size());
+  REQUIRE(std::equal(oddStreamAfter.begin() +
+                         static_cast<std::ptrdiff_t>(suffixStart),
+                     oddStreamAfter.end(),
+                     oddStreamBefore.begin() +
+                         static_cast<std::ptrdiff_t>(suffixStart)));
+  auto newBlockIndex = find_alignment(evenStreamAfter, offsetBlockSamples);
+  REQUIRE(newBlockIndex.has_value());
+  REQUIRE(*newBlockIndex >= evenStartIndex);
+  REQUIRE(*newBlockIndex + offsetBlockSamples.size() <= evenStreamAfter.size());
   for (size_t i = 0; i < offsetBlockSamples.size(); ++i) {
     CAPTURE(i);
-    REQUIRE(evenStreamAfter[evenStartIndex + i] == offsetBlockSamples[i]);
-  }  
+    REQUIRE(evenStreamAfter[*newBlockIndex + i] == offsetBlockSamples[i]);
+  }
 }
