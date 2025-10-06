@@ -518,6 +518,9 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   if (samples.empty() || !m_extractAudio) {
     return;
   }
+  
+  const int64_t halfPosAdjustment =
+      static_cast<int64_t>(kRobotRunwaySamples) * 2;
 
   const int64_t doubledPos = static_cast<int64_t>(pos) * 2;
   const int64_t initialStartOffset = m_audioStartOffset;
@@ -541,6 +544,15 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
       rawHalfPos += (desiredParity == 0) ? -1 : 1;
     }
     halfPos = rawHalfPos;
+
+    if (halfPosAdjustment > 0) {
+      const int64_t minHalfPos = evenChannel ? 0 : 1;
+      int64_t adjustedHalfPos = halfPos + halfPosAdjustment;
+      if (adjustedHalfPos < minHalfPos) {
+        adjustedHalfPos = minHalfPos;
+      }
+      halfPos = adjustedHalfPos;
+    }
 
     return planChannelAppend(*channel, isEvenChannel, halfPos, samples, plan);
   };
