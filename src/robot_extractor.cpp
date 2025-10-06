@@ -950,7 +950,7 @@ void RobotExtractor::finalizeAudio() {
     // Conserver l'ordre pair puis impair tel que décrit dans ScummVM/robot.h.
     mono.push_back(oddSample);
   }
-  writeWav(mono, kSampleRate, 0, true, 1);
+  writeWav(mono, kSampleRate, 0, true, 2, false);
 }
 
 RobotExtractor::ParsedPalette
@@ -1861,7 +1861,8 @@ size_t RobotExtractor::rgbaBufferLimit() const {
 
 void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
                               uint32_t sampleRate, size_t blockIndex,
-                              bool isEvenChannel, uint16_t numChannels) {
+                              bool isEvenChannel, uint16_t numChannels,
+                              bool appendChannelSuffix) {
   if (sampleRate == 0) {
     throw std::runtime_error("Fréquence d'échantillonnage nulle");
   }
@@ -1923,8 +1924,9 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
   write_le32(header.data() + 40, static_cast<uint32_t>(data_size));
   std::ostringstream wavName;
   wavName << "frame_" << std::setw(5) << std::setfill('0') << blockIndex
-          << (kNumChannels == 1 ? (isEvenChannel ? "_even" : "_odd")
-                                : "")
+          << ((appendChannelSuffix && kNumChannels == 1)
+                  ? (isEvenChannel ? "_even" : "_odd")
+                  : "")
           << ".wav";
   auto outPath = m_dstDir / wavName.str();
   auto [fsOutPath, outPathStr] = to_long_path(outPath);
