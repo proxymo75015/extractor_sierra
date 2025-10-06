@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "robot_extractor.hpp"
+#include "wav_helpers.hpp"
 
 namespace fs = std::filesystem;
 
@@ -52,22 +53,13 @@ struct StereoSamples {
 static StereoSamples read_wav_samples(const fs::path &path) {
   std::ifstream wav(path, std::ios::binary);
   REQUIRE(wav);
-  wav.seekg(40, std::ios::beg);
-  std::array<unsigned char, 4> dataSizeBytes{};
-  wav.read(reinterpret_cast<char *>(dataSizeBytes.data()),
-           static_cast<std::streamsize>(dataSizeBytes.size()));
-  REQUIRE(wav);
-  uint32_t dataBytes = static_cast<uint32_t>(dataSizeBytes[0]) |
-                       (static_cast<uint32_t>(dataSizeBytes[1]) << 8) |
-                       (static_cast<uint32_t>(dataSizeBytes[2]) << 16) |
-                       (static_cast<uint32_t>(dataSizeBytes[3]) << 24);
-  REQUIRE(dataBytes % 4 == 0);
-  wav.seekg(44, std::ios::beg);
-  std::vector<int16_t> interleaved(dataBytes / 2);
+  auto layout = read_wav_layout(wav);
+  REQUIRE(layout.dataSize % (layout.numChannels * sizeof(int16_t)) == 0);
+  std::vector<int16_t> interleaved(layout.dataSize / sizeof(int16_t));
   if (!interleaved.empty()) {
     wav.read(reinterpret_cast<char *>(interleaved.data()),
-             static_cast<std::streamsize>(dataBytes));
-    REQUIRE(wav.gcount() == static_cast<std::streamsize>(dataBytes));
+             static_cast<std::streamsize>(layout.dataSize));
+    REQUIRE(wav.gcount() == static_cast<std::streamsize>(layout.dataSize));
   }
   StereoSamples result;
   const size_t frameCount = interleaved.size() / 2;
