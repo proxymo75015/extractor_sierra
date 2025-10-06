@@ -10,6 +10,7 @@
 
 #include "robot_extractor.hpp"
 #include "utilities.hpp"
+#include "wav_helpers.hpp"
 
 namespace fs = std::filesystem;
 
@@ -141,27 +142,14 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
   std::ifstream wavFile(stereoPath, std::ios::binary);
   REQUIRE(wavFile.is_open());
 
-  std::array<char, 44> header{};
-  wavFile.read(header.data(), static_cast<std::streamsize>(header.size()));
-  REQUIRE(wavFile.gcount() == static_cast<std::streamsize>(header.size()));
-  REQUIRE(std::string_view(header.data(), 4) == "RIFF");
-  REQUIRE(std::string_view(header.data() + 8, 4) == "WAVE");
-  REQUIRE(std::string_view(header.data() + 12, 4) == "fmt ");
-  REQUIRE(std::string_view(header.data() + 36, 4) == "data");
-
-  uint32_t dataSize = static_cast<uint8_t>(header[40]) |
-                      (static_cast<uint32_t>(static_cast<uint8_t>(header[41]))
-                       << 8) |
-                      (static_cast<uint32_t>(static_cast<uint8_t>(header[42]))
-                       << 16) |
-                      (static_cast<uint32_t>(static_cast<uint8_t>(header[43]))
-                       << 24);
-  REQUIRE(dataSize % 4 == 0);
-  std::vector<int16_t> interleaved(dataSize / 2);
-  if (dataSize > 0) {
+  auto layout = read_wav_layout(wavFile);
+  REQUIRE(layout.sampleRate == 22050u);
+  REQUIRE(layout.dataSize % (layout.numChannels * sizeof(int16_t)) == 0);
+  std::vector<int16_t> interleaved(layout.dataSize / sizeof(int16_t));
+  if (layout.dataSize > 0) {
     wavFile.read(reinterpret_cast<char *>(interleaved.data()),
-                 static_cast<std::streamsize>(dataSize));
-    REQUIRE(wavFile.gcount() == static_cast<std::streamsize>(dataSize));
+                 static_cast<std::streamsize>(layout.dataSize));
+    REQUIRE(wavFile.gcount() == static_cast<std::streamsize>(layout.dataSize));
   }
 
   std::vector<int16_t> evenSamples;
