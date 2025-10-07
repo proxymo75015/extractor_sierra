@@ -242,6 +242,7 @@ private:
   struct ChannelAudio {
     std::vector<int16_t> samples;
     std::vector<uint8_t> occupied;
+    int16_t predictor = 0;
   };
   ChannelAudio m_evenChannelAudio;
   ChannelAudio m_oddChannelAudio;
