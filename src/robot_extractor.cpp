@@ -574,13 +574,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     return result;
   };
 
-  auto throwParityMismatch = [](const AppendPlan &p) {
-    if (p.posIsEven) {
-      throw std::runtime_error("Position paire pour canal impair");
-    }
-    throw std::runtime_error("Position impaire pour canal pair");
-  };
-
   std::vector<int64_t> attemptedOffsets;
   bool conflictEncountered = false;
   AppendPlan parityFailurePlan{};
@@ -703,12 +696,30 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   }
 
   if (sawParityFailure) {
-    throwParityMismatch(parityFailurePlan);
+    if (parityFailurePlan.posIsEven) {
+      log_warn(m_srcPath,
+               "Bloc audio ignoré (position paire reçue pour le canal impair) à la position " +
+                   std::to_string(static_cast<long long>(pos)),
+               m_options);
+    } else {
+      log_warn(m_srcPath,
+               "Bloc audio ignoré (position impaire reçue pour le canal pair) à la position " +
+                   std::to_string(static_cast<long long>(pos)),
+               m_options);
+    }
+    return;
   }
   if (conflictEncountered) {
-    throw std::runtime_error("Chevauchement de blocs audio détecté");
+    log_warn(m_srcPath,
+             "Bloc audio ignoré en raison d'un conflit à la position " +
+                 std::to_string(static_cast<long long>(pos)),
+             m_options);
+    return;
   }
-  throw std::runtime_error("Chevauchement de blocs audio détecté");
+  log_warn(m_srcPath,
+           "Bloc audio ignoré: impossible de déterminer une position valide pour la position " +
+               std::to_string(static_cast<long long>(pos)),
+           m_options);
 }
 
 RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
@@ -833,12 +844,24 @@ void RobotExtractor::appendChannelSamples(bool isEven, int64_t halfPos,
     finalizeChannelAppend(channel, isEven, halfPos, samples, plan, status);
     return;
   case AppendPlanStatus::Conflict:
-    throw std::runtime_error("Chevauchement de blocs audio détecté");
+    log_warn(m_srcPath,
+             "Bloc audio ignoré en raison d'un conflit à la position " +
+                 std::to_string(static_cast<long long>(halfPos)),
+             m_options);
+    return;
   case AppendPlanStatus::ParityMismatch:
     if (plan.posIsEven) {
-      throw std::runtime_error("Position paire pour canal impair");
+      log_warn(m_srcPath,
+               "Bloc audio ignoré (position paire reçue pour le canal impair) à la position " +
+                   std::to_string(static_cast<long long>(halfPos)),
+               m_options);
+    } else {
+      log_warn(m_srcPath,
+               "Bloc audio ignoré (position impaire reçue pour le canal pair) à la position " +
+                   std::to_string(static_cast<long long>(halfPos)),
+               m_options);
     }
-    throw std::runtime_error("Position impaire pour canal pair");
+    return;
   }
 }
 
