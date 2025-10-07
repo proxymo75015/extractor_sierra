@@ -483,8 +483,10 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     throw std::runtime_error("Primer audio tronqué");
   }
   const size_t runwaySamples = kRobotRunwaySamples;
-  int16_t predictor = 0;
+  ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
+  int16_t predictor = channel.predictor;
   auto pcm = dpcm16_decompress(std::span(primer), predictor);
+  channel.predictor = predictor;
   if (!m_extractAudio) {
     return;
   }
@@ -501,23 +503,33 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
 
 void RobotExtractor::process_audio_block(std::span<const std::byte> block,
                                          int32_t pos) {
-  ensurePrimerProcessed();  
+  ensurePrimerProcessed();
+  if (!m_extractAudio) {
+    return;
+  }
   if (block.size() < kRobotRunwayBytes) {
     throw std::runtime_error("Bloc audio inutilisable");
   }
-  int16_t predictor = 0;
-  auto samples = dpcm16_decompress(block, predictor);
   const size_t runwaySamples = kRobotRunwaySamples;
-  if (samples.size() >= runwaySamples) {
-    samples.erase(samples.begin(),
-                  samples.begin() + static_cast<std::ptrdiff_t>(runwaySamples));
-  } else {
-    samples.clear();
-  }
-  
-  if (samples.empty() || !m_extractAudio) {
-    return;
-  }
+  auto decodeChannelSamples = [&](const ChannelAudio &channel,
+                                  int16_t &predictorOut) {
+    int16_t predictor = channel.predictor;
+    auto decoded = dpcm16_decompress(block, predictor);
+    predictorOut = predictor;
+    if (decoded.size() >= runwaySamples) {
+      decoded.erase(decoded.begin(),
+                    decoded.begin() +
+                        static_cast<std::ptrdiff_t>(runwaySamples));
+    } else {
+      decoded.clear();
+    }
+    return decoded;
+  };
+
+  int16_t evenPredictorAfter = 0;
+  int16_t oddPredictorAfter = 0;
+  auto evenSamples = decodeChannelSamples(m_evenChannelAudio, evenPredictorAfter);
+  auto oddSamples = decodeChannelSamples(m_oddChannelAudio, oddPredictorAfter);
   
   const int64_t halfPosAdjustment =
       static_cast<int64_t>(kRobotRunwaySamples) * 2;
@@ -536,7 +548,10 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     const bool evenChannel = (adjustedDoubledPos & 3LL) == 0;
     isEvenChannel = evenChannel;
     channel = isEvenChannel ? &m_evenChannelAudio : &m_oddChannelAudio;
-
+    
+    const std::vector<int16_t> &channelSamples =
+        isEvenChannel ? evenSamples : oddSamples;
+    
     int64_t rawHalfPos = adjustedDoubledPos / 2;
     const int64_t desiredParity = evenChannel ? 0 : 1;
     const int64_t rawParity = rawHalfPos & 1LL;
@@ -554,7 +569,8 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
       halfPos = adjustedHalfPos;
     }
 
-    return planChannelAppend(*channel, isEvenChannel, halfPos, samples, plan);
+    return planChannelAppend(*channel, isEvenChannel, halfPos, channelSamples,
+                             plan);
   };
 
   struct AttemptResult {
@@ -564,6 +580,8 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     bool isEven = false;
     int64_t halfPos = 0;
     ChannelAudio *channel = nullptr;
+    const std::vector<int16_t> *samples = nullptr;
+    int16_t predictor = 0;
   };
 
   auto evaluateOffset = [&](int64_t offset) {
@@ -571,6 +589,8 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     result.offset = offset;
     result.status = tryOffset(offset, result.channel, result.isEven, result.halfPos,
                               result.plan);
+    result.samples = result.isEven ? &evenSamples : &oddSamples;
+    result.predictor = result.isEven ? evenPredictorAfter : oddPredictorAfter;    
     return result;
   };
 
@@ -625,8 +645,12 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
         m_audioStartOffset = attempt.offset;
       }
       m_audioStartOffsetInitialized = true;
+      const std::vector<int16_t> &channelSamples =
+          attempt.samples ? *attempt.samples : (attempt.isEven ? evenSamples
+                                                               : oddSamples);      
       finalizeChannelAppend(*attempt.channel, attempt.isEven, attempt.halfPos,
-                            samples, attempt.plan, resultStatus);
+                            channelSamples, attempt.plan, resultStatus);
+      attempt.channel->predictor = attempt.predictor;
       return {true, resultStatus};
     }
     attempt.status = resultStatus;
@@ -657,8 +681,10 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     const ChannelAudio &channel =
         isEven ? m_evenChannelAudio : m_oddChannelAudio;
     const size_t channelSize = channel.samples.size();
+    const std::vector<int16_t> &channelSamples =
+        isEven ? evenSamples : oddSamples;    
     const size_t maxOverlap =
-        std::min(samples.size(), static_cast<size_t>(channelSize));
+        std::min(channelSamples.size(), static_cast<size_t>(channelSize));
     const size_t startSampleBegin = channelSize - maxOverlap;
     const int64_t parityHalf = isEven ? 0 : 1;
     for (size_t startSample = startSampleBegin; startSample <= channelSize;
@@ -669,7 +695,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
           static_cast<int64_t>(pos) - halfPosCandidate;
       addCandidateOffset(offsetHalfCandidate * 2);
     }
-    const size_t negLimit = samples.size();
+    const size_t negLimit = channelSamples.size();
     for (size_t neg = 1; neg <= negLimit; ++neg) {
       const int64_t halfPosCandidate = isEven
                                           ? -static_cast<int64_t>(neg) * 2
@@ -2004,7 +2030,13 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
 
 void RobotExtractor::extract() {
   m_audioStartOffset = 0;
-  m_audioStartOffsetInitialized = false;  
+  m_audioStartOffsetInitialized = false;
+  m_evenChannelAudio.samples.clear();
+  m_evenChannelAudio.occupied.clear();
+  m_evenChannelAudio.predictor = 0;
+  m_oddChannelAudio.samples.clear();
+  m_oddChannelAudio.occupied.clear();
+  m_oddChannelAudio.predictor = 0;
   readHeader();
   readPrimer();
   readPalette();
