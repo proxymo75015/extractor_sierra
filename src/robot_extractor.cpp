@@ -177,7 +177,7 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
         "Impossible de repositionner le flux au début de l'en-tête Robot");
   }
 
-  const uint16_t rawSig = read_scalar<uint16_t>(m_fp, m_bigEndian);
+  const uint16_t rawSig = read_scalar<uint16_t>(m_fp, false);
   uint16_t sig = rawSig;
   if (sig == 0x3d) {
     sig = kRobotSig;
@@ -432,7 +432,6 @@ void RobotExtractor::readPrimer() {
   } else {
     m_postPrimerPos = m_fp.tellg();
     m_primerInvalid = true;
-    throw std::runtime_error("ReadPrimerData - Flags corrupt");    
   }
 
   if (!m_extractAudio) {
@@ -1814,22 +1813,6 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         if (size < 0) {
           throw std::runtime_error("Taille audio invalide");
         }
-        bool skipDueToZeroPosition = false;
-        if (pos == 0) {
-          log_warn(m_srcPath,
-                   "Bloc audio ignoré: position absolue nulle", m_options);
-          int64_t bytesToSkip = static_cast<int64_t>(audioBlkLen) - consumed;
-          if (bytesToSkip < 0) {
-            throw std::runtime_error(
-                "Bloc audio consommé au-delà de sa taille déclarée");
-          }
-          if (bytesToSkip > 0) {
-            m_fp.seekg(static_cast<std::streamoff>(bytesToSkip),
-                       std::ios::cur);
-            consumed += bytesToSkip;
-          }
-          skipDueToZeroPosition = true;
-        }        
         if (!silentAudioBlock && size > expectedAudioBlockSize) {
           const std::string logMessage =
               "Taille de bloc audio inattendue: " +
@@ -1842,9 +1825,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                      ? std::numeric_limits<int32_t>::max()
                      : static_cast<int32_t>(expectedAudioBlockSize);
         }
-        if (skipDueToZeroPosition) {
-          // Nothing else to do; the remaining bytes have already been skipped.
-        } else if (silentAudioBlock) {
+        if (silentAudioBlock) {
           int64_t bytesToSkip = static_cast<int64_t>(audioBlkLen) - consumed;
           if (bytesToSkip < 0) {
             throw std::runtime_error(
