@@ -597,6 +597,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   bool conflictEncountered = false;
   AppendPlan parityFailurePlan{};
   bool sawParityFailure = false;
+  bool abortDueToPrimaryFailure = false;
 
   auto recordFailure = [&](const AttemptResult &attempt) {
     if (attempt.status == AppendPlanStatus::ParityMismatch) {
@@ -604,8 +605,17 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
         parityFailurePlan = attempt.plan;
         sawParityFailure = true;
       }
+      if (m_audioStartOffsetInitialized &&
+          attempt.offset == initialStartOffset) {
+        abortDueToPrimaryFailure = true;
+      }      
     } else if (attempt.status == AppendPlanStatus::Conflict) {
       conflictEncountered = true;
+      if (m_audioStartOffsetInitialized &&
+          attempt.offset == initialStartOffset &&
+          m_processedAudioPositions.count(pos) > 0) {
+        abortDueToPrimaryFailure = true;
+      }      
     }
   };
 
@@ -649,6 +659,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
                                                                : oddSamples);
       finalizeChannelAppend(*attempt.channel, attempt.isEven, attempt.halfPos,
                             channelSamples, attempt.plan, resultStatus);
+      m_processedAudioPositions.insert(pos);      
       return {true, resultStatus};
     }
     attempt.status = resultStatus;
@@ -712,6 +723,9 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     if (success) {
       return;
     }
+    if (abortDueToPrimaryFailure) {
+      break;
+    }    
     if (!m_audioStartOffsetInitialized && status == AppendPlanStatus::ParityMismatch) {
       // Continue exploring remaining candidates; parity mismatches are tracked
       // through recordFailure.
@@ -1333,7 +1347,7 @@ void RobotExtractor::readPalette() {
   }
 }
 
-void RobotExtractor::readSizesAndCues() {
+void RobotExtractor::readSizesAndCues(bool allowShortFile) {
   StreamExceptionGuard guard(m_fp);
   if (m_options.debug_index) {
     log_error(m_srcPath,
@@ -1493,6 +1507,17 @@ void RobotExtractor::readSizesAndCues() {
   if (frameDataOffset > fileSize) {
     throw std::runtime_error("Les tables d'index dépassent la taille du fichier");
   }
+  const std::uintmax_t remainingBytes = fileSize - frameDataOffset;
+  if (!allowShortFile) {
+    if (totalFrameSize > remainingBytes) {
+      throw std::runtime_error(
+          "Somme des tailles de frame dépasse les données restantes du fichier");
+    }
+    if (totalPacketSize > remainingBytes) {
+      throw std::runtime_error(
+          "Somme des tailles de paquets dépasse les données restantes du fichier");
+    }
+  }  
 }
 
 bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
@@ -1810,16 +1835,6 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             m_fp.seekg(static_cast<std::streamoff>(bytesToSkip), std::ios::cur);
             consumed += bytesToSkip;
           }
-        } else if (pos == 0) {
-          int64_t bytesToSkip = static_cast<int64_t>(audioBlkLen) - consumed;
-          if (bytesToSkip < 0) {
-            throw std::runtime_error(
-                "Bloc audio consommé au-delà de sa taille déclarée");
-          }
-          if (bytesToSkip > 0) {
-            m_fp.seekg(static_cast<std::streamoff>(bytesToSkip), std::ios::cur);
-            consumed += bytesToSkip;
-          }
         } else {
           std::vector<std::byte> block;
           if (size == expectedAudioBlockSize) {
@@ -1858,7 +1873,22 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
           // 4) va sur le canal pair, congrue à 2 (mod 4) sur le canal impair.
           // L'audio peut exister même sans primer, décompresser toujours.
           if (!block.empty()) {
-            process_audio_block(block, pos);
+            bool skipZeroPosition = false;
+            if (pos == 0) {
+              const size_t runwayCheck =
+                  std::min(block.size(), static_cast<size_t>(kRobotRunwayBytes));
+              skipZeroPosition = std::all_of(
+                  block.begin(), block.begin() +
+                                     static_cast<std::ptrdiff_t>(runwayCheck),
+                  [](std::byte b) { return b == std::byte{0}; });
+              if (skipZeroPosition) {
+                log_warn(m_srcPath,
+                         "Bloc audio ignoré en position zéro", m_options);
+              }
+            }
+            if (!skipZeroPosition) {
+              process_audio_block(block, pos);
+            }
           }
         }
         int64_t remainingBytes = static_cast<int64_t>(audioBlkLen) - consumed;
@@ -2024,6 +2054,7 @@ void RobotExtractor::extract() {
   m_evenChannelAudio.occupied.clear();
   m_oddChannelAudio.samples.clear();
   m_oddChannelAudio.occupied.clear();
+  m_processedAudioPositions.clear();
   readHeader();
   readPrimer();
   readPalette();
