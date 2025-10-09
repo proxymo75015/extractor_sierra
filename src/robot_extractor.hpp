@@ -13,6 +13,7 @@
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <vector>
 namespace robot {
 
@@ -158,7 +159,7 @@ private:
   void ensurePrimerProcessed();
   void processPrimerChannel(std::vector<std::byte> &primer, bool isEven);
   void process_audio_block(std::span<const std::byte> block, int32_t pos);
-  void readSizesAndCues();
+  void readSizesAndCues(bool allowShortFile = false);
   bool exportFrame(int frameNo, nlohmann::json &frameJson);
   void writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate,
                 size_t blockIndex, bool isEvenChannel,
@@ -239,6 +240,7 @@ private:
   std::vector<std::byte> m_rgbaBuffer;
   bool m_paletteParseFailed = false;
   bool m_paletteFallbackDumped = false;
+  std::unordered_set<int32_t> m_processedAudioPositions;
   struct ChannelAudio {
     std::vector<int16_t> samples;
     std::vector<uint8_t> occupied;
@@ -315,7 +317,9 @@ struct RobotExtractorTester {
   static void readHeader(RobotExtractor &r) { r.readHeader(); }
   static void readPrimer(RobotExtractor &r) { r.readPrimer(); }
   static void readPalette(RobotExtractor &r) { r.readPalette(); }
-  static void readSizesAndCues(RobotExtractor &r) { r.readSizesAndCues(); }
+  static void readSizesAndCues(RobotExtractor &r) {
+    r.readSizesAndCues(/*allowShortFile=*/true);
+  }
   static bool exportFrame(RobotExtractor &r, int frameNo,
                           nlohmann::json &frameJson) {
     return r.exportFrame(frameNo, frameJson);
