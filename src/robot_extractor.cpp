@@ -500,10 +500,8 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     throw std::runtime_error("Primer audio tronqué");
   }
   const size_t runwaySamples = kRobotRunwaySamples;
-  ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
-  int16_t predictor = channel.predictor;
+  int16_t predictor = 0;
   auto pcm = dpcm16_decompress(std::span(primer), predictor);
-  channel.predictor = predictor;
   if (!m_extractAudio) {
     return;
   }
@@ -528,11 +526,9 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     throw std::runtime_error("Bloc audio inutilisable");
   }
   const size_t runwaySamples = kRobotRunwaySamples;
-  auto decodeChannelSamples = [&](const ChannelAudio &channel,
-                                  int16_t &predictorOut) {
-    int16_t predictor = channel.predictor;
+  auto decodeChannelSamples = [&]() {
+    int16_t predictor = 0;
     auto decoded = dpcm16_decompress(block, predictor);
-    predictorOut = predictor;
     if (decoded.size() >= runwaySamples) {
       decoded.erase(decoded.begin(),
                     decoded.begin() +
@@ -543,10 +539,8 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     return decoded;
   };
 
-  int16_t evenPredictorAfter = 0;
-  int16_t oddPredictorAfter = 0;
-  auto evenSamples = decodeChannelSamples(m_evenChannelAudio, evenPredictorAfter);
-  auto oddSamples = decodeChannelSamples(m_oddChannelAudio, oddPredictorAfter);
+  auto evenSamples = decodeChannelSamples();
+  auto oddSamples = decodeChannelSamples();
   
   const int64_t doubledPos = static_cast<int64_t>(pos) * 2;
   const int64_t initialStartOffset = m_audioStartOffset;
@@ -569,10 +563,12 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     int64_t rawHalfPos = adjustedDoubledPos / 2;
     const int64_t desiredParity = evenChannel ? 0 : 1;
     const int64_t rawParity = rawHalfPos & 1LL;
+    halfPos = rawHalfPos;    
     if (rawParity != desiredParity) {
-      rawHalfPos += (desiredParity == 0) ? -1 : 1;
+      plan = {};
+      plan.posIsEven = (rawParity == 0);
+      return AppendPlanStatus::ParityMismatch;
     }
-    halfPos = rawHalfPos;
 
     return planChannelAppend(*channel, isEvenChannel, halfPos, channelSamples,
                              plan);
@@ -586,7 +582,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     int64_t halfPos = 0;
     ChannelAudio *channel = nullptr;
     const std::vector<int16_t> *samples = nullptr;
-    int16_t predictor = 0;
   };
 
   auto evaluateOffset = [&](int64_t offset) {
@@ -595,7 +590,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     result.status = tryOffset(offset, result.channel, result.isEven, result.halfPos,
                               result.plan);
     result.samples = result.isEven ? &evenSamples : &oddSamples;
-    result.predictor = result.isEven ? evenPredictorAfter : oddPredictorAfter;    
     return result;
   };
 
@@ -652,10 +646,9 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
       m_audioStartOffsetInitialized = true;
       const std::vector<int16_t> &channelSamples =
           attempt.samples ? *attempt.samples : (attempt.isEven ? evenSamples
-                                                               : oddSamples);      
+                                                               : oddSamples);
       finalizeChannelAppend(*attempt.channel, attempt.isEven, attempt.halfPos,
                             channelSamples, attempt.plan, resultStatus);
-      attempt.channel->predictor = attempt.predictor;
       return {true, resultStatus};
     }
     attempt.status = resultStatus;
@@ -2029,10 +2022,8 @@ void RobotExtractor::extract() {
   m_audioStartOffsetInitialized = false;
   m_evenChannelAudio.samples.clear();
   m_evenChannelAudio.occupied.clear();
-  m_evenChannelAudio.predictor = 0;
   m_oddChannelAudio.samples.clear();
   m_oddChannelAudio.occupied.clear();
-  m_oddChannelAudio.predictor = 0;
   readHeader();
   readPrimer();
   readPalette();
