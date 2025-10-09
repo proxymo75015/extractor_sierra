@@ -541,7 +541,20 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
 
   auto evenSamples = decodeChannelSamples();
   auto oddSamples = decodeChannelSamples();
-  
+
+  auto hasAudibleData = [](const std::vector<int16_t> &samples) {
+    return std::any_of(samples.begin(), samples.end(),
+                       [](int16_t sample) { return sample != 0; });
+  };
+
+  if (pos == 0 && !hasAudibleData(evenSamples) && !hasAudibleData(oddSamples)) {
+    log_warn(m_srcPath,
+             "Bloc audio ignoré en position zéro (données silencieuses)",
+             m_options);
+    m_processedAudioPositions.insert(pos);
+    return;
+  }
+
   const int64_t doubledPos = static_cast<int64_t>(pos) * 2;
   const int64_t initialStartOffset = m_audioStartOffset;
   const bool startOffsetUninitialized = !m_audioStartOffsetInitialized;
@@ -1825,6 +1838,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                      ? std::numeric_limits<int32_t>::max()
                      : static_cast<int32_t>(expectedAudioBlockSize);
         }
+        
         if (silentAudioBlock) {
           int64_t bytesToSkip = static_cast<int64_t>(audioBlkLen) - consumed;
           if (bytesToSkip < 0) {
