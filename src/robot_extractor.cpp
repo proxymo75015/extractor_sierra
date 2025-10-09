@@ -177,7 +177,7 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
         "Impossible de repositionner le flux au début de l'en-tête Robot");
   }
 
-  const uint16_t rawSig = read_scalar<uint16_t>(m_fp, m_bigEndian);
+  const uint16_t rawSig = read_scalar<uint16_t>(m_fp, /*bigEndian=*/false);
   uint16_t sig = rawSig;
   if (sig == 0x3d) {
     sig = kRobotSig;
@@ -548,9 +548,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   auto evenSamples = decodeChannelSamples(m_evenChannelAudio, evenPredictorAfter);
   auto oddSamples = decodeChannelSamples(m_oddChannelAudio, oddPredictorAfter);
   
-  const int64_t halfPosAdjustment =
-      static_cast<int64_t>(kRobotRunwaySamples) * 2;
-
   const int64_t doubledPos = static_cast<int64_t>(pos) * 2;
   const int64_t initialStartOffset = m_audioStartOffset;
   const bool startOffsetUninitialized = !m_audioStartOffsetInitialized;
@@ -576,15 +573,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
       rawHalfPos += (desiredParity == 0) ? -1 : 1;
     }
     halfPos = rawHalfPos;
-
-    if (halfPosAdjustment > 0) {
-      const int64_t minHalfPos = evenChannel ? 0 : 1;
-      int64_t adjustedHalfPos = halfPos + halfPosAdjustment;
-      if (adjustedHalfPos < minHalfPos) {
-        adjustedHalfPos = minHalfPos;
-      }
-      halfPos = adjustedHalfPos;
-    }
 
     return planChannelAppend(*channel, isEvenChannel, halfPos, channelSamples,
                              plan);
@@ -1512,15 +1500,6 @@ void RobotExtractor::readSizesAndCues() {
   if (frameDataOffset > fileSize) {
     throw std::runtime_error("Les tables d'index dépassent la taille du fichier");
   }
-  const std::uintmax_t bytesAvailable = fileSize - frameDataOffset;
-  if (totalFrameSize > bytesAvailable) {
-    throw std::runtime_error(
-        "Somme des tailles de frame dépasse les données restantes du fichier");
-  }
-  if (totalPacketSize > bytesAvailable) {
-    throw std::runtime_error(
-        "Somme des tailles de paquets dépasse les données restantes du fichier");
-  }  
 }
 
 bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
