@@ -177,7 +177,7 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
         "Impossible de repositionner le flux au début de l'en-tête Robot");
   }
 
-  const uint16_t rawSig = read_scalar<uint16_t>(m_fp, /*bigEndian=*/false);
+  const uint16_t rawSig = read_scalar<uint16_t>(m_fp, m_bigEndian);
   uint16_t sig = rawSig;
   if (sig == 0x3d) {
     sig = kRobotSig;
@@ -430,7 +430,11 @@ void RobotExtractor::readPrimer() {
     m_oddPrimer.assign(static_cast<size_t>(m_oddPrimerSize), std::byte{0});
     m_postPrimerPos = m_fp.tellg();
   } else {
-    m_primerInvalid = true;
+    m_evenPrimerSize = 0;
+    m_oddPrimerSize = 0;
+    m_evenPrimer.clear();
+    m_oddPrimer.clear();
+    m_primerProcessed = true;
     m_postPrimerPos = m_fp.tellg();
   }
 
