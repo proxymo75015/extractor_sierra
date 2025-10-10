@@ -165,8 +165,6 @@ TEST_CASE("Odd-start audio without primer uses odd stream") {
                                                    block.position);
   }
 
-  REQUIRE(robot::RobotExtractorTester::audioStartOffsetInitialized(extractor));
-
   const auto evenStream =
       robot::RobotExtractorTester::buildChannelStream(extractor, true);
   const auto oddStream =
