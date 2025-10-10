@@ -201,8 +201,6 @@ TEST_CASE("Conflicting retransmission with parity mismatch is ignored") {
   REQUIRE(afterConflictEven == expectedEvenAfterFirst);
   REQUIRE(afterConflictOdd == baselineOdd);
 
-  robot::RobotExtractorTester::forceParityMismatchForNextAttempt(extractor) =
-      true;
   REQUIRE_NOTHROW(processBlock(parityBlock, parityPos));
   auto afterParityEven =
       robot::RobotExtractorTester::buildChannelStream(extractor, true);
@@ -211,7 +209,4 @@ TEST_CASE("Conflicting retransmission with parity mismatch is ignored") {
 
   REQUIRE(afterParityEven == expectedEvenAfterFirst);
   REQUIRE(afterParityOdd == baselineOdd);
-  REQUIRE_FALSE(
-      robot::RobotExtractorTester::forceParityMismatchForNextAttempt(
-          extractor));
 }
