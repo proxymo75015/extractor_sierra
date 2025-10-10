@@ -32,7 +32,7 @@ inline int validate_cel_dimensions(uint16_t w, uint16_t h, uint8_t scale) {
   if (w == 0 || h == 0) {
     throw std::runtime_error("Dimensions de cel invalides");
   }
-  if (scale == 0) {
+  if (scale == 0 || scale > 100) {
     throw std::runtime_error(
         "Facteur d'échelle vertical invalide (valeur attendue entre 1 et 100)");
   }
