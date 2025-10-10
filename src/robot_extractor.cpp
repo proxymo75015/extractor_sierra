@@ -1916,20 +1916,12 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
           // 4) va sur le canal pair, congrue à 2 (mod 4) sur le canal impair.
           // L'audio peut exister même sans primer, décompresser toujours.
           if (!block.empty()) {
-            bool skipZeroPosition = false;
             if (pos == 0) {
-              const size_t runwayCheck =
-                  std::min(block.size(), static_cast<size_t>(kRobotRunwayBytes));
-              skipZeroPosition = std::all_of(
-                  block.begin(), block.begin() +
-                                     static_cast<std::ptrdiff_t>(runwayCheck),
-                  [](std::byte b) { return b == std::byte{0}; });
-              if (skipZeroPosition) {
-                log_warn(m_srcPath,
-                         "Bloc audio ignoré en position zéro", m_options);
-              }
-            }
-            if (!skipZeroPosition) {
+              // Conserver l'alignement avec ScummVM : les paquets de retransmission
+              // positionnés à zéro ne doivent jamais être injectés dans le mixage
+              // audio, peu importe leur contenu.
+              log_warn(m_srcPath, "Bloc audio ignoré en position zéro", m_options);
+            } else {
               process_audio_block(block, pos);
             }
           }
