@@ -247,6 +247,8 @@ private:
   };
   ChannelAudio m_evenChannelAudio;
   ChannelAudio m_oddChannelAudio;
+  int16_t m_evenPredictor = 0;
+  int16_t m_oddPredictor = 0;
   int64_t m_audioStartOffset = 0;
   bool m_audioStartOffsetInitialized = false;
 #ifdef ROBOT_EXTRACTOR_TESTING
