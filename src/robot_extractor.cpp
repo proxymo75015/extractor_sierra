@@ -571,202 +571,43 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   }
 
   const int64_t doubledPos = static_cast<int64_t>(pos) * 2;
-  const int64_t initialStartOffset = m_audioStartOffset;
-  const bool startOffsetUninitialized = !m_audioStartOffsetInitialized;
+   if ((doubledPos & 1LL) != 0) {
+    throw std::runtime_error("Position audio incohérente");
+  }
 
-  auto tryOffset = [&](int64_t offset, ChannelAudio *&channel,
-                       bool &isEvenChannel, int64_t &halfPos,
-                       AppendPlan &plan) -> AppendPlanStatus {
-    int64_t adjustedDoubledPos = doubledPos - offset;
-    if ((adjustedDoubledPos & 1LL) != 0) {
-      throw std::runtime_error("Position audio incohérente");
+  const bool isEvenChannel = (doubledPos & 3LL) == 0;
+  ChannelAudio &channel =
+      isEvenChannel ? m_evenChannelAudio : m_oddChannelAudio;
+  const ChannelDecodeResult &decodeResult =
+      isEvenChannel ? evenResult : oddResult;
+  const std::vector<int16_t> &channelSamples = decodeResult.samples;
+  const int64_t halfPos = doubledPos / 2;
+
+  AppendPlan plan{};
+  AppendPlanStatus status =
+      planChannelAppend(channel, isEvenChannel, halfPos, channelSamples, plan);
+  
+  switch (status) {
+  case AppendPlanStatus::Ok:
+  case AppendPlanStatus::Skip:
+    finalizeChannelAppend(channel, isEvenChannel, halfPos, channelSamples, plan,
+                          status);
+    if (decodeResult.predictorValid) {
+      channel.predictor = decodeResult.finalPredictor;
+      channel.predictorInitialized = true;
     }
-    const bool evenChannel = (adjustedDoubledPos & 3LL) == 0;
-    isEvenChannel = evenChannel;
-    channel = isEvenChannel ? &m_evenChannelAudio : &m_oddChannelAudio;
-
-    const std::vector<int16_t> &channelSamples =
-        isEvenChannel ? evenResult.samples : oddResult.samples;
-
-    int64_t rawHalfPos = adjustedDoubledPos / 2;
-    const int64_t desiredParity = evenChannel ? 0 : 1;
-    const int64_t rawParity = rawHalfPos & 1LL;
-    halfPos = rawHalfPos;
-    if (rawParity != desiredParity) {
-      plan = {};
-      plan.posIsEven = (rawParity == 0);
-      return AppendPlanStatus::ParityMismatch;
-    }
-
-    return planChannelAppend(*channel, isEvenChannel, halfPos, channelSamples,
-                             plan);
-  };
-
-  struct AttemptResult {
-    int64_t offset = 0;
-    AppendPlanStatus status = AppendPlanStatus::Conflict;
-    AppendPlan plan{};
-    bool isEven = false;
-    int64_t halfPos = 0;
-    ChannelAudio *channel = nullptr;
-    const std::vector<int16_t> *samples = nullptr;
-    const ChannelDecodeResult *decodeResult = nullptr;
-  };
-
-  auto evaluateOffset = [&](int64_t offset) {
-    AttemptResult result;
-    result.offset = offset;
-    result.status = tryOffset(offset, result.channel, result.isEven, result.halfPos,
-                              result.plan);
-    result.samples = result.isEven ? &evenResult.samples : &oddResult.samples;
-    result.decodeResult = result.isEven ? &evenResult : &oddResult;
-    return result;
-  };
-
-  std::vector<int64_t> attemptedOffsets;
-  bool conflictEncountered = false;
-  AppendPlan parityFailurePlan{};
-  bool sawParityFailure = false;
-  bool abortDueToPrimaryFailure = false;
-
-  auto recordFailure = [&](const AttemptResult &attempt) {
-    if (attempt.status == AppendPlanStatus::ParityMismatch) {
-      if (!sawParityFailure) {
-        parityFailurePlan = attempt.plan;
-        sawParityFailure = true;
-      }
-      if (m_audioStartOffsetInitialized &&
-          attempt.offset == initialStartOffset) {
-        abortDueToPrimaryFailure = true;
-      }
-    } else if (attempt.status == AppendPlanStatus::Conflict) {
-      conflictEncountered = true;
-      if (m_audioStartOffsetInitialized &&
-          attempt.offset == initialStartOffset &&
-          m_processedAudioPositions.count(pos) > 0) {
-        abortDueToPrimaryFailure = true;
-      }
-    }
-  };
-
-  auto processOffset = [&](int64_t offset)
-      -> std::pair<bool, AppendPlanStatus> {
-    if (std::find(attemptedOffsets.begin(), attemptedOffsets.end(), offset) !=
-        attemptedOffsets.end()) {
-      return {false, AppendPlanStatus::Conflict};
-    }
-    attemptedOffsets.push_back(offset);
-    AttemptResult attempt = evaluateOffset(offset);
-#ifdef ROBOT_EXTRACTOR_TESTING
-    if (m_forceParityMismatchForNextAttempt && doubledPos < 0) {
-      attempt.status = AppendPlanStatus::ParityMismatch;
-      m_forceParityMismatchForNextAttempt = false;
-    }
-#endif
-    AppendPlanStatus resultStatus = attempt.status;
-    const bool firstOffsetAttempt = startOffsetUninitialized &&
-                                    offset == initialStartOffset &&
-                                    doubledPos >= 0;
-    if (firstOffsetAttempt &&
-        (resultStatus == AppendPlanStatus::Ok ||
-         resultStatus == AppendPlanStatus::Skip)) {
-      const bool expectedEvenChannel = ((doubledPos - offset) & 3LL) == 0;
-      if (attempt.isEven != expectedEvenChannel) {
-        resultStatus = AppendPlanStatus::ParityMismatch;
-      }
-    }
-    if (resultStatus == AppendPlanStatus::Ok ||
-        resultStatus == AppendPlanStatus::Skip) {
-      if (!m_audioStartOffsetInitialized ||
-          m_audioStartOffset != attempt.offset) {
-        m_audioStartOffset = attempt.offset;
-      }
-      m_audioStartOffsetInitialized = true;
-      const std::vector<int16_t> &channelSamples =
-          attempt.samples ? *attempt.samples
-                          : (attempt.isEven ? evenResult.samples
-                                            : oddResult.samples);
-      finalizeChannelAppend(*attempt.channel, attempt.isEven, attempt.halfPos,
-                            channelSamples, attempt.plan, resultStatus);
-      if (attempt.channel && attempt.decodeResult &&
-          attempt.decodeResult->predictorValid) {
-        attempt.channel->predictor = attempt.decodeResult->finalPredictor;
-        attempt.channel->predictorInitialized = true;
-      }
+    if (status != AppendPlanStatus::Skip) {
       m_processedAudioPositions.insert(pos);
-      return {true, resultStatus};
     }
-    attempt.status = resultStatus;
-    recordFailure(attempt);
-    return {false, resultStatus};
-  };
-
-  std::vector<int64_t> candidateOffsets;
-  candidateOffsets.reserve(8);
-
-  auto addCandidateOffset = [&](int64_t offset) {
-    if ((offset & 1LL) != 0) {
-      return;
-    }
-    if (std::find(candidateOffsets.begin(), candidateOffsets.end(), offset) ==
-        candidateOffsets.end()) {
-      candidateOffsets.push_back(offset);
-    }
-  };
-
-  if (m_audioStartOffsetInitialized) {
-    addCandidateOffset(m_audioStartOffset);
-  } else if (doubledPos >= 0) {
-    addCandidateOffset(initialStartOffset);
-  }
-
-  auto generateOffsetsForChannel = [&](bool isEven) {
-    const ChannelAudio &channel =
-        isEven ? m_evenChannelAudio : m_oddChannelAudio;
-    const size_t channelSize = channel.samples.size();
-    const std::vector<int16_t> &channelSamples =
-        isEven ? evenResult.samples : oddResult.samples;
-    const size_t maxOverlap =
-        std::min(channelSamples.size(), static_cast<size_t>(channelSize));
-    const size_t startSampleBegin = channelSize - maxOverlap;
-    const int64_t parityHalf = isEven ? 0 : 1;
-    for (size_t startSample = startSampleBegin; startSample <= channelSize;
-         ++startSample) {
-      const int64_t halfPosCandidate =
-          static_cast<int64_t>(startSample) * 2 + parityHalf;
-      const int64_t offsetHalfCandidate =
-          static_cast<int64_t>(pos) - halfPosCandidate;
-      addCandidateOffset(offsetHalfCandidate * 2);
-    }
-    const size_t negLimit = channelSamples.size();
-    for (size_t neg = 1; neg <= negLimit; ++neg) {
-      const int64_t halfPosCandidate = isEven
-                                          ? -static_cast<int64_t>(neg) * 2
-                                          : -static_cast<int64_t>(neg) * 2 + 1;
-      const int64_t offsetHalfCandidate =
-          static_cast<int64_t>(pos) - halfPosCandidate;
-      addCandidateOffset(offsetHalfCandidate * 2);
-    }
-  };
-
-  generateOffsetsForChannel(true);
-  generateOffsetsForChannel(false);
-
-  for (int64_t offset : candidateOffsets) {
-    auto [success, status] = processOffset(offset);
-    if (success) {
-      return;
-    }
-    if (abortDueToPrimaryFailure) {
-      break;
-    }
-    if (!m_audioStartOffsetInitialized && status == AppendPlanStatus::ParityMismatch) {
-      continue;
-    }
-  }
-
-  if (sawParityFailure) {
-    if (parityFailurePlan.posIsEven) {
+    return;
+  case AppendPlanStatus::Conflict:
+    log_warn(m_srcPath,
+             "Bloc audio ignoré en raison d'un conflit à la position " +
+                 std::to_string(static_cast<long long>(pos)),
+             m_options);
+    return;
+  case AppendPlanStatus::ParityMismatch:
+    if (plan.posIsEven) {
       log_warn(m_srcPath,
                "Bloc audio ignoré (position paire reçue pour le canal impair) à la position " +
                    std::to_string(static_cast<long long>(pos)),
@@ -779,17 +620,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     }
     return;
   }
-  if (conflictEncountered) {
-    log_warn(m_srcPath,
-             "Bloc audio ignoré en raison d'un conflit à la position " +
-                 std::to_string(static_cast<long long>(pos)),
-             m_options);
-    return;
-  }
-  log_warn(m_srcPath,
-           "Bloc audio ignoré: impossible de déterminer une position valide pour la position " +
-               std::to_string(static_cast<long long>(pos)),
-           m_options);
 }
 
 RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
@@ -2083,8 +1913,6 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
 }
 
 void RobotExtractor::extract() {
-  m_audioStartOffset = 0;
-  m_audioStartOffsetInitialized = false;
   m_evenChannelAudio.samples.clear();
   m_evenChannelAudio.occupied.clear();
   m_oddChannelAudio.samples.clear();
