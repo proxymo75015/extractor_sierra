@@ -249,11 +249,6 @@ private:
   };
   ChannelAudio m_evenChannelAudio;
   ChannelAudio m_oddChannelAudio;
-  int64_t m_audioStartOffset = 0;
-  bool m_audioStartOffsetInitialized = false;
-#ifdef ROBOT_EXTRACTOR_TESTING
-  bool m_forceParityMismatchForNextAttempt = false;
-#endif
 };
 
 #ifdef ROBOT_EXTRACTOR_TESTING
@@ -330,15 +325,6 @@ struct RobotExtractorTester {
   static std::vector<int16_t> buildChannelStream(RobotExtractor &r,
                                                  bool isEven) {
     return r.buildChannelStream(isEven);
-  }
-  static int64_t &audioStartOffset(RobotExtractor &r) {
-    return r.m_audioStartOffset;
-  }
-  static bool &audioStartOffsetInitialized(RobotExtractor &r) {
-    return r.m_audioStartOffsetInitialized;
-  }
-  static bool &forceParityMismatchForNextAttempt(RobotExtractor &r) {
-    return r.m_forceParityMismatchForNextAttempt;
   }
   static RobotExtractor::ParsedPalette parsePalette(const RobotExtractor &r) {
     return RobotExtractor::parseHunkPalette(r.m_palette);
