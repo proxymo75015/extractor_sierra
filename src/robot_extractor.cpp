@@ -500,13 +500,8 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     throw std::runtime_error("Primer audio tronqué");
   }
   const size_t runwaySamples = kRobotRunwaySamples;
-  int16_t predictor = isEven ? m_evenPredictor : m_oddPredictor;
+  int16_t predictor = 0;
   auto pcm = dpcm16_decompress(std::span(primer), predictor);
-  if (isEven) {
-    m_evenPredictor = predictor;
-  } else {
-    m_oddPredictor = predictor;
-  }
   if (!m_extractAudio) {
     return;
   }
@@ -533,14 +528,12 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   const size_t runwaySamples = kRobotRunwaySamples;
   struct ChannelDecodeResult {
     std::vector<int16_t> samples;
-    int16_t finalPredictor = 0;
   };
 
-  auto decodeChannelSamples = [&](int16_t predictor) {
+  auto decodeChannelSamples = [&]() {
     ChannelDecodeResult result;
-    int16_t localPredictor = predictor;
+    int16_t localPredictor = 0;
     auto decoded = dpcm16_decompress(block, localPredictor);
-    result.finalPredictor = localPredictor;
     if (decoded.size() >= runwaySamples) {
       decoded.erase(decoded.begin(),
                     decoded.begin() +
@@ -552,8 +545,8 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     return result;
   };
 
-  ChannelDecodeResult evenResult = decodeChannelSamples(m_evenPredictor);
-  ChannelDecodeResult oddResult = decodeChannelSamples(m_oddPredictor);
+  ChannelDecodeResult evenResult = decodeChannelSamples();
+  ChannelDecodeResult oddResult = decodeChannelSamples();
 
   auto hasAudibleData = [](const std::vector<int16_t> &samples) {
     return std::any_of(samples.begin(), samples.end(),
@@ -609,7 +602,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     int64_t halfPos = 0;
     ChannelAudio *channel = nullptr;
     const std::vector<int16_t> *samples = nullptr;
-    int16_t finalPredictor = 0;  
   };
 
   auto evaluateOffset = [&](int64_t offset) {
@@ -618,8 +610,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     result.status = tryOffset(offset, result.channel, result.isEven, result.halfPos,
                               result.plan);
     result.samples = result.isEven ? &evenResult.samples : &oddResult.samples;
-    result.finalPredictor =
-        result.isEven ? evenResult.finalPredictor : oddResult.finalPredictor;
     return result;
   };
 
@@ -690,11 +680,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
                                             : oddResult.samples);
       finalizeChannelAppend(*attempt.channel, attempt.isEven, attempt.halfPos,
                             channelSamples, attempt.plan, resultStatus);
-      if (attempt.isEven) {
-        m_evenPredictor = attempt.finalPredictor;
-      } else {
-        m_oddPredictor = attempt.finalPredictor;
-      }
       m_processedAudioPositions.insert(pos);
       return {true, resultStatus};
     }
