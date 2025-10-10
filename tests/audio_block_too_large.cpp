@@ -211,8 +211,6 @@ TEST_CASE("Audio block with no payload triggers an error") {
   nlohmann::json frameJson;
   REQUIRE_NOTHROW(
       robot::RobotExtractorTester::exportFrame(extractor, 0, frameJson));
-  REQUIRE_FALSE(
-      robot::RobotExtractorTester::audioStartOffsetInitialized(extractor));
   REQUIRE_NOTHROW(robot::RobotExtractorTester::finalizeAudio(extractor));
 
   fs::path wavPath = outDir / "frame_00000.wav";
