@@ -532,7 +532,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   struct ChannelDecodeResult {
     std::vector<int16_t> samples;
     int16_t finalPredictor = 0;
-    bool predictorValid = false;  
+    bool predictorValid = false;
   };
 
   auto decodeChannelSamples = [&](const ChannelAudio &channel) {
@@ -584,14 +584,14 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     const bool evenChannel = (adjustedDoubledPos & 3LL) == 0;
     isEvenChannel = evenChannel;
     channel = isEvenChannel ? &m_evenChannelAudio : &m_oddChannelAudio;
-    
+
     const std::vector<int16_t> &channelSamples =
         isEvenChannel ? evenResult.samples : oddResult.samples;
-    
+
     int64_t rawHalfPos = adjustedDoubledPos / 2;
     const int64_t desiredParity = evenChannel ? 0 : 1;
     const int64_t rawParity = rawHalfPos & 1LL;
-    halfPos = rawHalfPos;    
+    halfPos = rawHalfPos;
     if (rawParity != desiredParity) {
       plan = {};
       plan.posIsEven = (rawParity == 0);
@@ -610,7 +610,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     int64_t halfPos = 0;
     ChannelAudio *channel = nullptr;
     const std::vector<int16_t> *samples = nullptr;
-    const ChannelDecodeResult *decodeResult = nullptr;  
+    const ChannelDecodeResult *decodeResult = nullptr;
   };
 
   auto evaluateOffset = [&](int64_t offset) {
@@ -619,7 +619,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     result.status = tryOffset(offset, result.channel, result.isEven, result.halfPos,
                               result.plan);
     result.samples = result.isEven ? &evenResult.samples : &oddResult.samples;
-    result.decodeResult = result.isEven ? &evenResult : &oddResult;    
+    result.decodeResult = result.isEven ? &evenResult : &oddResult;
     return result;
   };
 
@@ -638,14 +638,14 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
       if (m_audioStartOffsetInitialized &&
           attempt.offset == initialStartOffset) {
         abortDueToPrimaryFailure = true;
-      }      
+      }
     } else if (attempt.status == AppendPlanStatus::Conflict) {
       conflictEncountered = true;
       if (m_audioStartOffsetInitialized &&
           attempt.offset == initialStartOffset &&
           m_processedAudioPositions.count(pos) > 0) {
         abortDueToPrimaryFailure = true;
-      }      
+      }
     }
   };
 
@@ -662,7 +662,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
       attempt.status = AppendPlanStatus::ParityMismatch;
       m_forceParityMismatchForNextAttempt = false;
     }
-#endif    
+#endif
     AppendPlanStatus resultStatus = attempt.status;
     const bool firstOffsetAttempt = startOffsetUninitialized &&
                                     offset == initialStartOffset &&
@@ -670,8 +670,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     if (firstOffsetAttempt &&
         (resultStatus == AppendPlanStatus::Ok ||
          resultStatus == AppendPlanStatus::Skip)) {
-      // Derive the target channel directly from the parity of the adjusted
-      // position for this start offset candidate.
       const bool expectedEvenChannel = ((doubledPos - offset) & 3LL) == 0;
       if (attempt.isEven != expectedEvenChannel) {
         resultStatus = AppendPlanStatus::ParityMismatch;
@@ -694,7 +692,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
           attempt.decodeResult->predictorValid) {
         attempt.channel->predictor = attempt.decodeResult->finalPredictor;
         attempt.channel->predictorInitialized = true;
-      }      
+      }
       m_processedAudioPositions.insert(pos);
       return {true, resultStatus};
     }
@@ -761,10 +759,8 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     }
     if (abortDueToPrimaryFailure) {
       break;
-    }    
+    }
     if (!m_audioStartOffsetInitialized && status == AppendPlanStatus::ParityMismatch) {
-      // Continue exploring remaining candidates; parity mismatches are tracked
-      // through recordFailure.
       continue;
     }
   }
@@ -2099,12 +2095,8 @@ void RobotExtractor::extract() {
   m_audioStartOffsetInitialized = false;
   m_evenChannelAudio.samples.clear();
   m_evenChannelAudio.occupied.clear();
-  m_evenChannelAudio.predictor = 0;
-  m_evenChannelAudio.predictorInitialized = false;
   m_oddChannelAudio.samples.clear();
   m_oddChannelAudio.occupied.clear();
-  m_oddChannelAudio.predictor = 0;
-  m_oddChannelAudio.predictorInitialized = false;
   m_processedAudioPositions.clear();
   readHeader();
   readPrimer();
