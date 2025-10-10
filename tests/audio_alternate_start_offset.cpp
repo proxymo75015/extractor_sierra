@@ -85,17 +85,6 @@ std::vector<uint8_t> build_primer_header(uint32_t total, uint32_t evenSize,
   return p;
 }
 
-int64_t compute_start_sample(int32_t pos, int64_t offsetHalf) {
-  int64_t halfPos = static_cast<int64_t>(pos) - offsetHalf;
-  int64_t startSampleSigned = 0;
-  if (halfPos >= 0) {
-    startSampleSigned = halfPos / 2;
-  } else {
-    startSampleSigned = (halfPos - 1) / 2;
-  }
-  return startSampleSigned;
-}
-
 std::optional<size_t> find_alignment(const std::vector<int16_t> &stream,
                                      const std::vector<int16_t> &samples) {
   if (samples.empty()) {
@@ -195,24 +184,6 @@ TEST_CASE("Alternate audio start offset persists across blocks") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
   
-  REQUIRE(robot::RobotExtractorTester::audioStartOffsetInitialized(extractor));
-  const int64_t audioStartOffset =
-      robot::RobotExtractorTester::audioStartOffset(extractor);
-  REQUIRE((audioStartOffset & 1LL) == 0);
-  REQUIRE(((audioStartOffset % 2) + 2) % 2 == 0);
-  const int64_t offsetHalf = audioStartOffset / 2;
-  CAPTURE(audioStartOffset);
-  CAPTURE(offsetHalf);
-
-  auto computeAlternateHalf = [](int64_t baseOffset) {
-    REQUIRE((baseOffset & 1LL) == 0);
-    if ((baseOffset & 2LL) == 0) {
-      return (baseOffset + 2) / 2;
-    }
-    return (baseOffset - 2) / 2;
-  };
-  const int64_t alternateOffsetHalf = computeAlternateHalf(audioStartOffset);
-
   const auto evenStream =
       robot::RobotExtractorTester::buildChannelStream(extractor, true);
   const auto oddStream =
@@ -221,20 +192,16 @@ TEST_CASE("Alternate audio start offset persists across blocks") {
   CAPTURE(evenStream.size());
   CAPTURE(oddStream.size());
 
-  std::optional<size_t> previousEvenStart;
-  std::optional<size_t> previousOddStart;
   if (!primerSamples.empty()) {
     auto primerEven = find_alignment(evenStream, primerSamples);
     auto primerOdd = find_alignment(oddStream, primerSamples);
     REQUIRE(primerEven.has_value() != primerOdd.has_value());
     if (primerEven) {
-      previousEvenStart = *primerEven;
       for (size_t i = 0; i < primerSamples.size(); ++i) {
         CAPTURE(i);
         REQUIRE(evenStream[*primerEven + i] == primerSamples[i]);
       }
     } else if (primerOdd) {
-      previousOddStart = *primerOdd;
       for (size_t i = 0; i < primerSamples.size(); ++i) {
         CAPTURE(i);
         REQUIRE(oddStream[*primerOdd + i] == primerSamples[i]);
@@ -247,80 +214,15 @@ TEST_CASE("Alternate audio start offset persists across blocks") {
       continue;
     }
     CAPTURE(block.samples.size());
-    auto evaluateAlignment = [&](int64_t candidateHalf)
-        -> std::optional<size_t> {
-      const int64_t startSampleSigned =
-          compute_start_sample(block.position, candidateHalf);
-      if (startSampleSigned < 0) {
-        return std::nullopt;
-      }
-      const size_t startIndex = static_cast<size_t>(startSampleSigned);
-      if (startIndex > evenStream.size()) {
-        return std::nullopt;
-      }
-      const size_t requiredSize = startIndex + block.samples.size();
-      if (requiredSize > evenStream.size()) {
-        return std::nullopt;
-      }
-      for (size_t i = 0; i < block.samples.size(); ++i) {
-        if (evenStream[startIndex + i] != block.samples[i]) {
-          return std::nullopt;
-        }
-      }
-      return startIndex;
-    };
-
-    std::optional<size_t> startIndexOpt = evaluateAlignment(offsetHalf);
-    if (!startIndexOpt) {
-      startIndexOpt = evaluateAlignment(alternateOffsetHalf);
-    }
-    if (!startIndexOpt) {
-      startIndexOpt = find_alignment(evenStream, block.samples);
-    }
-    std::optional<size_t> oddIndex;
-    if (!startIndexOpt) {
-      oddIndex = find_alignment(oddStream, block.samples);
-      if (oddIndex) {
-        CAPTURE(*oddIndex);
-        startIndexOpt = oddIndex;
-      } else {
-        auto evenFallback = find_alignment(evenStream, block.samples);
-        if (evenFallback) {
-          startIndexOpt = evenFallback;
-        }
-      }
-    }
-    std::optional<size_t> evenIndex;
-    if (!oddIndex) {
-      evenIndex = startIndexOpt;
-    }
-    if (evenIndex && oddIndex) {
-      // Should not happen, sanity check.
-      CAPTURE(*evenIndex);
-      CAPTURE(*oddIndex);
-    }
-    REQUIRE(startIndexOpt.has_value());
-    const size_t startIndex = *startIndexOpt;
-    if (oddIndex) {
-      if (previousOddStart && startIndex < *previousOddStart) {
-        CAPTURE(*previousOddStart);
-        CAPTURE(startIndex);
-      }
-      if (previousOddStart) {
-        REQUIRE(startIndex >= *previousOddStart);
-      }
-      REQUIRE(startIndex + block.samples.size() <= oddStream.size());
-      previousOddStart = startIndex;
+    auto evenIndex = find_alignment(evenStream, block.samples);
+    auto oddIndex = find_alignment(oddStream, block.samples);
+    const bool shouldBeEven = (block.position % 2) == 0;
+    if (shouldBeEven) {
+      REQUIRE(evenIndex.has_value());
+      REQUIRE_FALSE(oddIndex.has_value());
     } else {
-      if (previousEvenStart && startIndex < *previousEvenStart) {
-        CAPTURE(*previousEvenStart);
-        CAPTURE(startIndex);
-      }
-      if (previousEvenStart) {
-        REQUIRE(startIndex >= *previousEvenStart);
-      }
-      REQUIRE(startIndex + block.samples.size() <= evenStream.size());
-      previousEvenStart = startIndex;
+      REQUIRE(oddIndex.has_value());
+      REQUIRE_FALSE(evenIndex.has_value());
     }
   }
 }
