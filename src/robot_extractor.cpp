@@ -847,17 +847,40 @@ std::vector<int16_t> RobotExtractor::buildChannelStream(bool isEven) const {
     }
     return std::nullopt;
   };
-  auto interpolateGap = [&](size_t gapStart, size_t gapEnd) {
-    if (gapStart == 0) {
+  auto fillGapWithSilence = [&](size_t gapStart, size_t gapEnd) {
+    if (gapStart >= gapEnd) {
       return;
     }
-    int16_t previousOpposite =
-        fetchOppositeSample(gapStart - 1)
-            .value_or(working[gapStart - 1]);
+    std::fill(working.begin() + static_cast<std::ptrdiff_t>(gapStart),
+              working.begin() + static_cast<std::ptrdiff_t>(gapEnd), 0);
+    std::fill(occupied.begin() + static_cast<std::ptrdiff_t>(gapStart),
+              occupied.begin() + static_cast<std::ptrdiff_t>(gapEnd), 1);
+  };
+  auto interpolateGap = [&](size_t gapStart, size_t gapEnd) {
+    if (gapStart == 0) {
+      fillGapWithSilence(gapStart, gapEnd);
+      return;
+    }
+    const auto previousOppositeOpt = fetchOppositeSample(gapStart - 1);
+    if (!previousOppositeOpt.has_value()) {
+      fillGapWithSilence(gapStart, gapEnd);
+      return;
+    }
+    bool hasFullOppositeCoverage = true;
+    for (size_t i = gapStart; i < gapEnd; ++i) {
+      if (!fetchOppositeSample(i).has_value()) {
+        hasFullOppositeCoverage = false;
+        break;
+      }
+    }
+    if (!hasFullOppositeCoverage) {
+      fillGapWithSilence(gapStart, gapEnd);
+      return;
+    }
+    int16_t previousOpposite = previousOppositeOpt.value();
     int16_t lastSample = working[gapStart - 1];
     for (size_t i = gapStart; i < gapEnd; ++i) {
-      int16_t currentOpposite =
-          fetchOppositeSample(i).value_or(previousOpposite);
+      const int16_t currentOpposite = fetchOppositeSample(i).value();
       const int32_t averaged =
           (static_cast<int32_t>(currentOpposite) +
            static_cast<int32_t>(previousOpposite)) >> 1;
@@ -874,7 +897,7 @@ std::vector<int16_t> RobotExtractor::buildChannelStream(bool isEven) const {
       working[gapEnd] = lastSample;
       occupied[gapEnd] = 1;
     }
-  };  
+  };
   for (size_t i = 0; i < firstOccupied; ++i) {
     working[i] = 0;
     occupied[i] = 1;
