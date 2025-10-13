@@ -1307,9 +1307,8 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
                "Packet size < frame size (i=" + std::to_string(i) +
                    ", frame=" + std::to_string(m_frameSizes[i]) +
                    ", packet=" + std::to_string(m_packetSizes[i]) +
-                   ") - ajustement à la taille de frame",
+                   ")",
                m_options);
-      m_packetSizes[i] = m_frameSizes[i];
     }
     uint64_t maxSize64 =
         static_cast<uint64_t>(m_frameSizes[i]) +
@@ -1333,9 +1332,7 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
           std::to_string(i) + ", frame=" + std::to_string(m_frameSizes[i]) +
           ", packet=" + std::to_string(m_packetSizes[i]) + ", max=" +
           std::to_string(maxSize) + ")";
-      log_error(m_srcPath, message, m_options);
-      throw std::runtime_error(
-          "Packet size exceeds frame size + audio block size");
+      log_warn(m_srcPath, message, m_options);
     }
     const uint32_t frameSize = m_frameSizes[i];
     const uint32_t packetSize = m_packetSizes[i];
