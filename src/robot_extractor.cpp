@@ -1596,12 +1596,15 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
         m_rgbaBuffer.reserve(required);
       }
       m_rgbaBuffer.resize(required);
+      bool conversionOk = true;
+      uint8_t missingIndex = 0;      
       for (size_t pixel = 0; pixel < m_celBuffer.size(); ++pixel) {
         const uint8_t idx = std::to_integer<uint8_t>(m_celBuffer[pixel]);
         const auto &color = parsedPalette.entries[idx];
         if (!color.present) {
-          throw std::runtime_error("Indice de palette hors limites: " +
-                                   std::to_string(idx));
+          conversionOk = false;
+          missingIndex = idx;
+          break;
         }
         m_rgbaBuffer[pixel * 4 + 0] = std::byte{color.r};
         m_rgbaBuffer[pixel * 4 + 1] = std::byte{color.g};
@@ -1610,10 +1613,25 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             static_cast<std::byte>(color.used ? 255 : 0);
       }
 
-      std::ostringstream oss;
-      oss << std::setw(5) << std::setfill('0') << frameNo << "_" << i << ".png";
-      auto outPath = m_dstDir / oss.str();
-      write_png_cross_platform(outPath, w, h, 4, m_rgbaBuffer.data(), w * 4);
+      if (!conversionOk) {
+        log_warn(m_srcPath,
+                 "Indice de palette hors limites: " +
+                     std::to_string(static_cast<unsigned int>(missingIndex)) +
+                     ", export PNG abandonné",
+                 m_options);
+        paletteUsable = false;
+        m_paletteParseFailed = true;
+        frameJson["palette_required"] = true;
+        frameJson["palette_parse_failed"] = true;
+        frameJson["palette_raw"] = kPaletteFallbackFilename;
+        dumpPaletteFallback();
+      } else {
+        std::ostringstream oss;
+        oss << std::setw(5) << std::setfill('0') << frameNo << "_" << i
+            << ".png";
+        auto outPath = m_dstDir / oss.str();
+        write_png_cross_platform(outPath, w, h, 4, m_rgbaBuffer.data(), w * 4);
+      }
     }
 
     nlohmann::json celJson;
