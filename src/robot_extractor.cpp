@@ -584,8 +584,8 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   const int64_t halfPos = doubledPos / 2;
 
   AppendPlan plan{};
-  AppendPlanStatus status =
-      planChannelAppend(channel, isEvenChannel, halfPos, channelSamples, plan);
+  AppendPlanStatus status = prepareChannelAppend(channel, isEvenChannel,
+                                                 halfPos, channelSamples, plan);
   
   switch (status) {
   case AppendPlanStatus::Ok:
@@ -622,14 +622,46 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   }
 }
 
-RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
-    const ChannelAudio &channel, bool isEven, int64_t halfPos,
-    const std::vector<int16_t> &samples, AppendPlan &plan) const {
-  plan = {};
+RobotExtractor::AppendPlanStatus RobotExtractor::prepareChannelAppend(
+    ChannelAudio &channel, bool isEven, int64_t halfPos,
+    const std::vector<int16_t> &samples, AppendPlan &plan) {
+  const bool posIsEven = (halfPos & 1LL) == 0;
+  plan.posIsEven = posIsEven;
+  if ((posIsEven && !isEven) || (!posIsEven && isEven)) {
+    return AppendPlanStatus::ParityMismatch;
+  }
   if (samples.empty()) {
     return AppendPlanStatus::Skip;
   }
-  plan.posIsEven = (halfPos & 1LL) == 0;
+  int64_t adjustedHalfPos = halfPos;
+  if (!channel.startHalfPosInitialized) {
+    channel.startHalfPos = halfPos;
+    channel.startHalfPosInitialized = true;
+    adjustedHalfPos = 0;
+  } else if (halfPos < channel.startHalfPos) {
+    const int64_t deltaHalf = channel.startHalfPos - halfPos;
+    if ((deltaHalf & 1LL) != 0) {
+      return AppendPlanStatus::ParityMismatch;
+    }
+    const size_t deltaSamples = static_cast<size_t>(deltaHalf / 2);
+    if (deltaSamples != 0) {
+      channel.samples.insert(channel.samples.begin(), deltaSamples, 0);
+      channel.occupied.insert(channel.occupied.begin(), deltaSamples, 0);
+    }
+    channel.startHalfPos = halfPos;
+    adjustedHalfPos = 0;
+  } else {
+    adjustedHalfPos = halfPos - channel.startHalfPos;
+  }
+  return planChannelAppend(channel, isEven, adjustedHalfPos, samples, plan);
+}
+
+RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
+    const ChannelAudio &channel, bool isEven, int64_t halfPos,
+    const std::vector<int16_t> &samples, AppendPlan &plan) const {
+  if (samples.empty()) {
+    return AppendPlanStatus::Skip;
+  }
   if (plan.posIsEven && !isEven) {
     return AppendPlanStatus::ParityMismatch;
   }
@@ -737,7 +769,7 @@ void RobotExtractor::appendChannelSamples(bool isEven, int64_t halfPos,
   ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
   AppendPlan plan{};
   AppendPlanStatus status =
-      planChannelAppend(channel, isEven, halfPos, samples, plan);
+      prepareChannelAppend(channel, isEven, halfPos, samples, plan);
   switch (status) {
   case AppendPlanStatus::Ok:
   case AppendPlanStatus::Skip:
@@ -1930,8 +1962,12 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
 void RobotExtractor::extract() {
   m_evenChannelAudio.samples.clear();
   m_evenChannelAudio.occupied.clear();
+  m_evenChannelAudio.startHalfPos = 0;
+  m_evenChannelAudio.startHalfPosInitialized = false;
   m_oddChannelAudio.samples.clear();
   m_oddChannelAudio.occupied.clear();
+  m_oddChannelAudio.startHalfPos = 0;
+  m_oddChannelAudio.startHalfPosInitialized = false;;
   m_processedAudioPositions.clear();
   readHeader();
   readPrimer();
