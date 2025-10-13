@@ -110,3 +110,52 @@ TEST_CASE("Malformed palettes fall back to raw dump") {
 
   REQUIRE(diskBytes == RobotExtractorTester::palette(extractor));
 }
+
+TEST_CASE("Missing palette entries trigger raw fallback instead of throwing") {
+  std::vector<uint8_t> frameData;
+  push16(frameData, 1);
+  appendCel(frameData, 0x05);
+
+  std::vector<test_palette::Color> colors{{true, 10, 20, 30}};
+  auto rawPalette = test_palette::build_hunk_palette(colors, 0, false);
+
+  fs::path tmpDir = fs::temp_directory_path() / "palette_missing_entry";
+  fs::create_directories(tmpDir);
+  fs::path input = tmpDir / "frame.bin";
+  fs::path outDir = tmpDir / "out";
+  fs::create_directories(outDir);
+
+  {
+    std::ofstream out(input, std::ios::binary);
+    out.write(reinterpret_cast<const char *>(frameData.data()),
+              static_cast<std::streamsize>(frameData.size()));
+  }
+
+  robot::RobotExtractor extractor(input, outDir, false);
+  RobotExtractorTester::hasPalette(extractor) = true;
+  RobotExtractorTester::palette(extractor) = rawPalette;
+  RobotExtractorTester::bigEndian(extractor) = false;
+  RobotExtractorTester::maxCelsPerFrame(extractor) = 1;
+  RobotExtractorTester::frameSizes(extractor) =
+      {static_cast<uint32_t>(frameData.size())};
+  RobotExtractorTester::packetSizes(extractor) =
+      {static_cast<uint32_t>(frameData.size())};
+  RobotExtractorTester::file(extractor).seekg(0, std::ios::beg);
+
+  nlohmann::json frameJson;
+  bool exported = false;
+  REQUIRE_NOTHROW(exported =
+                      RobotExtractorTester::exportFrame(extractor, 0, frameJson));
+  REQUIRE(exported);
+
+  REQUIRE(frameJson.contains("palette_parse_failed"));
+  REQUIRE(frameJson["palette_parse_failed"].get<bool>());
+  REQUIRE(frameJson.contains("palette_raw"));
+  REQUIRE(frameJson["palette_raw"].get<std::string>() == "palette.raw");
+  REQUIRE(frameJson["cels"].size() == 1);
+  REQUIRE(frameJson["cels"][0]["palette_required"].get<bool>());
+
+  auto palettePath = outDir / "palette.raw";
+  REQUIRE(fs::exists(palettePath));
+  REQUIRE_FALSE(fs::exists(outDir / "00000_0.png"));
+}
