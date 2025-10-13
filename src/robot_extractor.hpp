@@ -186,6 +186,10 @@ private:
                                      int64_t halfPos,
                                      const std::vector<int16_t> &samples,
                                      AppendPlan &plan) const;
+  AppendPlanStatus prepareChannelAppend(ChannelAudio &channel, bool isEven,
+                                        int64_t halfPos,
+                                        const std::vector<int16_t> &samples,
+                                        AppendPlan &plan);
   void finalizeChannelAppend(ChannelAudio &channel, bool isEven,
                              int64_t halfPos,
                              const std::vector<int16_t> &samples,
@@ -246,6 +250,8 @@ private:
     std::vector<uint8_t> occupied;
     int16_t predictor = 0;
     bool predictorInitialized = false;
+    int64_t startHalfPos = 0;
+    bool startHalfPosInitialized = false;
   };
   ChannelAudio m_evenChannelAudio;
   ChannelAudio m_oddChannelAudio;
