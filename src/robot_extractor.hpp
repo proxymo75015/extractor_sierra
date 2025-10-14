@@ -252,6 +252,9 @@ private:
     bool predictorInitialized = false;
     int64_t startHalfPos = 0;
     bool startHalfPosInitialized = false;
+    bool seenNonPrimerBlock = false;
+    bool hasAcceptedPos = false;
+    int32_t lastAcceptedPos = 0;
   };
   ChannelAudio m_evenChannelAudio;
   ChannelAudio m_oddChannelAudio;
