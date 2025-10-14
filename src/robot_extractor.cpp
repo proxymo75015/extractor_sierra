@@ -1362,8 +1362,9 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
                "Packet size < frame size (i=" + std::to_string(i) +
                    ", frame=" + std::to_string(m_frameSizes[i]) +
                    ", packet=" + std::to_string(m_packetSizes[i]) +
-                   ")",
+                   ") — ajustement",
                m_options);
+      m_packetSizes[i] = m_frameSizes[i];      
     }
     uint64_t maxSize64 =
         static_cast<uint64_t>(m_frameSizes[i]) +
