@@ -583,6 +583,16 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   const std::vector<int16_t> &channelSamples = decodeResult.samples;
   const int64_t halfPos = doubledPos / 2;
 
+  if (channel.seenNonPrimerBlock && channel.hasAcceptedPos &&
+      static_cast<int32_t>(halfPos) < channel.lastAcceptedPos &&
+      !m_processedAudioPositions.contains(pos)) {
+    log_warn(m_srcPath,
+             "Bloc audio ignoré (position antérieure hors fenêtre) à la position " +
+                 std::to_string(static_cast<long long>(pos)),
+             m_options);
+    return;
+  }
+  
   AppendPlan plan{};
   AppendPlanStatus status = prepareChannelAppend(channel, isEvenChannel,
                                                  halfPos, channelSamples, plan);
@@ -598,6 +608,17 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     }
     if (status != AppendPlanStatus::Skip) {
       m_processedAudioPositions.insert(pos);
+      if (status == AppendPlanStatus::Ok) {
+        if (channel.hasAcceptedPos) {
+          if (static_cast<int32_t>(halfPos) > channel.lastAcceptedPos) {
+            channel.lastAcceptedPos = static_cast<int32_t>(halfPos);
+          }
+        } else {
+          channel.lastAcceptedPos = static_cast<int32_t>(halfPos);
+          channel.hasAcceptedPos = true;
+        }
+        channel.seenNonPrimerBlock = true;
+      }      
     }
     return;
   case AppendPlanStatus::Conflict:
