@@ -566,12 +566,11 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     log_warn(m_srcPath,
              "Bloc audio ignoré en position zéro (données silencieuses)",
              m_options);
-    m_processedAudioPositions.insert(pos);
     return;
   }
 
   const int64_t doubledPos = static_cast<int64_t>(pos) * 2;
-   if ((doubledPos & 1LL) != 0) {
+  if ((doubledPos & 1LL) != 0) {
     throw std::runtime_error("Position audio incohérente");
   }
 
@@ -583,16 +582,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   const std::vector<int16_t> &channelSamples = decodeResult.samples;
   const int64_t halfPos = doubledPos / 2;
 
-  if (channel.seenNonPrimerBlock && channel.hasAcceptedPos &&
-      static_cast<int32_t>(halfPos) < channel.lastAcceptedPos &&
-      !m_processedAudioPositions.contains(pos)) {
-    log_warn(m_srcPath,
-             "Bloc audio ignoré (position antérieure hors fenêtre) à la position " +
-                 std::to_string(static_cast<long long>(pos)),
-             m_options);
-    return;
-  }
-  
   AppendPlan plan{};
   AppendPlanStatus status = prepareChannelAppend(channel, isEvenChannel,
                                                  halfPos, channelSamples, plan);
@@ -606,19 +595,16 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
       channel.predictor = decodeResult.finalPredictor;
       channel.predictorInitialized = true;
     }
-    if (status != AppendPlanStatus::Skip) {
-      m_processedAudioPositions.insert(pos);
-      if (status == AppendPlanStatus::Ok) {
-        if (channel.hasAcceptedPos) {
-          if (static_cast<int32_t>(halfPos) > channel.lastAcceptedPos) {
-            channel.lastAcceptedPos = static_cast<int32_t>(halfPos);
-          }
-        } else {
+    if (status == AppendPlanStatus::Ok) {
+      if (channel.hasAcceptedPos) {
+        if (static_cast<int32_t>(halfPos) > channel.lastAcceptedPos) {
           channel.lastAcceptedPos = static_cast<int32_t>(halfPos);
-          channel.hasAcceptedPos = true;
         }
-        channel.seenNonPrimerBlock = true;
-      }      
+      } else {
+        channel.lastAcceptedPos = static_cast<int32_t>(halfPos);
+        channel.hasAcceptedPos = true;
+      }
+      channel.seenNonPrimerBlock = true;
     }
     return;
   case AppendPlanStatus::Conflict:
@@ -2005,8 +1991,7 @@ void RobotExtractor::extract() {
   m_oddChannelAudio.samples.clear();
   m_oddChannelAudio.occupied.clear();
   m_oddChannelAudio.startHalfPos = 0;
-  m_oddChannelAudio.startHalfPosInitialized = false;;
-  m_processedAudioPositions.clear();
+  m_oddChannelAudio.startHalfPosInitialized = false;
   readHeader();
   readPrimer();
   readPalette();
