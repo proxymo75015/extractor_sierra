@@ -13,7 +13,6 @@
 #include <span>
 #include <stdexcept>
 #include <string>
-#include <unordered_set>
 #include <vector>
 namespace robot {
 
@@ -244,7 +243,6 @@ private:
   std::vector<std::byte> m_rgbaBuffer;
   bool m_paletteParseFailed = false;
   bool m_paletteFallbackDumped = false;
-  std::unordered_set<int32_t> m_processedAudioPositions;
   struct ChannelAudio {
     std::vector<int16_t> samples;
     std::vector<uint8_t> occupied;
