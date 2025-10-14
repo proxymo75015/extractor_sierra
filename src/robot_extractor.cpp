@@ -723,7 +723,7 @@ RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
       break;
     }
     if (channel.samples[index] != samples[plan.skipSamples + plan.leadingOverlap]) {
-      return AppendPlanStatus::Conflict;
+      break;
     }
     ++plan.leadingOverlap;
   }
@@ -731,13 +731,6 @@ RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
     return AppendPlanStatus::Skip;
   }
   plan.trimmedStart = plan.startSample + plan.leadingOverlap;
-  for (size_t i = plan.leadingOverlap; i < plan.availableSamples; ++i) {
-    size_t index = plan.startSample + i;
-    if (index < channel.occupied.size() && channel.occupied[index] &&
-        channel.samples[index] != samples[plan.skipSamples + i]) {
-      return AppendPlanStatus::Conflict;
-    }
-  }
   return AppendPlanStatus::Ok;
 }
 
