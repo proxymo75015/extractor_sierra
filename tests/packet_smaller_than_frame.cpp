@@ -109,6 +109,14 @@ TEST_CASE("Inconsistent packet sizes do not abort extraction") {
         out.close();
 
         robot::RobotExtractor extractor(input, outDir, false);
-        REQUIRE_THROWS_AS(extractor.extract(), std::runtime_error);
+        REQUIRE_NOTHROW(extractor.extract());
+
+        const auto &frames = robot::RobotExtractorTester::frameSizes(extractor);
+        REQUIRE(frames.size() == 1);
+        REQUIRE(frames[0] == 2);
+
+        const auto &packets = robot::RobotExtractorTester::packetSizes(extractor);
+        REQUIRE(packets.size() == 1);
+        REQUIRE(packets[0] == 6);
     }
 }
