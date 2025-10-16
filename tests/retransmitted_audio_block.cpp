@@ -3,10 +3,12 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <nlohmann/json.hpp>
 #include <span>
 #include <vector>
 
+#include "audio_decompression_helpers.hpp"
 #include "robot_extractor.hpp"
 #include "utilities.hpp"
 #include "wav_helpers.hpp"
@@ -66,20 +68,9 @@ static std::vector<uint8_t> build_primer_header() {
   return p;
 }
 
-static std::vector<int16_t> decode_block(const std::vector<uint8_t> &bytes) {
-  std::vector<std::byte> asBytes;
-  asBytes.reserve(bytes.size());
-  for (uint8_t b : bytes) {
-    asBytes.push_back(static_cast<std::byte>(b));
-  }
-  int16_t predictor = 0;
-  auto decoded = robot::dpcm16_decompress(std::span(asBytes), predictor);
-  if (decoded.size() <= robot::kRobotRunwayBytes) {
-    return {};
-  }
-  return std::vector<int16_t>(decoded.begin() +
-                                  static_cast<std::ptrdiff_t>(robot::kRobotRunwayBytes),
-                              decoded.end());
+static std::vector<int16_t> decode_block(const std::vector<uint8_t> &bytes,
+                                         int16_t &predictor) {
+  return audio_test::decompress_without_runway(bytes, predictor);
 }
 
 TEST_CASE("Retransmitted audio blocks append only fresh data") {
@@ -196,34 +187,47 @@ TEST_CASE("Retransmitted audio blocks append only fresh data") {
     return evenSamples;
   };
 
-  auto expectedBlock1 = decode_block(block1);
-  auto expectedBlock2 = decode_block(block2);
-  auto expectedBlock3 = decode_block(block3);
+  std::vector<uint8_t> primerEvenVec(primerEven.begin(), primerEven.end());
+  auto primerBytes = audio_test::to_bytes(primerEvenVec);
+  int16_t evenPredictor = 0;
+  auto primerSamples =
+      audio_test::decompress_without_runway(primerBytes, evenPredictor);
+  (void)primerSamples;
+  auto expectedBlock1 = decode_block(block1, evenPredictor);
+  auto expectedBlock2 = decode_block(block2, evenPredictor);
+  auto expectedBlock3 = decode_block(block3, evenPredictor);
 
   const size_t block1Start = block1Pos / 2;
   const size_t block2Start = block2Pos / 2;
   const size_t block3Start = block3Pos / 2;
 
   std::vector<int16_t> expectedSamples;
-  auto appendSamples = [&](size_t start, const std::vector<int16_t> &samples) {
+  int64_t baseSample = std::numeric_limits<int64_t>::max();
+  auto appendSamples = [&](int64_t start, const std::vector<int16_t> &samples) {
     if (samples.empty()) {
       return;
     }
-    if (expectedSamples.size() < start) {
-      expectedSamples.resize(start, 0);
+    if (baseSample == std::numeric_limits<int64_t>::max()) {
+      baseSample = start;
     }
-    size_t newSize = start + samples.size();
+    if (start < baseSample) {
+      const size_t shift = static_cast<size_t>(baseSample - start);
+      expectedSamples.insert(expectedSamples.begin(), shift, 0);
+      baseSample = start;
+    }
+    const size_t offset = static_cast<size_t>(start - baseSample);
+    size_t newSize = offset + samples.size();
     if (expectedSamples.size() < newSize) {
       expectedSamples.resize(newSize, 0);
     }
     for (size_t i = 0; i < samples.size(); ++i) {
-      expectedSamples[start + i] = samples[i];
+      expectedSamples[offset + i] = samples[i];
     }
   };
 
-  appendSamples(block1Start, expectedBlock1);
-  appendSamples(block2Start, expectedBlock2);
-  appendSamples(block3Start, expectedBlock3);
+  appendSamples(static_cast<int64_t>(block1Start), expectedBlock1);
+  appendSamples(static_cast<int64_t>(block2Start), expectedBlock2);
+  appendSamples(static_cast<int64_t>(block3Start), expectedBlock3);
 
   auto wavSamples = readSamples(wavPath);
   REQUIRE(wavSamples == expectedSamples);
