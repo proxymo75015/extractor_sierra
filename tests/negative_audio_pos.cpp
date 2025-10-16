@@ -4,6 +4,7 @@
 #include <fstream>
 #include <vector>
 
+#include "audio_decompression_helpers.hpp"
 #include "robot_extractor.hpp"
 #include "utilities.hpp"
 
@@ -59,55 +60,6 @@ static std::vector<uint8_t> build_primer_header() {
   push32(p, kRunwayBytes); // even size
   push32(p, 0); // odd size
   return p;
-}
-
-static std::vector<std::byte> to_bytes(const std::vector<uint8_t> &src) {
-  std::vector<std::byte> out;
-  out.reserve(src.size());
-  for (uint8_t b : src) {
-    out.push_back(static_cast<std::byte>(b));
-  }
-  return out;
-}
-
-static std::vector<int16_t>
-decode_block_without_runway(const std::vector<uint8_t> &blockData) {
-  auto bytes = to_bytes(blockData);
-  int16_t predictor = 0;
-  auto decoded = robot::dpcm16_decompress(std::span(bytes), predictor);
-  std::vector<int16_t> samples;
-  const size_t runwaySamples = robot::kRobotRunwayBytes;
-  if (decoded.size() > runwaySamples) {
-    samples.assign(decoded.begin() +
-                       static_cast<std::ptrdiff_t>(runwaySamples),
-                   decoded.end());
-  }
-  return samples;
-}
-
-static std::vector<int16_t> expected_stream_for_block(
-    const std::vector<uint8_t> &blockData, int32_t pos) {
-  auto samples = decode_block_without_runway(blockData);
-  if (samples.empty()) {
-    return samples;
-  }
-  int64_t startHalf = static_cast<int64_t>(pos);
-  int64_t startSampleSigned = 0;
-  if (startHalf >= 0) {
-    startSampleSigned = startHalf / 2;
-  } else {
-    startSampleSigned = (startHalf - 1) / 2;
-  }
-  if (startSampleSigned < 0) {
-    size_t skip = static_cast<size_t>(-startSampleSigned);
-    if (skip >= samples.size()) {
-      samples.clear();
-    } else {
-      samples.erase(samples.begin(),
-                    samples.begin() + static_cast<std::ptrdiff_t>(skip));
-    }
-  }
-  return samples;
 }
 
 TEST_CASE("Negative audio position is ignored") {
@@ -206,18 +158,22 @@ TEST_CASE("Audio block with position -1 is adjusted without corruption") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
-  auto expectedOdd = expected_stream_for_block(fullBlock, -1);
-  auto fullSamples = decode_block_without_runway(fullBlock);  
+  std::vector<std::byte> primerBytes(kRunwayBytes);
+  for (uint32_t i = 0; i < kRunwayBytes; ++i) {
+    primerBytes[i] = std::byte{static_cast<unsigned char>(0x20 + (i * 3))};
+  }
+  int16_t evenPredictor = 0;
+  auto primerSamples =
+      audio_test::decompress_without_runway(primerBytes, evenPredictor);
+  (void)primerSamples;
+  int16_t oddPredictor = 0;
+  auto fullSamples =
+      audio_test::decompress_without_runway(fullBlock, oddPredictor);
+  audio_test::ChannelExpectation oddExpected;
+  audio_test::append_expected(oddExpected, -1, fullSamples);
   auto evenStream = robot::RobotExtractorTester::buildChannelStream(extractor, true);
   auto oddStream = robot::RobotExtractorTester::buildChannelStream(extractor, false);
 
-  REQUIRE(evenStream.size() >= expectedOdd.size());
-  REQUIRE(evenStream.size() <= fullSamples.size());
-  if (!fullSamples.empty()) {
-    REQUIRE_FALSE(evenStream.empty());
-    REQUIRE(evenStream.front() == fullSamples.front());
-  }
-  REQUIRE(std::equal(evenStream.begin() + (evenStream.size() - expectedOdd.size()),
-                     evenStream.end(), expectedOdd.begin(), expectedOdd.end()));
-  REQUIRE(oddStream.empty());
+  REQUIRE(evenStream.empty());
+  REQUIRE(oddStream == oddExpected.samples);
 }
