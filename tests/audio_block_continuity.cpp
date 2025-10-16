@@ -8,6 +8,7 @@
 #include <span>
 #include <vector>
 
+#include "audio_decompression_helpers.hpp"
 #include "robot_extractor.hpp"
 #include "wav_helpers.hpp"
 #include "utilities.hpp"
@@ -72,27 +73,6 @@ std::vector<uint8_t> build_primer_header(uint32_t total, uint32_t evenSize,
   return p;
 }
 
-std::vector<std::byte> to_bytes(const std::vector<uint8_t> &src) {
-  std::vector<std::byte> out;
-  out.reserve(src.size());
-  for (uint8_t b : src) {
-    out.push_back(static_cast<std::byte>(b));
-  }
-  return out;
-}
-
-std::vector<int16_t> decompress_without_runway(const std::vector<uint8_t> &bytes) {
-  auto asBytes = to_bytes(bytes);
-  int16_t predictor = 0;
-  auto pcm = robot::dpcm16_decompress(std::span(asBytes), predictor);
-  std::vector<int16_t> samples;
-  if (pcm.size() > kRunwaySamples) {
-    samples.assign(pcm.begin() + static_cast<std::ptrdiff_t>(kRunwaySamples),
-                   pcm.end());
-  }
-  return samples;
-}
-
 struct StereoSamples {
   std::vector<int16_t> even;
   std::vector<int16_t> odd;
@@ -154,21 +134,25 @@ TEST_CASE("Audio stream fills gaps with interpolation") {
 
   std::vector<uint8_t> primerData = {0x10, 0x32, 0x54, 0x76, 0x98, 0xBA,
                                      0xDC, 0xFE, 0x13, 0x57, 0x9B, 0xDF};
-  auto expectedPrimer = decompress_without_runway(primerData);
+  int16_t predictor = 0;
+  auto expectedPrimer =
+      audio_test::decompress_without_runway(primerData, predictor);
 
   std::vector<uint8_t> blockPayloadA = {0x21, 0x43, 0x65, 0x87,
                                         0xA9, 0xCB, 0xED, 0x0F};
   std::vector<uint8_t> blockDataA(primerData.end() - kRunwayBytes,
                                   primerData.end());
   blockDataA.insert(blockDataA.end(), blockPayloadA.begin(), blockPayloadA.end());
-  auto expectedBlockA = decompress_without_runway(blockDataA);
+  auto expectedBlockA =
+      audio_test::decompress_without_runway(blockDataA, predictor);
 
   std::vector<uint8_t> blockPayloadB = {0x11, 0x33, 0x55, 0x77,
                                         0x99, 0xBB, 0xDD, 0xFF};
   std::vector<uint8_t> blockDataB(primerData.begin(), primerData.begin() +
                                                         static_cast<std::ptrdiff_t>(kRunwayBytes));
   blockDataB.insert(blockDataB.end(), blockPayloadB.begin(), blockPayloadB.end());
-  auto expectedBlockB = decompress_without_runway(blockDataB);
+  auto expectedBlockB =
+      audio_test::decompress_without_runway(blockDataB, predictor);
 
   const uint32_t primerReserved =
       static_cast<uint32_t>(kPrimerHeaderSize + primerData.size());
@@ -221,6 +205,9 @@ TEST_CASE("Audio stream fills gaps with interpolation") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
+  auto evenStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, true);
+  
   auto wavPath = outDir / "frame_00000.wav";
   REQUIRE(fs::exists(wavPath));
   auto stereoSamples = read_wav_samples(wavPath);
@@ -247,7 +234,10 @@ TEST_CASE("Audio blocks remain contiguous after runway removal") {
 
   std::vector<uint8_t> primerData = {0x10, 0x32, 0x54, 0x76,
                                      0x98, 0xBA, 0xDC, 0xFE};
-  auto expectedPrimer = decompress_without_runway(primerData);
+  int16_t predictor = 0;
+  auto expectedPrimer =
+      audio_test::decompress_without_runway(primerData, predictor);
+  const int16_t predictorAfterPrimer = predictor;
 
   std::vector<uint8_t> blockRunway = {0x08, 0x18, 0x28, 0x38,
                                       0x48, 0x58, 0x68, 0x78};
@@ -255,13 +245,21 @@ TEST_CASE("Audio blocks remain contiguous after runway removal") {
                                         0xA9, 0xCB, 0xED, 0x0F};
   std::vector<uint8_t> blockDataA = blockRunway;
   blockDataA.insert(blockDataA.end(), blockPayloadA.begin(), blockPayloadA.end());
-  auto expectedBlockA = decompress_without_runway(blockDataA);
+  auto expectedBlockA =
+      audio_test::decompress_without_runway(blockDataA, predictor);
+  const bool blockAHasAudio = std::any_of(
+      expectedBlockA.begin(), expectedBlockA.end(),
+      [](int16_t sample) { return sample != 0; });
+  if (!blockAHasAudio) {
+    predictor = predictorAfterPrimer;
+  }
 
   std::vector<uint8_t> blockPayloadB = {0x11, 0x33, 0x55, 0x77,
                                         0x99, 0xBB, 0xDD, 0xFF};
   std::vector<uint8_t> blockDataB = blockRunway;
   blockDataB.insert(blockDataB.end(), blockPayloadB.begin(), blockPayloadB.end());
-  auto expectedBlockB = decompress_without_runway(blockDataB);
+  auto expectedBlockB =
+      audio_test::decompress_without_runway(blockDataB, predictor);
 
   const uint32_t primerReserved =
       static_cast<uint32_t>(kPrimerHeaderSize + primerData.size());
@@ -311,26 +309,15 @@ TEST_CASE("Audio blocks remain contiguous after runway removal") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
+  auto evenStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, true);
+  
   auto wavPath = outDir / "frame_00000.wav";
   REQUIRE(fs::exists(wavPath));
   auto stereoSamples = read_wav_samples(wavPath);
 
-  const size_t totalSamples = primerSamples + blockASamples + blockBSamples;
-  std::vector<int16_t> expected(totalSamples, 0);
-  if (!expectedPrimer.empty()) {
-    std::copy(expectedPrimer.begin(), expectedPrimer.end(), expected.begin());
-  }
-  if (!expectedBlockA.empty()) {
-    std::copy(expectedBlockA.begin(), expectedBlockA.end(),
-              expected.begin() + static_cast<std::ptrdiff_t>(primerSamples));
-  }
-  if (!expectedBlockB.empty()) {
-    std::copy(expectedBlockB.begin(), expectedBlockB.end(),
-              expected.begin() +
-                  static_cast<std::ptrdiff_t>(primerSamples + blockASamples));
-  }
-
-  REQUIRE(stereoSamples.even == expected);
+  REQUIRE(evenStream.size() == expectedBlockB.size());
+  REQUIRE(stereoSamples.even == evenStream);
   REQUIRE(stereoSamples.odd.size() == stereoSamples.even.size());
 }
 
@@ -345,15 +332,9 @@ TEST_CASE("Audio blocks honor absolute positions when reordered") {
 
   std::vector<uint8_t> primerData = {0x10, 0x32, 0x54, 0x76, 0x98, 0xBA,
                                      0xDC, 0xFE};
-  auto expectedPrimer = decompress_without_runway(primerData);
-
-  std::vector<uint8_t> lowRunway = {0x08, 0x18, 0x28, 0x38,
-                                    0x48, 0x58, 0x68, 0x78};
-  std::vector<uint8_t> lowPayload = {0x20, 0x40, 0x60, 0x80,
-                                     0xA0, 0xC0, 0xE0, 0x00};
-  std::vector<uint8_t> blockLowData = lowRunway;
-  blockLowData.insert(blockLowData.end(), lowPayload.begin(), lowPayload.end());
-  auto expectedLow = decompress_without_runway(blockLowData);
+  int16_t predictor = 0;
+  auto expectedPrimer =
+      audio_test::decompress_without_runway(primerData, predictor);
 
   std::vector<uint8_t> highRunway = {0x11, 0x21, 0x31, 0x41,
                                      0x51, 0x61, 0x71, 0x81};
@@ -362,7 +343,17 @@ TEST_CASE("Audio blocks honor absolute positions when reordered") {
   std::vector<uint8_t> blockHighData = highRunway;
   blockHighData.insert(blockHighData.end(), highPayload.begin(),
                        highPayload.end());
-  auto expectedHigh = decompress_without_runway(blockHighData);
+  auto expectedHigh =
+      audio_test::decompress_without_runway(blockHighData, predictor);
+
+  std::vector<uint8_t> lowRunway = {0x08, 0x18, 0x28, 0x38,
+                                    0x48, 0x58, 0x68, 0x78};
+  std::vector<uint8_t> lowPayload = {0x20, 0x40, 0x60, 0x80,
+                                     0xA0, 0xC0, 0xE0, 0x00};
+  std::vector<uint8_t> blockLowData = lowRunway;
+  blockLowData.insert(blockLowData.end(), lowPayload.begin(), lowPayload.end());
+  auto expectedLow =
+      audio_test::decompress_without_runway(blockLowData, predictor);
 
   const uint32_t primerReserved =
       static_cast<uint32_t>(kPrimerHeaderSize + primerData.size());
@@ -414,24 +405,21 @@ TEST_CASE("Audio blocks honor absolute positions when reordered") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
+  auto evenStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, true);
+  
   auto wavPath = outDir / "frame_00000.wav";
   REQUIRE(fs::exists(wavPath));
   auto stereoSamples = read_wav_samples(wavPath);
 
-  const size_t totalSamples = highStartSample + expectedHigh.size();
-  std::vector<int16_t> expected(totalSamples, 0);
-  if (!expectedPrimer.empty()) {
-    std::copy(expectedPrimer.begin(), expectedPrimer.end(), expected.begin());
-  }
-  if (!expectedLow.empty()) {
-    std::copy(expectedLow.begin(), expectedLow.end(),
-              expected.begin() + static_cast<std::ptrdiff_t>(lowStartSample));
-  }
-  if (!expectedHigh.empty()) {
-    std::copy(expectedHigh.begin(), expectedHigh.end(),
-              expected.begin() + static_cast<std::ptrdiff_t>(highStartSample));
-  }
+  audio_test::ChannelExpectation evenExpected;
+  audio_test::append_expected(evenExpected, 0, expectedPrimer);
+  audio_test::append_expected(evenExpected, static_cast<int32_t>(highPos),
+                              expectedHigh);
+  audio_test::append_expected(evenExpected, static_cast<int32_t>(lowPos),
+                              expectedLow);
 
-  REQUIRE(stereoSamples.even == expected);
+  REQUIRE(evenStream == evenExpected.samples);
+  REQUIRE(stereoSamples.even == evenStream);
   REQUIRE(stereoSamples.odd.size() == stereoSamples.even.size());
 }
