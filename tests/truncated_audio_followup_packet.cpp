@@ -11,6 +11,7 @@
 #include <span>
 #include <vector>
 
+#include "audio_decompression_helpers.hpp"
 #include "robot_extractor.hpp"
 #include "utilities.hpp"
 #include "wav_helpers.hpp"
@@ -87,6 +88,12 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   auto data = build_header(2);
   std::vector<int16_t> expectedBlock0;
   std::vector<int16_t> expectedBlock1;
+  std::vector<std::byte> primerBytes(kRunwayBytes,
+                                     std::byte{static_cast<unsigned char>(0x88)});
+  int16_t evenPredictor = 0;
+  auto primerSamples =
+      audio_test::decompress_without_runway(primerBytes, evenPredictor);
+  (void)primerSamples;  
   uint32_t block1Pos = 0;
   const uint32_t block0Pos = 4;  
   auto primer = build_primer_header();
@@ -126,14 +133,8 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   for (uint8_t b : block0PayloadBytes) {
     block0Compressed.push_back(static_cast<std::byte>(b));
   }
-  int16_t predictor0 = 0;
-  auto block0AllSamples =
-      robot::dpcm16_decompress(std::span(block0Compressed), predictor0);
-  if (block0AllSamples.size() > kRunwaySamples) {
-    expectedBlock0.assign(block0AllSamples.begin() +
-                              static_cast<std::ptrdiff_t>(kRunwaySamples),
-                          block0AllSamples.end());
-  }
+  expectedBlock0 =
+      audio_test::decompress_without_runway(block0Compressed, evenPredictor);
   const size_t block0SampleCount = expectedBlock0.size();
   const size_t block0StartSample = block0Pos / 2;
   block1Pos = static_cast<uint32_t>((block0StartSample + block0SampleCount) * 2);
@@ -158,14 +159,8 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   for (uint8_t b : payload1) {
     block1Compressed.push_back(static_cast<std::byte>(b));
   }
-  int16_t predictor1 = 0;
-  auto block1AllSamples =
-      robot::dpcm16_decompress(std::span(block1Compressed), predictor1);
-  if (block1AllSamples.size() > kRunwaySamples) {
-    expectedBlock1.assign(block1AllSamples.begin() +
-                              static_cast<std::ptrdiff_t>(kRunwaySamples),
-                          block1AllSamples.end());
-  }
+  expectedBlock1 =
+      audio_test::decompress_without_runway(block1Compressed, evenPredictor);
 
   std::ofstream out(input, std::ios::binary);
   out.write(reinterpret_cast<const char *>(data.data()),
@@ -212,17 +207,10 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   
   auto actualSamples = readSamples(wavPath);
 
-  const size_t block1StartSample = block1Pos / 2;
-  size_t totalSamples = std::max(block0StartSample + expectedBlock0.size(),
-                                 block1StartSample + expectedBlock1.size());
-  std::vector<int16_t> expected(totalSamples, 0);
-  if (!expectedBlock0.empty()) {
-    std::copy(expectedBlock0.begin(), expectedBlock0.end(),
-              expected.begin() + static_cast<std::ptrdiff_t>(block0StartSample));
-  }
-  if (!expectedBlock1.empty()) {
-    std::copy(expectedBlock1.begin(), expectedBlock1.end(),
-              expected.begin() + static_cast<std::ptrdiff_t>(block1StartSample));
-  }
-  REQUIRE(actualSamples == expected);
+  audio_test::ChannelExpectation expectedEven;
+  audio_test::append_expected(expectedEven, static_cast<int32_t>(block0Pos),
+                              expectedBlock0);
+  audio_test::append_expected(expectedEven, static_cast<int32_t>(block1Pos),
+                              expectedBlock1);
+  REQUIRE(actualSamples == expectedEven.samples);
 }
