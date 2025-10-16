@@ -62,7 +62,7 @@ build_primer_header(uint32_t total, uint32_t evenSize, uint32_t oddSize) {
   return p;
 }
 
-TEST_CASE("totalPrimerSize nul conserve les données primer") {
+TEST_CASE("totalPrimerSize nul ignore les données primer") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "primer_total_zero.rbt";
   fs::path outDir = tmpDir / "primer_total_zero_out";
@@ -101,22 +101,13 @@ TEST_CASE("totalPrimerSize nul conserve les données primer") {
   REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
   REQUIRE_NOTHROW(RobotExtractorTester::readPrimer(extractor));
 
-  REQUIRE(RobotExtractorTester::evenPrimerSize(extractor) ==
-          static_cast<std::streamsize>(evenSize));
-  REQUIRE(RobotExtractorTester::oddPrimerSize(extractor) ==
-          static_cast<std::streamsize>(oddSize));
+  REQUIRE(RobotExtractorTester::evenPrimerSize(extractor) == 0);
+  REQUIRE(RobotExtractorTester::oddPrimerSize(extractor) == 0);
 
   const auto &evenPrimer = RobotExtractorTester::evenPrimer(extractor);
   const auto &oddPrimer = RobotExtractorTester::oddPrimer(extractor);
-  REQUIRE(evenPrimer.size() == evenSize);
-  REQUIRE(oddPrimer.size() == oddSize);
-  for (uint32_t i = 0; i < evenSize; ++i) {
-    REQUIRE(evenPrimer[i] ==
-            std::byte{static_cast<unsigned char>(i & 0xFF)});
-  }
-  for (uint32_t i = 0; i < oddSize; ++i) {
-    REQUIRE(oddPrimer[i] == std::byte{static_cast<unsigned char>(0x80 | i)});
-  }
+  REQUIRE(evenPrimer.empty());
+  REQUIRE(oddPrimer.empty());
 
   REQUIRE(RobotExtractorTester::postPrimerPos(extractor) ==
           RobotExtractorTester::postHeaderPos(extractor) +
