@@ -8,6 +8,7 @@
 #include <span>
 #include <vector>
 
+#include "audio_decompression_helpers.hpp"
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
@@ -31,21 +32,6 @@ void push32(std::vector<uint8_t> &v, uint32_t x) {
   v.push_back(static_cast<uint8_t>((x >> 8) & 0xFF));
   v.push_back(static_cast<uint8_t>((x >> 16) & 0xFF));
   v.push_back(static_cast<uint8_t>((x >> 24) & 0xFF));
-}
-
-std::vector<int16_t>
-decompress_without_runway(const std::vector<uint8_t> &rawBytes) {
-  std::vector<std::byte> bytes(rawBytes.size());
-  for (size_t i = 0; i < rawBytes.size(); ++i) {
-    bytes[i] = std::byte{rawBytes[i]};
-  }
-  int16_t predictor = 0;
-  auto samples = robot::dpcm16_decompress(std::span(bytes), predictor);
-  if (samples.size() <= kRunwaySamples) {
-    return {};
-  }
-  return {samples.begin() + static_cast<std::ptrdiff_t>(kRunwaySamples),
-          samples.end()};
 }
 
 std::vector<uint8_t> build_header(uint16_t primerReserved) {
@@ -126,19 +112,21 @@ TEST_CASE("Alternate audio start offset persists across blocks") {
   fs::create_directories(outDir);
 
   std::vector<uint8_t> primerData = {0, 0, 0, 0, 0, 0, 0, 0, 10, 10, 10};
-  auto primerSamples = decompress_without_runway(primerData);
+  int16_t predictor = 0;
+  auto primerSamples =
+      audio_test::decompress_without_runway(primerData, predictor);
   REQUIRE(primerSamples.size() == 3);
 
   BlockInfo block0;
   block0.position = 4; // requires alternate offset
   block0.raw = {0, 0, 0, 0, 0, 0, 0, 0, 20, 10, 10, 10, 10, 10, 10, 10};
-  block0.samples = decompress_without_runway(block0.raw);
+  block0.samples = audio_test::decompress_without_runway(block0.raw, predictor);
   REQUIRE(block0.samples.size() == 8);
 
   BlockInfo block1;
   block1.position = 20;
   block1.raw = {0, 0, 0, 0, 0, 0, 0, 0, 100, 10, 10, 10, 10, 10, 10, 10};
-  block1.samples = decompress_without_runway(block1.raw);
+  block1.samples = audio_test::decompress_without_runway(block1.raw, predictor);
   REQUIRE(block1.samples.size() == 8);
 
   const uint32_t primerTotal =
@@ -189,34 +177,66 @@ TEST_CASE("Alternate audio start offset persists across blocks") {
   const auto oddStream =
       robot::RobotExtractorTester::buildChannelStream(extractor, false);
   REQUIRE(evenStream.size() + oddStream.size() > 0);
-  CAPTURE(evenStream.size());
-  CAPTURE(oddStream.size());
 
-  if (!primerSamples.empty()) {
-    auto primerEven = find_alignment(evenStream, primerSamples);
-    auto primerOdd = find_alignment(oddStream, primerSamples);
-    REQUIRE(primerEven.has_value() != primerOdd.has_value());
-    if (primerEven) {
-      for (size_t i = 0; i < primerSamples.size(); ++i) {
-        CAPTURE(i);
-        REQUIRE(evenStream[*primerEven + i] == primerSamples[i]);
-      }
-    } else if (primerOdd) {
-      for (size_t i = 0; i < primerSamples.size(); ++i) {
-        CAPTURE(i);
-        REQUIRE(oddStream[*primerOdd + i] == primerSamples[i]);
-      }
+  struct ChannelExpectation {
+    bool initialized = false;
+    int64_t startHalfPos = 0;
+    std::vector<int16_t> samples;
+  };
+
+  auto appendExpected = [](ChannelExpectation &channel, int32_t halfPos,
+                           const std::vector<int16_t> &samples) {
+    if (samples.empty()) {
+      return;
     }
-  }
+    int64_t pos = static_cast<int64_t>(halfPos);
+    if (!channel.initialized) {
+      channel.startHalfPos = pos;
+      channel.initialized = true;
+    } else if (pos < channel.startHalfPos) {
+      const int64_t deltaHalf = channel.startHalfPos - pos;
+      if ((deltaHalf & 1LL) != 0) {
+        throw std::runtime_error("Parity mismatch in expected audio layout");
+      }
+      const size_t deltaSamples = static_cast<size_t>(deltaHalf / 2);
+      channel.samples.insert(channel.samples.begin(), deltaSamples, 0);
+      channel.startHalfPos = pos;
+    }
+    int64_t adjustedHalf = pos - channel.startHalfPos;
+    int64_t startSampleSigned =
+        adjustedHalf >= 0 ? adjustedHalf / 2 : (adjustedHalf - 1) / 2;
+    size_t skip = 0;
+    if (startSampleSigned < 0) {
+      skip = static_cast<size_t>(-startSampleSigned);
+      if (skip >= samples.size()) {
+        return;
+      }
+      startSampleSigned = 0;
+    }
+    const size_t startSample = static_cast<size_t>(startSampleSigned);
+    const size_t available = samples.size() - skip;
+    const size_t requiredSize = startSample + available;
+    if (channel.samples.size() < requiredSize) {
+      channel.samples.resize(requiredSize, 0);
+    }
+    std::copy(samples.begin() + static_cast<std::ptrdiff_t>(skip),
+              samples.end(),
+              channel.samples.begin() + static_cast<std::ptrdiff_t>(startSample));
+  };
+
+  ChannelExpectation evenExpected;
+  ChannelExpectation oddExpected;
+  appendExpected(evenExpected, 0, primerSamples);
 
   for (const auto &block : blocks) {
     if (block.samples.empty()) {
       continue;
     }
-    CAPTURE(block.samples.size());
+    const bool shouldBeEven = (block.position % 2) == 0;
+    ChannelExpectation &target = shouldBeEven ? evenExpected : oddExpected;
+    appendExpected(target, block.position, block.samples);
     auto evenIndex = find_alignment(evenStream, block.samples);
     auto oddIndex = find_alignment(oddStream, block.samples);
-    const bool shouldBeEven = (block.position % 2) == 0;
     if (shouldBeEven) {
       REQUIRE(evenIndex.has_value());
       REQUIRE_FALSE(oddIndex.has_value());
@@ -225,4 +245,7 @@ TEST_CASE("Alternate audio start offset persists across blocks") {
       REQUIRE_FALSE(evenIndex.has_value());
     }
   }
+
+  REQUIRE(evenStream == evenExpected.samples);
+  REQUIRE(oddStream == oddExpected.samples);  
 }
