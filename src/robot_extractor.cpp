@@ -544,6 +544,17 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   ChannelDecodeResult evenResult = decodeChannelSamples(m_evenChannelAudio);
   ChannelDecodeResult oddResult = decodeChannelSamples(m_oddChannelAudio);
 
+  auto applyPredictorState = [](ChannelAudio &channel,
+                                const ChannelDecodeResult &result) {
+    if (result.predictorValid) {
+      channel.predictor = result.finalPredictor;
+      channel.predictorInitialized = true;
+    }
+  };
+
+  applyPredictorState(m_evenChannelAudio, evenResult);
+  applyPredictorState(m_oddChannelAudio, oddResult);
+  
   auto hasAudibleData = [](const std::vector<int16_t> &samples) {
     return std::any_of(samples.begin(), samples.end(),
                        [](int16_t sample) { return sample != 0; });
@@ -579,10 +590,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   case AppendPlanStatus::Skip:
     finalizeChannelAppend(channel, isEvenChannel, halfPos, channelSamples, plan,
                           status);
-    if (decodeResult.predictorValid) {
-      channel.predictor = decodeResult.finalPredictor;
-      channel.predictorInitialized = true;
-    }
     if (status == AppendPlanStatus::Ok) {
       if (channel.hasAcceptedPos) {
         if (static_cast<int32_t>(halfPos) > channel.lastAcceptedPos) {
