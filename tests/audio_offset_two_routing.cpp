@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
@@ -7,6 +8,7 @@
 #include <span>
 #include <vector>
 
+#include "audio_decompression_helpers.hpp"
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
@@ -18,17 +20,12 @@ constexpr size_t kRunwaySamples = robot::kRobotRunwaySamples;
 
 std::vector<int16_t> decompress_truncated_block(
     const std::vector<uint8_t> &raw) {
-  std::vector<std::byte> block(kZeroPrefixBytes + raw.size(), std::byte{0});
+  std::vector<uint8_t> block(kZeroPrefixBytes + raw.size(), 0);
   for (size_t i = 0; i < raw.size(); ++i) {
-    block[kZeroPrefixBytes + i] = std::byte{raw[i]};
+    block[kZeroPrefixBytes + i] = raw[i];
   }
   int16_t predictor = 0;
-  auto samples = robot::dpcm16_decompress(std::span(block), predictor);
-  if (samples.size() <= kRunwaySamples) {
-    return {};
-  }
-  return {samples.begin() + static_cast<std::ptrdiff_t>(kRunwaySamples),
-          samples.end()};
+  return audio_test::decompress_without_runway(block, predictor);
 }
 
 } // namespace
@@ -72,16 +69,16 @@ TEST_CASE("Audio routing places odd-position blocks on odd channel") {
   REQUIRE(evenStream.empty());
   REQUIRE_FALSE(oddStream.empty());
 
-  const int64_t expectedStartSampleSigned =
+  const int64_t absoluteStartSample =
       blockPos >= 0 ? blockPos / 2 : (static_cast<int64_t>(blockPos) - 1) / 2;
-  REQUIRE(expectedStartSampleSigned >= 0);
-  const size_t expectedStartSample =
-      static_cast<size_t>(expectedStartSampleSigned);
-  REQUIRE(oddStream.size() >= expectedStartSample + expectedSamples.size());
-
-  for (size_t i = 0; i < expectedSamples.size(); ++i) {
-    CAPTURE(i);
-    CAPTURE(expectedStartSample);
-    REQUIRE(oddStream[expectedStartSample + i] == expectedSamples[i]);
-  }
+  REQUIRE(absoluteStartSample >= 0);
+  const size_t expectedStartSample = 0; // channel streams are trimmed to the
+                                        // earliest sample stored
+  REQUIRE_FALSE(expectedSamples.empty());
+  auto startIt = std::search(oddStream.begin(), oddStream.end(),
+                             expectedSamples.begin(), expectedSamples.end());
+  REQUIRE(startIt != oddStream.end());
+  const size_t actualStart =
+      static_cast<size_t>(std::distance(oddStream.begin(), startIt));
+  REQUIRE(actualStart == expectedStartSample);
 }
