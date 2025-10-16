@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "audio_decompression_helpers.hpp"
 #include "robot_extractor.hpp"
 #include "utilities.hpp"
 #include "wav_helpers.hpp"
@@ -40,14 +41,9 @@ static void push32(std::vector<uint8_t> &v, uint32_t x) {
 }
 
 static std::vector<int16_t>
-decompress_without_runway(const std::vector<std::byte> &bytes) {
-  int16_t predictor = 0;
-  auto samples = robot::dpcm16_decompress(std::span(bytes), predictor);
-  if (samples.size() <= kRunwaySamples) {
-    return {};
-  }
-  return {samples.begin() + static_cast<std::ptrdiff_t>(kRunwaySamples),
-          samples.end()};
+decompress_without_runway(const std::vector<std::byte> &bytes,
+                          int16_t &predictor) {
+  return audio_test::decompress_without_runway(bytes, predictor);
 }
 
 static std::vector<uint8_t> build_header() {
@@ -140,7 +136,9 @@ TEST_CASE("Audio block with runway triggers error") {
 
   std::vector<std::byte> primerBytes(kRunwayBytes,
                                      std::byte{static_cast<unsigned char>(0x88)});
-  const auto primerSamples = decompress_without_runway(primerBytes);
+  int16_t predictor = 0;
+  const auto primerSamples =
+      decompress_without_runway(primerBytes, predictor);
 
   std::vector<std::byte> zeroPrefix(kZeroPrefixBytes, std::byte{0});
   std::vector<std::byte> payload = {
@@ -150,20 +148,22 @@ TEST_CASE("Audio block with runway triggers error") {
   REQUIRE(payload.size() == kTruncatedPayloadBytes);
   std::vector<std::byte> block = zeroPrefix;
   block.insert(block.end(), payload.begin(), payload.end());
-  const auto blockSamples = decompress_without_runway(block);
+  const auto blockSamples = decompress_without_runway(block, predictor);
+  REQUIRE(!blockSamples.empty());
 
   const size_t blockStart = static_cast<size_t>(kBlockPosHalfSamples / 2);
-  size_t totalSamples = blockStart + blockSamples.size();
-  if (totalSamples < primerSamples.size()) {
-    totalSamples = primerSamples.size();
-  }
+  const size_t baseSample = primerSamples.empty() ? blockStart : size_t{0};
+  const size_t primerOffset = 0;
+  const size_t blockOffset = blockStart - baseSample;
+  size_t totalSamples = std::max(primerOffset + primerSamples.size(),
+                                 blockOffset + blockSamples.size());
   std::vector<int16_t> expected(totalSamples, 0);
   if (!primerSamples.empty()) {
     std::copy(primerSamples.begin(), primerSamples.end(), expected.begin());
   }
   if (!blockSamples.empty()) {
     std::copy(blockSamples.begin(), blockSamples.end(),
-              expected.begin() + static_cast<std::ptrdiff_t>(blockStart));
+              expected.begin() + static_cast<std::ptrdiff_t>(blockOffset));
   }
 
   REQUIRE(evenStream == expected);
