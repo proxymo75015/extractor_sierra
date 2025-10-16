@@ -365,46 +365,34 @@ void RobotExtractor::readPrimer() {
         reservedSpan > fileSize - primerHeaderPosMax) {
       throw std::runtime_error("Primer hors limites");
     }
-    std::streamoff afterPrimerDataPos = 0;
-    if (m_totalPrimerSize == 0) {
-      m_evenPrimerSize = 0;
-      m_oddPrimerSize = 0;
-      m_evenPrimer.clear();
-      m_oddPrimer.clear();
-      const std::streamoff reservedEnd =
-          primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
-      m_fp.seekg(reservedEnd, std::ios::beg);
-      afterPrimerDataPos = m_fp.tellg();
-      if (m_options.debug_index) {
-        log_error(m_srcPath,
-                  "readPrimer: primer total size nul, données audio ignorées",
-                  m_options);
-      }
-    } else {
-      m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
-      m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
-      if (m_evenPrimerSize > 0) {
-        try {
-          read_exact(m_fp, m_evenPrimer.data(),
-                     static_cast<size_t>(m_evenPrimerSize));
-        } catch (const std::runtime_error &) {
-          throw std::runtime_error(
-              std::string("Primer audio pair tronqué pour ") +
-              m_srcPath.string());
-        }
-      }
-      if (m_oddPrimerSize > 0) {
-        try {
-          read_exact(m_fp, m_oddPrimer.data(),
-                     static_cast<size_t>(m_oddPrimerSize));
-        } catch (const std::runtime_error &) {
-          throw std::runtime_error(
-              std::string("Primer audio impair tronqué pour ") +
-              m_srcPath.string());
-        }
-      }
-      afterPrimerDataPos = m_fp.tellg();
+    if (m_totalPrimerSize == 0 && m_options.debug_index) {
+      log_error(m_srcPath,
+                "readPrimer: totalPrimerSize nul, conservation des données", 
+                m_options);
     }
+
+    m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
+    m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
+    if (m_evenPrimerSize > 0) {
+      try {
+        read_exact(m_fp, m_evenPrimer.data(),
+                   static_cast<size_t>(m_evenPrimerSize));
+      } catch (const std::runtime_error &) {
+        throw std::runtime_error(std::string("Primer audio pair tronqué pour ") +
+                                 m_srcPath.string());
+      }
+    }
+    if (m_oddPrimerSize > 0) {
+      try {
+        read_exact(m_fp, m_oddPrimer.data(),
+                   static_cast<size_t>(m_oddPrimerSize));
+      } catch (const std::runtime_error &) {
+        throw std::runtime_error(
+            std::string("Primer audio impair tronqué pour ") +
+            m_srcPath.string());
+      }
+    }
+    std::streamoff afterPrimerDataPos = m_fp.tellg();    
     const bool primerSizesMatchReserved =
         primerSizesSum == static_cast<std::uint64_t>(m_primerReservedSize);
     if (!primerSizesMatchReserved) {
