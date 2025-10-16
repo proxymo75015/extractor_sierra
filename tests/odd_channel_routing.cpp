@@ -7,6 +7,7 @@
 #include <span>
 #include <vector>
 
+#include "audio_decompression_helpers.hpp"
 #include "robot_extractor.hpp"
 #include "wav_helpers.hpp"
 
@@ -31,18 +32,13 @@ static void push32(std::vector<uint8_t> &v, uint32_t x) {
 }
 
 static std::vector<int16_t>
-decompress_truncated_block(const std::vector<uint8_t> &raw) {
+decompress_truncated_block(const std::vector<uint8_t> &raw,
+                           int16_t &predictor) {
   std::vector<std::byte> block(kZeroPrefixBytes + raw.size(), std::byte{0});
   for (size_t i = 0; i < raw.size(); ++i) {
     block[kZeroPrefixBytes + i] = std::byte{raw[i]};
   }
-  int16_t predictor = 0;
-  auto samples = robot::dpcm16_decompress(std::span(block), predictor);
-  if (samples.size() <= kRunwaySamples) {
-    return {};
-  }
-  return {samples.begin() + static_cast<std::ptrdiff_t>(kRunwaySamples),
-          samples.end()};
+  return audio_test::decompress_without_runway(block, predictor);
 }
 
 struct StereoSamples {
@@ -148,13 +144,16 @@ TEST_CASE("Audio blocks are routed according to parity") {
   std::vector<BlockInfo> blocks;
   blocks.reserve(kNumFrames);
 
+  int16_t evenPredictor = 0;
+  int16_t oddPredictor = 0;  
   for (size_t idx = 0; idx < payloadBases.size(); ++idx) {
     const bool isEven = (idx % 2) == 0;
     std::vector<uint8_t> raw(10);
     for (int i = 0; i < 10; ++i) {
       raw[static_cast<size_t>(i)] = static_cast<uint8_t>(payloadBases[idx] + i);
     }
-    auto samples = decompress_truncated_block(raw);
+    auto &predictor = isEven ? evenPredictor : oddPredictor;
+    auto samples = decompress_truncated_block(raw, predictor);
     const uint32_t pos = isEven ? nextEvenPos : nextOddPos;
 
     data.push_back(0);
@@ -192,21 +191,17 @@ TEST_CASE("Audio blocks are routed according to parity") {
   const auto oddStream =
       robot::RobotExtractorTester::buildChannelStream(extractor, false);
 
-  std::vector<uint8_t> evenCoverage(evenStream.size(), 0);
-  std::vector<uint8_t> oddCoverage(oddStream.size(), 0);
+  audio_test::ChannelExpectation evenExpected;
+  audio_test::ChannelExpectation oddExpected;
   for (const auto &block : blocks) {
-    auto &stream = block.even ? evenStream : oddStream;
-    auto &coverage = block.even ? evenCoverage : oddCoverage;
-    const size_t startSample = static_cast<size_t>(block.position / 2);
-    REQUIRE(stream.size() >= startSample + block.samples.size());
-    for (size_t i = 0; i < block.samples.size(); ++i) {
-      CAPTURE(block.position);
-      CAPTURE(startSample);
-      CAPTURE(i);
-      REQUIRE(stream[startSample + i] == block.samples[i]);
-      coverage[startSample + i] = 1;
-    }
+    auto &target = block.even ? evenExpected : oddExpected;
+    audio_test::append_expected(target,
+                                static_cast<int32_t>(block.position),
+                                block.samples);
   }
+
+  REQUIRE(evenStream == evenExpected.samples);
+  REQUIRE(oddStream == oddExpected.samples);
 
   const auto stereoPath = outDir / "frame_00000.wav";
   REQUIRE(fs::exists(stereoPath));
