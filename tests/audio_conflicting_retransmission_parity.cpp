@@ -6,6 +6,7 @@
 #include <span>
 #include <vector>
 
+#include "audio_decompression_helpers.hpp"
 #include "robot_extractor.hpp"
 #include "utilities.hpp"
 
@@ -67,20 +68,9 @@ std::vector<uint8_t> build_primer_header() {
   return p;
 }
 
-std::vector<int16_t> decode_block(const std::vector<uint8_t> &bytes) {
-  std::vector<std::byte> asBytes;
-  asBytes.reserve(bytes.size());
-  for (uint8_t b : bytes) {
-    asBytes.push_back(static_cast<std::byte>(b));
-  }
-  int16_t predictor = 0;
-  auto decoded = robot::dpcm16_decompress(std::span(asBytes), predictor);
-  if (decoded.size() <= robot::kRobotRunwaySamples) {
-    return {};
-  }
-  return std::vector<int16_t>(decoded.begin() +
-                                  static_cast<std::ptrdiff_t>(robot::kRobotRunwaySamples),
-                              decoded.end());
+std::vector<int16_t> decode_block(const std::vector<uint8_t> &bytes,
+                                  int16_t &predictor) {
+  return audio_test::decompress_without_runway(bytes, predictor);
 }
 
 std::vector<uint8_t> build_block(
@@ -110,6 +100,9 @@ TEST_CASE("Conflicting retransmission overwrites while parity mismatch is ignore
   std::array<uint8_t, robot::kRobotRunwayBytes> primerEven{};
   primerEven.fill(0x88);
   data.insert(data.end(), primerEven.begin(), primerEven.end());
+  int16_t predictor = 0;
+  std::vector<uint8_t> primerBytes(primerEven.begin(), primerEven.end());
+  audio_test::decompress_without_runway(primerBytes, predictor);  
 
   for (uint16_t i = 0; i < kNumFrames; ++i) {
     push16(data, 2); // frame size placeholder
@@ -175,19 +168,39 @@ TEST_CASE("Conflicting retransmission overwrites while parity mismatch is ignore
       robot::RobotExtractorTester::buildChannelStream(extractor, false);
 
   auto expectedEvenAfterFirst = baselineEven;
-  auto block1Samples = decode_block(block1);
+  int64_t evenBaseSample = 0;
+  bool evenBaseInitialized = !baselineEven.empty();
+  auto updateEvenExpected = [&](std::vector<int16_t> &buffer,
+                                int64_t startSample,
+                                const std::vector<int16_t> &samples) {
+    if (samples.empty()) {
+      return;
+    }
+    if (!evenBaseInitialized) {
+      evenBaseSample = startSample;
+      evenBaseInitialized = true;
+    }
+    if (startSample < evenBaseSample) {
+      const size_t shift = static_cast<size_t>(evenBaseSample - startSample);
+      buffer.insert(buffer.begin(), shift, 0);
+      evenBaseSample = startSample;
+    }
+    const size_t offset = static_cast<size_t>(startSample - evenBaseSample);
+    if (buffer.size() < offset) {
+      buffer.resize(offset, 0);
+    }
+    const size_t requiredSize = offset + samples.size();
+    if (buffer.size() < requiredSize) {
+      buffer.resize(requiredSize, 0);
+    }
+    for (size_t i = 0; i < samples.size(); ++i) {
+      buffer[offset + i] = samples[i];
+    }
+  };
+  auto block1Samples = decode_block(block1, predictor);
   REQUIRE_FALSE(block1Samples.empty());
-  const size_t block1Start = static_cast<size_t>(block1Pos / 2);
-  if (expectedEvenAfterFirst.size() < block1Start) {
-    expectedEvenAfterFirst.resize(block1Start, 0);
-  }
-  const size_t requiredSize = block1Start + block1Samples.size();
-  if (expectedEvenAfterFirst.size() < requiredSize) {
-    expectedEvenAfterFirst.resize(requiredSize, 0);
-  }
-  for (size_t i = 0; i < block1Samples.size(); ++i) {
-    expectedEvenAfterFirst[block1Start + i] = block1Samples[i];
-  }
+  const int64_t block1Start = block1Pos / 2;
+  updateEvenExpected(expectedEvenAfterFirst, block1Start, block1Samples);
 
   REQUIRE(afterFirstEven == expectedEvenAfterFirst);
   REQUIRE(afterFirstOdd == baselineOdd);
@@ -198,20 +211,11 @@ TEST_CASE("Conflicting retransmission overwrites while parity mismatch is ignore
   auto afterConflictOdd =
       robot::RobotExtractorTester::buildChannelStream(extractor, false);
 
-  auto conflictSamples = decode_block(conflictBlock);
+  auto conflictSamples = decode_block(conflictBlock, predictor);
   REQUIRE_FALSE(conflictSamples.empty());
   auto expectedEvenAfterConflict = expectedEvenAfterFirst;
-  if (expectedEvenAfterConflict.size() < block1Start) {
-    expectedEvenAfterConflict.resize(block1Start, 0);
-  }
-  const size_t conflictRequiredSize = block1Start + conflictSamples.size();
-  if (expectedEvenAfterConflict.size() < conflictRequiredSize) {
-    expectedEvenAfterConflict.resize(conflictRequiredSize, 0);
-  }
-  for (size_t i = 0; i < conflictSamples.size(); ++i) {
-    expectedEvenAfterConflict[block1Start + i] = conflictSamples[i];
-  }
-
+  updateEvenExpected(expectedEvenAfterConflict, block1Start, conflictSamples);
+  
   REQUIRE(afterConflictEven == expectedEvenAfterConflict);
   REQUIRE(afterConflictOdd == baselineOdd);
 
@@ -220,7 +224,12 @@ TEST_CASE("Conflicting retransmission overwrites while parity mismatch is ignore
       robot::RobotExtractorTester::buildChannelStream(extractor, true);
   auto afterParityOdd =
       robot::RobotExtractorTester::buildChannelStream(extractor, false);
+  int16_t predictorForParity = predictor;
+  auto paritySamples = decode_block(parityBlock, predictorForParity);
 
+  const int64_t parityStart = parityPos / 2;
+  updateEvenExpected(expectedEvenAfterConflict, parityStart, paritySamples);
+  
   REQUIRE(afterParityEven == expectedEvenAfterConflict);
   REQUIRE(afterParityOdd == baselineOdd);
 }
