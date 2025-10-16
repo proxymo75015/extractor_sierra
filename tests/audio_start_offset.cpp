@@ -9,6 +9,7 @@
 #include <span>
 #include <vector>
 
+#include "audio_decompression_helpers.hpp"
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
@@ -36,18 +37,9 @@ void push32(std::vector<uint8_t> &v, uint32_t x) {
 }
 
 std::vector<int16_t>
-decompress_primer_block(const std::vector<uint8_t> &rawBytes) {
-  std::vector<std::byte> bytes(rawBytes.size());
-  for (size_t i = 0; i < rawBytes.size(); ++i) {
-    bytes[i] = std::byte{rawBytes[i]};
-  }
-  int16_t predictor = 0;
-  auto samples = robot::dpcm16_decompress(std::span(bytes), predictor);
-  if (samples.size() <= kRunwaySamples) {
-    return {};
-  }
-  return {samples.begin() + static_cast<std::ptrdiff_t>(kRunwaySamples),
-          samples.end()};
+decompress_primer_block(const std::vector<uint8_t> &rawBytes,
+                        int16_t &predictor) {
+  return audio_test::decompress_without_runway(rawBytes, predictor);
 }
 
 std::vector<uint8_t> build_header(uint16_t primerReserved) {
@@ -88,18 +80,12 @@ std::vector<uint8_t> build_primer_header(uint32_t total, uint32_t evenSize,
 }
 
 std::vector<int16_t> decompress_truncated_block(
-    const std::vector<uint8_t> &raw) {
-  std::vector<std::byte> block(kZeroPrefixBytes + raw.size(), std::byte{0});
+    const std::vector<uint8_t> &raw, int16_t &predictor) {
+  std::vector<uint8_t> block(kZeroPrefixBytes + raw.size(), 0);
   for (size_t i = 0; i < raw.size(); ++i) {
-    block[kZeroPrefixBytes + i] = std::byte{raw[i]};
+    block[kZeroPrefixBytes + i] = raw[i];
   }
-  int16_t predictor = 0;
-  auto samples = robot::dpcm16_decompress(std::span(block), predictor);
-  if (samples.size() <= kRunwaySamples) {
-    return {};
-  }
-  return {samples.begin() + static_cast<std::ptrdiff_t>(kRunwaySamples),
-          samples.end()};
+  return audio_test::decompress_without_runway(block, predictor);
 }
 
 std::optional<size_t> find_alignment(const std::vector<int16_t> &stream,
@@ -143,7 +129,9 @@ TEST_CASE("Audio start offset routed using doubled positions") {
   fs::create_directories(outDir);
 
   std::vector<uint8_t> primerData = {0, 0, 0, 0, 0, 0, 0, 0, 10, 20, 30};
-  auto primerSamples = decompress_primer_block(primerData);
+  int16_t evenPredictor = 0;
+  int16_t oddPredictor = 0;
+  auto primerSamples = decompress_primer_block(primerData, oddPredictor);
   REQUIRE(primerSamples.size() >= 2);
   auto data = build_header(static_cast<uint16_t>(kPrimerHeaderSize +
                                                  primerData.size()));
@@ -170,10 +158,12 @@ TEST_CASE("Audio start offset routed using doubled positions") {
   std::array<BlockInfo, 2> blocks;
   blocks[0].position = 3;
   blocks[0].raw = {0x12, 0x34, 0x56, 0x78, 0x9A};
-  blocks[0].samples = decompress_truncated_block(blocks[0].raw);
+  blocks[0].samples =
+      decompress_truncated_block(blocks[0].raw, oddPredictor);
   blocks[1].position = 4096;
   blocks[1].raw = {0xAB, 0xCD, 0xEF, 0x10, 0x24};
-  blocks[1].samples = decompress_truncated_block(blocks[1].raw);
+  blocks[1].samples =
+      decompress_truncated_block(blocks[1].raw, evenPredictor);
 
   for (const auto &block : blocks) {
     data.push_back(0);
@@ -221,8 +211,8 @@ TEST_CASE("Audio start offset routed using doubled positions") {
   REQUIRE_FALSE(firstBlock.samples.empty());
   auto firstEvenIndex = find_alignment(evenStream, firstBlock.samples);
   auto firstOddIndex = find_alignment(oddStream, firstBlock.samples);
-  REQUIRE(firstEvenIndex.has_value());
-  REQUIRE_FALSE(firstOddIndex.has_value());
+  REQUIRE_FALSE(firstEvenIndex.has_value());
+  REQUIRE(firstOddIndex.has_value());
   
   for (const auto &block : blocks) {
     const auto &samples = block.samples;
