@@ -1092,6 +1092,9 @@ RobotExtractor::parseHunkPalette(std::span<const std::byte> raw) {
         if (offset + kEntryHeaderSize > raw.size()) {
           continue;
         }
+        const uint16_t startColor =
+            read_u16_be(raw, offset + kEntryStartColorOffset);
+        write_span_le16(converted, offset + kEntryStartColorOffset, startColor);        
         const uint16_t numColors =
             read_u16_be(raw, offset + kEntryNumColorsOffset);
         write_span_le16(converted, offset + kEntryNumColorsOffset, numColors);
