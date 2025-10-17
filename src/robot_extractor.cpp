@@ -1800,35 +1800,8 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                        std::to_string(static_cast<long long>(pos)),
                    m_options);
         }
-        int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
-        consumed += 4;
-        if (size < 0) {
-          throw std::runtime_error("Taille audio invalide");
-        }
-        if (!silentAudioBlock && size > expectedAudioBlockSize) {
-          const std::string logMessage =
-              "Taille de bloc audio inattendue: " +
-              std::to_string(size) + " (maximum " +
-              std::to_string(expectedAudioBlockSize) +
-              ") — troncature appliquée";
-          log_warn(m_srcPath, logMessage, m_options);
-          size = expectedAudioBlockSize >
-                         static_cast<int64_t>(std::numeric_limits<int32_t>::max())
-                     ? std::numeric_limits<int32_t>::max()
-                     : static_cast<int32_t>(expectedAudioBlockSize);
-        }
-        const bool skipAudioData = (pos == 0 && size == 0);
-        if (skipAudioData) {
-          int64_t bytesToSkip = static_cast<int64_t>(audioBlkLen) - consumed;
-          if (bytesToSkip < 0) {
-            throw std::runtime_error(
-                "Bloc audio consommé au-delà de sa taille déclarée");
-          }
-          if (bytesToSkip > 0) {
-            m_fp.seekg(static_cast<std::streamoff>(bytesToSkip), std::ios::cur);
-            consumed += bytesToSkip;
-          }
-        } else if (silentAudioBlock) {
+        if (pos == 0) {
+          log_warn(m_srcPath, "Bloc audio ignoré en position zéro", m_options);
           int64_t bytesToSkip = static_cast<int64_t>(audioBlkLen) - consumed;
           if (bytesToSkip < 0) {
             throw std::runtime_error(
@@ -1839,49 +1812,67 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             consumed += bytesToSkip;
           }
         } else {
-          std::vector<std::byte> block;
-          if (size == expectedAudioBlockSize) {
-            const size_t expectedSize =
-                expectedAudioBlockSize > 0
-                    ? static_cast<size_t>(expectedAudioBlockSize)
-                    : size_t{0};
-            block.resize(expectedSize);
-            if (!block.empty()) {
-              m_fp.read(reinterpret_cast<char *>(block.data()),
-                        checked_streamsize(block.size()));
-            }
-            consumed += static_cast<int64_t>(block.size());
-          } else {
-            const size_t bytesToRead =
-                size > 0 ? static_cast<size_t>(size) : size_t{0};
-            std::vector<std::byte> truncated(bytesToRead);
-            if (!truncated.empty()) {
-              m_fp.read(reinterpret_cast<char *>(truncated.data()),
-                        checked_streamsize(truncated.size()));
-            }
-            consumed += static_cast<int64_t>(bytesToRead);
-            const size_t zeroPrefix = kRobotZeroCompressSize;
-            if (bytesToRead > std::numeric_limits<size_t>::max() - zeroPrefix) {
-              throw std::runtime_error("Audio block too large");
-            }
-            block.assign(zeroPrefix + truncated.size(), std::byte{0});
-            if (!truncated.empty()) {
-              auto dst = block.begin() +
-                         static_cast<std::ptrdiff_t>(zeroPrefix);
-              std::copy(truncated.begin(), truncated.end(), dst);
-            }
+          int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
+          consumed += 4;
+          if (size < 0) {
+            throw std::runtime_error("Taille audio invalide");
           }
-          // Les canaux audio sont déterminés à partir de la position ajustée
-          // (logique alignée sur ScummVM) : une valeur ajustée congrue à 0 (mod
-          // 4) va sur le canal pair, congrue à 2 (mod 4) sur le canal impair.
-          // L'audio peut exister même sans primer, décompresser toujours.
-          if (!block.empty()) {
-            if (pos == 0) {
-              // Conserver l'alignement avec ScummVM : les paquets de retransmission
-              // positionnés à zéro ne doivent jamais être injectés dans le mixage
-              // audio, peu importe leur contenu.
-              log_warn(m_srcPath, "Bloc audio ignoré en position zéro", m_options);
+          if (!silentAudioBlock && size > expectedAudioBlockSize) {
+            const std::string logMessage =
+                "Taille de bloc audio inattendue: " +
+                std::to_string(size) + " (maximum " +
+                std::to_string(expectedAudioBlockSize) +
+                ") — troncature appliquée";
+            log_warn(m_srcPath, logMessage, m_options);
+            size = expectedAudioBlockSize >
+                           static_cast<int64_t>(std::numeric_limits<int32_t>::max())
+                       ? std::numeric_limits<int32_t>::max()
+                       : static_cast<int32_t>(expectedAudioBlockSize);
+          }
+          if (silentAudioBlock) {
+            int64_t bytesToSkip = static_cast<int64_t>(audioBlkLen) - consumed;
+            if (bytesToSkip < 0) {
+              throw std::runtime_error(
+                  "Bloc audio consommé au-delà de sa taille déclarée");
+            }
+            if (bytesToSkip > 0) {
+              m_fp.seekg(static_cast<std::streamoff>(bytesToSkip), std::ios::cur);
+              consumed += bytesToSkip;
+            }
+          } else {
+            std::vector<std::byte> block;
+            if (size == expectedAudioBlockSize) {
+              const size_t expectedSize =
+                  expectedAudioBlockSize > 0
+                      ? static_cast<size_t>(expectedAudioBlockSize)
+                      : size_t{0};
+              block.resize(expectedSize);
+              if (!block.empty()) {
+                m_fp.read(reinterpret_cast<char *>(block.data()),
+                          checked_streamsize(block.size()));
+              }
+              consumed += static_cast<int64_t>(block.size());
             } else {
+              const size_t bytesToRead =
+                  size > 0 ? static_cast<size_t>(size) : size_t{0};
+              std::vector<std::byte> truncated(bytesToRead);
+              if (!truncated.empty()) {
+                m_fp.read(reinterpret_cast<char *>(truncated.data()),
+                          checked_streamsize(truncated.size()));
+              }
+              consumed += static_cast<int64_t>(bytesToRead);
+              const size_t zeroPrefix = kRobotZeroCompressSize;
+              if (bytesToRead > std::numeric_limits<size_t>::max() - zeroPrefix) {
+                throw std::runtime_error("Audio block too large");
+              }
+              block.assign(zeroPrefix + truncated.size(), std::byte{0});
+              if (!truncated.empty()) {
+                auto dst =
+                    block.begin() + static_cast<std::ptrdiff_t>(zeroPrefix);
+                std::copy(truncated.begin(), truncated.end(), dst);
+              }
+            }
+            if (!block.empty()) {
               process_audio_block(block, pos);
             }
           }
