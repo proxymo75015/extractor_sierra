@@ -534,26 +534,16 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     }    
     return;
   }
+  ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;  
   if (primer.size() < kRobotRunwayBytes) {
     const char *channelLabel = isEven ? "pair" : "impair";
     log_warn(m_srcPath,
              std::string("Primer audio ") + channelLabel +
                  " trop court (" +
                  std::to_string(static_cast<unsigned long long>(primer.size())) +
-                 " octets), ignoré",
+                 " octets), décompressé malgré tout",
              m_options);
-    ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
-    channel.predictor = 0;
-    channel.predictorInitialized = false;
-    primer.clear();
-    if (isEven) {
-      m_evenPrimerSize = 0;
-    } else {
-      m_oddPrimerSize = 0;
-    }
-    return;
   }
-  ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
   int16_t predictor = channel.predictorInitialized ? channel.predictor : 0;
   auto pcm = dpcm16_decompress(std::span(primer), predictor);
   channel.predictor = predictor;
