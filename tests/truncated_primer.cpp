@@ -123,7 +123,7 @@ TEST_CASE("Primer audio impair tronqué") {
     }
 }
 
-TEST_CASE("Primer plus court que la piste d'élan est ignoré") {
+TEST_CASE("Primer plus court que la piste d'élan est utilisé") {
     fs::path tmpDir = fs::temp_directory_path();
     fs::path input = tmpDir / "primer_short_runway.rbt";
     fs::path outDir = tmpDir / "primer_short_runway_out";
@@ -170,9 +170,17 @@ TEST_CASE("Primer plus court que la piste d'élan est ignoré") {
     REQUIRE(primerEnd == robot::RobotExtractorTester::postHeaderPos(extractor) +
                              static_cast<std::streamoff>(totalPrimerSize));
 
-    REQUIRE_NOTHROW(robot::RobotExtractorTester::finalizeAudio(extractor));
-
-    REQUIRE(robot::RobotExtractorTester::evenPrimerSize(extractor) == 0);
+    REQUIRE(robot::RobotExtractorTester::evenPrimerSize(extractor) ==
+            static_cast<std::streamsize>(evenSize));
     REQUIRE(robot::RobotExtractorTester::oddPrimerSize(extractor) ==
             static_cast<std::streamsize>(oddSize));
+
+    REQUIRE_NOTHROW(robot::RobotExtractorTester::finalizeAudio(extractor));
+
+    const auto evenStream =
+        robot::RobotExtractorTester::buildChannelStream(extractor, true);
+    const auto oddStream =
+        robot::RobotExtractorTester::buildChannelStream(extractor, false);
+    REQUIRE(evenStream.size() == evenSize);
+    REQUIRE(oddStream.size() == oddSize);
 }
