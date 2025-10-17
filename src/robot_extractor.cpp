@@ -623,11 +623,18 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
                        [](int16_t sample) { return sample != 0; });
   };
 
-  if (pos == 0 && !hasAudibleData(evenResult.samples) &&
-      !hasAudibleData(oddResult.samples)) {
-    log_warn(m_srcPath,
-             "Bloc audio ignoré en position zéro (données silencieuses)",
-             m_options);
+  if (pos == 0) {
+    const bool hasAudioData = hasAudibleData(evenResult.samples) ||
+                              hasAudibleData(oddResult.samples);
+    if (hasAudioData) {
+      log_warn(m_srcPath,
+               "Bloc audio ignoré en position zéro (données audibles ignorées)",
+               m_options);
+    } else {
+      log_warn(m_srcPath,
+               "Bloc audio ignoré en position zéro (données silencieuses)",
+               m_options);
+    }
     return;
   }
   const std::vector<int16_t> &channelSamples = decodeResult.samples;
