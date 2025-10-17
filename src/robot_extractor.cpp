@@ -572,8 +572,20 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   if (!m_extractAudio) {
     return;
   }
+  std::span<const std::byte> blockBytes = block;
+  std::vector<std::byte> zeroPrefixed;  
   if (block.size() < kRobotRunwayBytes) {
-    throw std::runtime_error("Bloc audio inutilisable");
+    const size_t zeroPrefix = kRobotZeroCompressSize;
+    if (block.size() > std::numeric_limits<size_t>::max() - zeroPrefix) {
+      throw std::runtime_error("Taille de bloc audio trop grande");
+    }
+    zeroPrefixed.assign(zeroPrefix + block.size(), std::byte{0});
+    if (!block.empty()) {
+      auto dst = zeroPrefixed.begin() +
+                 static_cast<std::ptrdiff_t>(zeroPrefix);
+      std::copy(block.begin(), block.end(), dst);
+    }
+    blockBytes = zeroPrefixed;
   }
   struct ChannelDecodeResult {
     std::vector<int16_t> samples;
@@ -585,7 +597,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     ChannelDecodeResult result;
     int16_t localPredictor =
         channel.predictorInitialized ? channel.predictor : 0;
-    auto decoded = dpcm16_decompress(block, localPredictor);
+    auto decoded = dpcm16_decompress(blockBytes, localPredictor);
     result.finalPredictor = localPredictor;
     result.predictorValid = true;
     result.samples = std::move(decoded);
