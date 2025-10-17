@@ -553,7 +553,6 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     }
     return;
   }
-  const size_t runwaySamples = kRobotRunwaySamples;
   ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
   int16_t predictor = channel.predictorInitialized ? channel.predictor : 0;
   auto pcm = dpcm16_decompress(std::span(primer), predictor);
@@ -561,12 +560,6 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
   channel.predictorInitialized = true;
   if (!m_extractAudio) {
     return;
-  }
-  if (pcm.size() >= runwaySamples) {
-    pcm.erase(pcm.begin(),
-              pcm.begin() + static_cast<std::ptrdiff_t>(runwaySamples));
-  } else {
-    pcm.clear();
   }
   if (!pcm.empty()) {
     appendChannelSamples(isEven, isEven ? 0 : 1, pcm);
@@ -582,7 +575,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   if (block.size() < kRobotRunwayBytes) {
     throw std::runtime_error("Bloc audio inutilisable");
   }
-  const size_t runwaySamples = kRobotRunwaySamples;
   struct ChannelDecodeResult {
     std::vector<int16_t> samples;
     int16_t finalPredictor = 0;
@@ -596,13 +588,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     auto decoded = dpcm16_decompress(block, localPredictor);
     result.finalPredictor = localPredictor;
     result.predictorValid = true;
-    if (decoded.size() >= runwaySamples) {
-      decoded.erase(decoded.begin(),
-                    decoded.begin() +
-                        static_cast<std::ptrdiff_t>(runwaySamples));
-    } else {
-      decoded.clear();
-    }
     result.samples = std::move(decoded);
     return result;
   };
