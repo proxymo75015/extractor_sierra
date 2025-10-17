@@ -149,12 +149,14 @@ void RobotExtractor::readHeader() {
 
 void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_bigEndian = bigEndian;
-    const std::streampos headerStart = m_fp.tellg();
+  const std::streampos headerStart = m_fp.tellg();
   if (headerStart == std::streampos(-1)) {
     throw std::runtime_error(
         "Impossible de déterminer la position de l'en-tête Robot");
   }
 
+  m_fileOffset = static_cast<std::streamoff>(headerStart);
+  
   constexpr std::streamoff versionOffset =
       static_cast<std::streamoff>(sizeof(uint16_t) + 4);
   const std::streampos versionPos = headerStart + versionOffset;
@@ -1429,8 +1431,9 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
                "Packet size < frame size (i=" + std::to_string(i) +
                    ", frame=" + std::to_string(m_frameSizes[i]) +
                    ", packet=" + std::to_string(m_packetSizes[i]) +
-                   ")",
+                   ") — ajustement à la taille de frame",
                m_options);
+      m_packetSizes[i] = m_frameSizes[i];
     }
     uint64_t maxSize64 =
         static_cast<uint64_t>(m_frameSizes[i]) +
@@ -1476,7 +1479,15 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
     value = read_scalar<uint16_t>(m_fp, m_bigEndian);
   }
   std::streamoff posAfter = m_fp.tellg();
-  std::streamoff bytesRemaining = posAfter % 2048;
+  if (posAfter < 0) {
+    throw std::runtime_error(
+        "Position de lecture invalide après les tables d'index");
+  }
+  if (posAfter < m_fileOffset) {
+    throw std::runtime_error(
+        "Position des tables Robot avant le début déclaré du fichier");
+  }
+  std::streamoff bytesRemaining = (posAfter - m_fileOffset) % 2048;
   if (bytesRemaining != 0) {
     m_fp.seekg(2048 - bytesRemaining, std::ios::cur);
   }
