@@ -1,4 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
+#include <array>
+#include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -119,4 +121,58 @@ TEST_CASE("Primer audio impair tronqué") {
         REQUIRE(std::string(e.what()).find("Primer hors limites") !=
                 std::string::npos);
     }
+}
+
+TEST_CASE("Primer plus court que la piste d'élan est ignoré") {
+    fs::path tmpDir = fs::temp_directory_path();
+    fs::path input = tmpDir / "primer_short_runway.rbt";
+    fs::path outDir = tmpDir / "primer_short_runway_out";
+    fs::remove_all(outDir);
+    fs::create_directories(outDir);
+
+    constexpr uint32_t evenSize = robot::kRobotRunwayBytes - 2;
+    constexpr uint32_t oddSize = robot::kRobotRunwayBytes;
+    const uint32_t totalPrimerSize = kPrimerHeaderSize + evenSize + oddSize;
+    auto header = build_header(static_cast<uint16_t>(totalPrimerSize));
+    auto primer = build_primer_header(totalPrimerSize, evenSize, oddSize);
+
+    std::vector<uint8_t> data;
+    data.reserve(header.size() + primer.size() + evenSize + oddSize);
+    data.insert(data.end(), header.begin(), header.end());
+    data.insert(data.end(), primer.begin(), primer.end());
+
+    std::array<uint8_t, evenSize> evenBytes{};
+    for (size_t i = 0; i < evenBytes.size(); ++i)
+        evenBytes[i] = static_cast<uint8_t>(0x10 + i);
+    data.insert(data.end(), evenBytes.begin(), evenBytes.end());
+
+    std::array<uint8_t, oddSize> oddBytes{};
+    for (size_t i = 0; i < oddBytes.size(); ++i)
+        oddBytes[i] = static_cast<uint8_t>(0x80 + i);
+    data.insert(data.end(), oddBytes.begin(), oddBytes.end());
+
+    std::ofstream out(input, std::ios::binary);
+    out.write(reinterpret_cast<const char*>(data.data()),
+              static_cast<std::streamsize>(data.size()));
+    out.close();
+
+    robot::RobotExtractor extractor(input, outDir, true);
+    REQUIRE_NOTHROW(robot::RobotExtractorTester::readHeader(extractor));
+    REQUIRE_NOTHROW(robot::RobotExtractorTester::readPrimer(extractor));
+
+    const auto &evenPrimer = robot::RobotExtractorTester::evenPrimer(extractor);
+    REQUIRE(evenPrimer.size() == evenBytes.size());
+    for (size_t i = 0; i < evenBytes.size(); ++i) {
+        REQUIRE(std::to_integer<uint8_t>(evenPrimer[i]) == evenBytes[i]);
+    }
+
+    const auto primerEnd = robot::RobotExtractorTester::postPrimerPos(extractor);
+    REQUIRE(primerEnd == robot::RobotExtractorTester::postHeaderPos(extractor) +
+                             static_cast<std::streamoff>(totalPrimerSize));
+
+    REQUIRE_NOTHROW(robot::RobotExtractorTester::finalizeAudio(extractor));
+
+    REQUIRE(robot::RobotExtractorTester::evenPrimerSize(extractor) == 0);
+    REQUIRE(robot::RobotExtractorTester::oddPrimerSize(extractor) ==
+            static_cast<std::streamsize>(oddSize));
 }
