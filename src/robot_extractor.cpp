@@ -14,6 +14,7 @@
 #include <span>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <system_error>
 #include <cmath>
 #include <vector>
@@ -399,27 +400,46 @@ void RobotExtractor::readPrimer() {
       const std::streamoff reservedEnd =
           primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
 
+      auto readPrimerChannel = [this](std::vector<std::byte> &buffer,
+                                      std::streamsize requestedSize,
+                                      const char *channelLabel) {
+        if (requestedSize <= 0) {
+          return;
+        }
+
+        const std::streamoff channelStart = m_fp.tellg();
+        const std::streamsize toRead = checked_streamsize(buffer.size());
+
+        auto oldMask = m_fp.exceptions();
+        m_fp.exceptions(std::ios::goodbit);
+        m_fp.read(reinterpret_cast<char *>(buffer.data()), toRead);
+        const std::streamsize got = m_fp.gcount();
+        m_fp.exceptions(oldMask);
+
+        if (got < toRead) {
+          m_fp.clear();
+          const std::streamsize safeGot = std::max<std::streamsize>(0, got);
+          const auto bytesRead = static_cast<size_t>(safeGot);
+          if (bytesRead < buffer.size()) {
+            std::fill(buffer.begin() + static_cast<std::ptrdiff_t>(bytesRead),
+                      buffer.end(), std::byte{0});
+          }
+
+          log_warn(m_srcPath,
+                   std::string("Primer audio ") + channelLabel +
+                       " tronqué, complétion avec des zéros",
+                   m_options);
+
+          const std::streamoff truncatedPos =
+              channelStart + static_cast<std::streamoff>(safeGot);
+          m_fp.seekg(truncatedPos, std::ios::beg);
+        }
+      };
+
       m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
       m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
-      if (m_evenPrimerSize > 0) {
-        try {
-          read_exact(m_fp, m_evenPrimer.data(),
-                     static_cast<size_t>(m_evenPrimerSize));
-        } catch (const std::runtime_error &) {
-          throw std::runtime_error(std::string("Primer audio pair tronqué pour ") +
-                                   m_srcPath.string());
-        }
-      }
-      if (m_oddPrimerSize > 0) {
-        try {
-          read_exact(m_fp, m_oddPrimer.data(),
-                     static_cast<size_t>(m_oddPrimerSize));
-        } catch (const std::runtime_error &) {
-          throw std::runtime_error(
-              std::string("Primer audio impair tronqué pour ") +
-              m_srcPath.string());
-        }
-      }
+      readPrimerChannel(m_evenPrimer, m_evenPrimerSize, "pair");
+      readPrimerChannel(m_oddPrimer, m_oddPrimerSize, "impair");
 
       std::streamoff afterPrimerDataPos = m_fp.tellg();
       if (reservedEnd > afterPrimerDataPos) {
@@ -506,10 +526,31 @@ void RobotExtractor::ensurePrimerProcessed() {
 void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
                                           bool isEven) {
   if (primer.empty()) {
+    if (isEven) {
+      m_evenPrimerSize = 0;
+    } else {
+      m_oddPrimerSize = 0;
+    }    
     return;
   }
   if (primer.size() < kRobotRunwayBytes) {
-    throw std::runtime_error("Primer audio tronqué");
+    const char *channelLabel = isEven ? "pair" : "impair";
+    log_warn(m_srcPath,
+             std::string("Primer audio ") + channelLabel +
+                 " trop court (" +
+                 std::to_string(static_cast<unsigned long long>(primer.size())) +
+                 " octets), ignoré",
+             m_options);
+    ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
+    channel.predictor = 0;
+    channel.predictorInitialized = false;
+    primer.clear();
+    if (isEven) {
+      m_evenPrimerSize = 0;
+    } else {
+      m_oddPrimerSize = 0;
+    }
+    return;
   }
   const size_t runwaySamples = kRobotRunwaySamples;
   ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
