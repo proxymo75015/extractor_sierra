@@ -57,6 +57,24 @@ inline void write_u32(std::vector<std::byte> &out, size_t offset, uint32_t value
   }
 }
 
+inline void write_start_color(std::vector<std::byte> &out, size_t offset,
+                              uint8_t startColor, bool bigEndian) {
+  if (offset >= out.size()) {
+    return;
+  }
+  if (bigEndian) {
+    out[offset] = std::byte{0};
+    if (offset + 1 < out.size()) {
+      out[offset + 1] = std::byte{startColor};
+    }
+  } else {
+    out[offset] = std::byte{startColor};
+    if (offset + 1 < out.size()) {
+      out[offset + 1] = std::byte{0};
+    }
+  }
+}
+
 inline std::vector<std::byte>
 build_hunk_palette(const std::vector<Color> &colors, uint8_t startColor = 0,
                    bool sharedUsed = false, bool defaultUsed = true,
@@ -85,7 +103,8 @@ build_hunk_palette(const std::vector<Color> &colors, uint8_t startColor = 0,
   write_u16(raw, kHunkPaletteHeaderSize, paletteOffset, bigEndian);
 
   const size_t entryPos = paletteOffset;
-  raw[entryPos + kEntryStartColorOffset] = std::byte{startColor};
+  write_start_color(raw, entryPos + kEntryStartColorOffset, startColor,
+                    bigEndian);
   write_u16(raw, entryPos + kEntryNumColorsOffset,
             static_cast<uint16_t>(colors.size()), bigEndian);
   raw[entryPos + kEntryUsedOffset] =
@@ -167,7 +186,8 @@ build_hunk_palette_with_offsets(const std::vector<EntrySpec> &entries,
     if (cursor + kEntryHeaderSize > raw.size()) {
       raw.resize(cursor + kEntryHeaderSize);
     }
-    raw[cursor + kEntryStartColorOffset] = std::byte{entry.startColor};
+    write_start_color(raw, cursor + kEntryStartColorOffset, entry.startColor,
+                      bigEndian);
     write_u16(raw, cursor + kEntryNumColorsOffset,
               static_cast<uint16_t>(entry.colors.size()), bigEndian);
     raw[cursor + kEntryUsedOffset] = std::byte{entry.defaultUsed ? 1 : 0};
