@@ -1429,9 +1429,8 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
                "Packet size < frame size (i=" + std::to_string(i) +
                    ", frame=" + std::to_string(m_frameSizes[i]) +
                    ", packet=" + std::to_string(m_packetSizes[i]) +
-                   ") — ajustement",
+                   ")",
                m_options);
-      m_packetSizes[i] = m_frameSizes[i];      
     }
     uint64_t maxSize64 =
         static_cast<uint64_t>(m_frameSizes[i]) +
@@ -2069,7 +2068,28 @@ void RobotExtractor::extract() {
       throw std::runtime_error(
           "Position de paquet dépasse std::streamoff::max");
     }
-    m_fp.seekg(posOff + packetOff, std::ios::beg);
+    std::streamoff expectedPos = posOff + packetOff;
+    std::streamoff actualPos = m_fp.tellg();
+    if (actualPos < 0) {
+      throw std::runtime_error(
+          "Position de lecture après frame invalide");
+    }
+    if (expectedPos < actualPos) {
+      log_warn(m_srcPath,
+               "Position de paquet avant la position actuelle (frame=" +
+                   std::to_string(i) + ", attendu=" +
+                   std::to_string(static_cast<long long>(expectedPos)) +
+                   ", actuel=" +
+                   std::to_string(static_cast<long long>(actualPos)) +
+                   ")",
+               m_options);
+    } else if (expectedPos > actualPos) {
+      m_fp.seekg(expectedPos, std::ios::beg);
+      if (!m_fp) {
+        throw std::runtime_error(
+            "Échec du repositionnement à la fin du paquet");
+      }
+    }
   }
 
   finalizeAudio();
