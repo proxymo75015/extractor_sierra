@@ -10,7 +10,6 @@
 #include <iostream>
 #include <limits>
 #include <new>
-#include <optional>
 #include <span>
 #include <sstream>
 #include <stdexcept>
@@ -888,26 +887,6 @@ std::vector<int16_t> RobotExtractor::buildChannelStream(bool isEven) const {
   std::vector<uint8_t> occupied(channel.occupied.begin(),
                                 channel.occupied.begin() +
                                     static_cast<std::ptrdiff_t>(outputSize));
-  const ChannelAudio &otherChannel =
-      isEven ? m_oddChannelAudio : m_evenChannelAudio;
-  std::vector<int16_t> oppositeSamples(outputSize, 0);
-  std::vector<uint8_t> oppositeOccupied(outputSize, 0);
-  const size_t oppositeSamplesLimit =
-      std::min<size_t>(outputSize, otherChannel.samples.size());
-  const size_t oppositeOccupiedLimit =
-      std::min<size_t>(outputSize, otherChannel.occupied.size());
-  for (size_t i = 0; i < oppositeSamplesLimit; ++i) {
-    oppositeSamples[i] = otherChannel.samples[i];
-  }
-  for (size_t i = 0; i < oppositeOccupiedLimit; ++i) {
-    oppositeOccupied[i] = otherChannel.occupied[i];
-  }
-  auto fetchOppositeSample = [&](size_t index) -> std::optional<int16_t> {
-    if (index < oppositeOccupied.size() && oppositeOccupied[index]) {
-      return oppositeSamples[index];
-    }
-    return std::nullopt;
-  };
   auto fillGapWithSilence = [&](size_t gapStart, size_t gapEnd) {
     if (gapStart >= gapEnd) {
       return;
@@ -922,41 +901,60 @@ std::vector<int16_t> RobotExtractor::buildChannelStream(bool isEven) const {
       fillGapWithSilence(gapStart, gapEnd);
       return;
     }
-    const auto previousOppositeOpt = fetchOppositeSample(gapStart - 1);
-    if (!previousOppositeOpt.has_value()) {
+    bool hasPrevious = false;
+    size_t previousIndex = 0;
+    if (gapStart > 0) {
+      size_t search = gapStart;
+      do {
+        --search;
+        if (occupied[search]) {
+          previousIndex = search;
+          hasPrevious = true;
+          break;
+        }
+      } while (search > 0);
+      if (!hasPrevious && occupied[0]) {
+        previousIndex = 0;
+        hasPrevious = true;
+      }
+    }
+    if (!hasPrevious) {
       fillGapWithSilence(gapStart, gapEnd);
       return;
     }
-    bool hasFullOppositeCoverage = true;
-    for (size_t i = gapStart; i < gapEnd; ++i) {
-      if (!fetchOppositeSample(i).has_value()) {
-        hasFullOppositeCoverage = false;
+    bool hasNext = false;
+    size_t nextIndex = 0;
+    for (size_t i = gapEnd; i < outputSize; ++i) {
+      if (occupied[i]) {
+        nextIndex = i;
+        hasNext = true;
         break;
       }
     }
-    if (!hasFullOppositeCoverage) {
+    if (!hasNext) {
       fillGapWithSilence(gapStart, gapEnd);
       return;
     }
-    int16_t previousOpposite = previousOppositeOpt.value();
-    int16_t lastSample = working[gapStart - 1];
-    for (size_t i = gapStart; i < gapEnd; ++i) {
-      const int16_t currentOpposite = fetchOppositeSample(i).value();
-      const int32_t averaged =
-          (static_cast<int32_t>(currentOpposite) +
-           static_cast<int32_t>(previousOpposite)) >> 1;
-      const int32_t clamped = std::clamp<int32_t>(
-          averaged, std::numeric_limits<int16_t>::min(),
-          std::numeric_limits<int16_t>::max());
-      const int16_t sample = static_cast<int16_t>(clamped);
-      working[i] = sample;
-      occupied[i] = 1;
-      lastSample = sample;
-      previousOpposite = currentOpposite;
+    const int32_t previousValue = working[previousIndex];
+    const int32_t nextValue = working[nextIndex];
+    const size_t distance = nextIndex - previousIndex;
+    if (distance <= 1) {
+      fillGapWithSilence(gapStart, gapEnd);
+      return;
     }
-    if (!isEven && gapEnd < outputSize && !occupied[gapEnd]) {
-      working[gapEnd] = lastSample;
-      occupied[gapEnd] = 1;
+    const size_t gapLength = gapEnd - gapStart;
+    for (size_t i = 0; i < gapLength; ++i) {
+      const size_t currentIndex = gapStart + i;
+      const size_t offset = currentIndex - previousIndex;
+      const int32_t interpolated =
+          previousValue + static_cast<int32_t>(nextValue - previousValue) *
+                                  static_cast<int32_t>(offset) /
+                                  static_cast<int32_t>(distance);
+      const int32_t clamped = std::clamp<int32_t>(
+          interpolated, std::numeric_limits<int16_t>::min(),
+          std::numeric_limits<int16_t>::max());
+      working[currentIndex] = static_cast<int16_t>(clamped);
+      occupied[currentIndex] = 1;
     }
   };
   for (size_t i = 0; i < firstOccupied; ++i) {
