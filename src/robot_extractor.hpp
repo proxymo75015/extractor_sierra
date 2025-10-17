@@ -228,6 +228,7 @@ private:
   std::array<int32_t, kMaxCuePoints> m_cueTimes;
   std::array<uint16_t, kMaxCuePoints> m_cueValues;
   std::vector<std::byte> m_palette;
+  std::streamoff m_fileOffset = 0;
   std::streamoff m_postHeaderPos = 0;
   std::streamoff m_postPrimerPos = 0;
   std::streamsize m_evenPrimerSize = 0;
