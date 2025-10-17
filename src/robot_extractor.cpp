@@ -573,6 +573,17 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   ChannelDecodeResult evenResult = decodeChannelSamples(m_evenChannelAudio);
   ChannelDecodeResult oddResult = decodeChannelSamples(m_oddChannelAudio);
 
+    const int64_t doubledPos = static_cast<int64_t>(pos) * 2;
+  if ((doubledPos & 1LL) != 0) {
+    throw std::runtime_error("Position audio incohérente");
+  }
+
+  const bool isEvenChannel = (doubledPos & 3LL) == 0;
+  ChannelAudio &channel =
+      isEvenChannel ? m_evenChannelAudio : m_oddChannelAudio;
+  const ChannelDecodeResult &decodeResult =
+      isEvenChannel ? evenResult : oddResult;
+
   auto applyPredictorState = [](ChannelAudio &channel,
                                 const ChannelDecodeResult &result) {
     if (result.predictorValid) {
@@ -581,8 +592,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     }
   };
 
-  applyPredictorState(m_evenChannelAudio, evenResult);
-  applyPredictorState(m_oddChannelAudio, oddResult);
+  applyPredictorState(channel, decodeResult);
   
   auto hasAudibleData = [](const std::vector<int16_t> &samples) {
     return std::any_of(samples.begin(), samples.end(),
@@ -596,17 +606,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
              m_options);
     return;
   }
-
-  const int64_t doubledPos = static_cast<int64_t>(pos) * 2;
-  if ((doubledPos & 1LL) != 0) {
-    throw std::runtime_error("Position audio incohérente");
-  }
-
-  const bool isEvenChannel = (doubledPos & 3LL) == 0;
-  ChannelAudio &channel =
-      isEvenChannel ? m_evenChannelAudio : m_oddChannelAudio;
-  const ChannelDecodeResult &decodeResult =
-      isEvenChannel ? evenResult : oddResult;
   const std::vector<int16_t> &channelSamples = decodeResult.samples;
   const int64_t halfPos = doubledPos / 2;
 
