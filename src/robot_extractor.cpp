@@ -98,6 +98,18 @@ void write_span_le32(std::vector<std::byte> &data, size_t offset, uint32_t value
 } // namespace
 
 namespace robot {
+namespace {
+void trim_runway_samples(std::vector<int16_t> &samples) {
+  if (samples.size() <= kRobotRunwaySamples) {
+    samples.clear();
+    return;
+  }
+  const auto runwayEnd =
+      samples.begin() + static_cast<std::ptrdiff_t>(kRobotRunwaySamples);
+  samples.erase(samples.begin(), runwayEnd);
+}
+} // namespace
+
 RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath,
                                const std::filesystem::path &dstDir,
                                bool extractAudio, ExtractorOptions options)
@@ -546,6 +558,7 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
   }
   int16_t predictor = channel.predictorInitialized ? channel.predictor : 0;
   auto pcm = dpcm16_decompress(std::span(primer), predictor);
+  trim_runway_samples(pcm);  
   channel.predictor = predictor;
   channel.predictorInitialized = true;
   if (!m_extractAudio) {
@@ -588,6 +601,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     int16_t localPredictor =
         channel.predictorInitialized ? channel.predictor : 0;
     auto decoded = dpcm16_decompress(blockBytes, localPredictor);
+    trim_runway_samples(decoded);    
     result.finalPredictor = localPredictor;
     result.predictorValid = true;
     result.samples = std::move(decoded);
