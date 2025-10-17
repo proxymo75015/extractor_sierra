@@ -1027,49 +1027,58 @@ RobotExtractor::parseHunkPalette(std::span<const std::byte> raw) {
       return parsed;
     }
     
-    const size_t offsetsBytes = static_cast<size_t>(2 * numPalettes);
-    if (raw.size() < offsetTablePos + offsetsBytes) {
-      throw std::runtime_error("Table d'offset de palette incomplète");
-    }
+    const size_t offsetsBytesDeclared = static_cast<size_t>(2 * numPalettes);
+    const size_t bytesAvailableForOffsets =
+        raw.size() > offsetTablePos ? raw.size() - offsetTablePos : 0;
+    const size_t offsetsInBlob =
+        std::min<size_t>(numPalettes, bytesAvailableForOffsets / 2);
+    const size_t actualOffsetsBytes = offsetsInBlob * 2;
+    const size_t offsetsEnd = offsetTablePos + actualOffsetsBytes;
+    const size_t tableEnd = offsetTablePos + offsetsBytesDeclared;
 
-    const size_t tableEnd = offsetTablePos + offsetsBytes;
-
-    auto readOffsets = [&](bool assumeBigEndian)
-        -> std::optional<std::vector<size_t>> {
+    auto readOffsets = [&](bool assumeBigEndian) {
       std::vector<size_t> offsets;
-      offsets.reserve(numPalettes);
-      for (uint8_t i = 0; i < numPalettes; ++i) {
-        const size_t pos = offsetTablePos + static_cast<size_t>(i) * 2;
-        const uint16_t entryOffset =
-            assumeBigEndian ? read_u16_be(raw, pos) : read_u16(raw, pos);
-        if (entryOffset < offsetTablePos + offsetsBytes ||
-            entryOffset > raw.size()) {
-          return std::nullopt;
-        }
+      offsets.reserve(offsetsInBlob);
+      for (size_t i = 0; i < offsetsInBlob; ++i) {
+        const size_t pos = offsetTablePos + i * 2;
+        const uint16_t entryOffset = assumeBigEndian
+                                         ? read_u16_be(raw, pos)
+                                         : read_u16(raw, pos);
         offsets.push_back(static_cast<size_t>(entryOffset));
       }
       return offsets;
     };
 
-    auto offsetsOpt = readOffsets(false);
-    bool paletteBigEndian = false;
-    if (!offsetsOpt) {
-      offsetsOpt = readOffsets(true);
-      if (!offsetsOpt) {
-        throw std::runtime_error("Offset de palette invalide");
+    auto offsetsLE = readOffsets(false);
+    auto offsetsBE = readOffsets(true);
+    auto scoreOffsets = [&](const std::vector<size_t> &offsets) {
+      size_t valid = 0;
+      for (const auto offset : offsets) {
+        if (offset >= offsetsEnd && offset <= raw.size()) {
+          ++valid;
+        }
       }
+      return valid;
+    };
+    const size_t validLE = scoreOffsets(offsetsLE);
+    const size_t validBE = scoreOffsets(offsetsBE);
+
+    bool paletteBigEndian = false;
+    std::vector<size_t> offsets = offsetsLE;
+    if (validBE > validLE) {
       paletteBigEndian = true;
+      offsets = offsetsBE;
     }
     
     std::vector<std::byte> converted;
     if (paletteBigEndian) {
       converted.assign(raw.begin(), raw.end());
-      for (size_t i = 0; i < offsetsOpt->size(); ++i) {
+      for (size_t i = 0; i < offsets.size(); ++i) {
         write_span_le16(converted, offsetTablePos + i * 2,
-                       static_cast<uint16_t>((*offsetsOpt)[i]));
+                        static_cast<uint16_t>(offsets[i]));
       }
       size_t conversionMinEntryOffset = std::numeric_limits<size_t>::max();
-      for (const auto offset : *offsetsOpt) {
+      for (const auto offset : offsets) {
         conversionMinEntryOffset = std::min(conversionMinEntryOffset, offset);
       }
       if (tableEnd + sizeof(uint16_t) <= raw.size() &&
@@ -1079,7 +1088,7 @@ RobotExtractor::parseHunkPalette(std::span<const std::byte> raw) {
           write_span_le16(converted, tableEnd, candidate);
         }
       }
-      for (const auto offset : *offsetsOpt) {
+      for (const auto offset : offsets) {
         if (offset + kEntryHeaderSize > raw.size()) {
           continue;
         }
@@ -1099,18 +1108,19 @@ RobotExtractor::parseHunkPalette(std::span<const std::byte> raw) {
     };
 
     std::vector<EntryPointer> entryPointers;
-    entryPointers.reserve(numPalettes);
-    for (uint8_t i = 0; i < numPalettes; ++i) {
-      const size_t pos = offsetTablePos + static_cast<size_t>(i) * 2;
-      const uint16_t entryOffset = read_u16(raw, pos);
-      if (entryOffset < offsetTablePos + offsetsBytes ||
-          entryOffset > raw.size()) {
-        throw std::runtime_error("Offset de palette invalide");
+    entryPointers.reserve(offsets.size());
+    for (size_t i = 0; i < offsets.size(); ++i) {
+      const size_t entryOffset = offsets[i];
+      if (entryOffset < offsetsEnd || entryOffset > raw.size()) {
+        continue;
       }
-      entryPointers.push_back(EntryPointer{static_cast<size_t>(entryOffset), i});
+      entryPointers.push_back(
+          EntryPointer{entryOffset, static_cast<uint8_t>(i)});
     }
-    
-    size_t minEntryOffset = std::numeric_limits<size_t>::max();
+
+    size_t minEntryOffset = entryPointers.empty()
+                                ? raw.size()
+                                : std::numeric_limits<size_t>::max();
     for (const auto &ptr : entryPointers) {
       minEntryOffset = std::min(minEntryOffset, ptr.offset);
     }
@@ -1137,13 +1147,13 @@ RobotExtractor::parseHunkPalette(std::span<const std::byte> raw) {
     bool firstEntry = true;
     uint16_t firstStart = 0;
     uint16_t maxEnd = 0;
-    size_t lastEntryEnd = tableEnd;
+    size_t lastEntryEnd = offsetsEnd;
 
     for (size_t entryIndex = 0; entryIndex < entryPointers.size(); ++entryIndex) {
       const auto &entryPtr = entryPointers[entryIndex];
       const size_t offset = entryPtr.offset;
       if (offset > raw.size() - kEntryHeaderSize) {
-        throw std::runtime_error("Palette SCI HunkPalette tronquée");
+        continue;
       }
       auto entry = raw.subspan(offset);
       size_t entryLimit = raw.size();
@@ -1156,8 +1166,7 @@ RobotExtractor::parseHunkPalette(std::span<const std::byte> raw) {
         entryLimit = raw.size();
       }
       if (entryLimit < offset) {
-        throw std::runtime_error(
-            "Borne de palette avant l'offset de l'entrée");
+        continue;
       }
       size_t entryExtent = entryLimit - offset;
       size_t maxPayloadBytes =
@@ -1273,8 +1282,7 @@ RobotExtractor::parseHunkPalette(std::span<const std::byte> raw) {
     size_t remapOffset =
         hasExplicitRemapOffset ? explicitRemapOffset : lastEntryEnd;
     if (remapOffset < lastEntryEnd) {
-      throw std::runtime_error(
-          "Offset de remap avant la fin des entrées de palette");
+      remapOffset = lastEntryEnd;
     }
 
     if (remapOffset < raw.size()) {
