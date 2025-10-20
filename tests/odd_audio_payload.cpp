@@ -126,7 +126,8 @@ TEST_CASE("Odd-sized audio payload throws") {
   std::vector<std::byte> primerBytes(kRunwayBytes,
                                      std::byte{static_cast<unsigned char>(0x88)});
   int16_t evenPredictor = 0;
-  const auto primerSamples = decompress_without_runway(primerBytes, evenPredictor);
+  const auto primerSamples =
+      audio_test::decompress_primer(primerBytes, evenPredictor);
 
   std::vector<std::byte> block(kZeroPrefixBytes + 1, std::byte{0});
   block.back() = std::byte{static_cast<unsigned char>(0x88)};
