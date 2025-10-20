@@ -158,6 +158,7 @@ private:
   void ensurePrimerProcessed();
   void processPrimerChannel(std::vector<std::byte> &primer, bool isEven);
   void process_audio_block(std::span<const std::byte> block, int32_t pos);
+  void setAudioStartOffset(int64_t offset);
   void readSizesAndCues(bool allowShortFile = false);
   bool exportFrame(int frameNo, nlohmann::json &frameJson);
   void writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate,
@@ -257,6 +258,7 @@ private:
   };
   ChannelAudio m_evenChannelAudio;
   ChannelAudio m_oddChannelAudio;
+  int64_t m_audioStartOffset = 0;
 };
 
 #ifdef ROBOT_EXTRACTOR_TESTING
@@ -340,6 +342,9 @@ struct RobotExtractorTester {
   static void processAudioBlock(RobotExtractor &r,
                                 std::span<const std::byte> block, int32_t pos) {
     r.process_audio_block(block, pos);
+  }
+  static void setAudioStartOffset(RobotExtractor &r, int64_t offset) {
+    r.setAudioStartOffset(offset);
   }
   static void writeWav(RobotExtractor &r, const std::vector<int16_t> &samples,
                        uint32_t sampleRate, size_t blockIndex,
