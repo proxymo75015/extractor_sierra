@@ -135,8 +135,7 @@ TEST_CASE("Audio stream fills gaps with interpolation") {
   std::vector<uint8_t> primerData = {0x10, 0x32, 0x54, 0x76, 0x98, 0xBA,
                                      0xDC, 0xFE, 0x13, 0x57, 0x9B, 0xDF};
   int16_t predictor = 0;
-  auto expectedPrimer =
-      audio_test::decompress_without_runway(primerData, predictor);
+  auto expectedPrimer = audio_test::decompress_primer(primerData, predictor);
 
   std::vector<uint8_t> blockPayloadA = {0x21, 0x43, 0x65, 0x87,
                                         0xA9, 0xCB, 0xED, 0x0F};
@@ -235,8 +234,7 @@ TEST_CASE("Audio blocks remain contiguous after runway removal") {
   std::vector<uint8_t> primerData = {0x10, 0x32, 0x54, 0x76,
                                      0x98, 0xBA, 0xDC, 0xFE};
   int16_t predictor = 0;
-  auto expectedPrimer =
-      audio_test::decompress_without_runway(primerData, predictor);
+  auto expectedPrimer = audio_test::decompress_primer(primerData, predictor);
   const int16_t predictorAfterPrimer = predictor;
 
   std::vector<uint8_t> blockRunway = {0x08, 0x18, 0x28, 0x38,
@@ -333,8 +331,7 @@ TEST_CASE("Audio blocks honor absolute positions when reordered") {
   std::vector<uint8_t> primerData = {0x10, 0x32, 0x54, 0x76, 0x98, 0xBA,
                                      0xDC, 0xFE};
   int16_t predictor = 0;
-  auto expectedPrimer =
-      audio_test::decompress_without_runway(primerData, predictor);
+  auto expectedPrimer = audio_test::decompress_primer(primerData, predictor);
 
   std::vector<uint8_t> highRunway = {0x11, 0x21, 0x31, 0x41,
                                      0x51, 0x61, 0x71, 0x81};
