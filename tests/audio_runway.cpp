@@ -138,7 +138,7 @@ TEST_CASE("Audio block with runway triggers error") {
                                      std::byte{static_cast<unsigned char>(0x88)});
   int16_t predictor = 0;
   const auto primerSamples =
-      decompress_without_runway(primerBytes, predictor);
+      audio_test::decompress_primer(primerBytes, predictor);
 
   std::vector<std::byte> zeroPrefix(kZeroPrefixBytes, std::byte{0});
   std::vector<std::byte> payload = {
