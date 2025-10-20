@@ -191,7 +191,7 @@ TEST_CASE("Retransmitted audio blocks append only fresh data") {
   auto primerBytes = audio_test::to_bytes(primerEvenVec);
   int16_t evenPredictor = 0;
   auto primerSamples =
-      audio_test::decompress_without_runway(primerBytes, evenPredictor);
+      audio_test::decompress_primer(primerBytes, evenPredictor);
   (void)primerSamples;
   auto expectedBlock1 = decode_block(block1, evenPredictor);
   auto expectedBlock2 = decode_block(block2, evenPredictor);
