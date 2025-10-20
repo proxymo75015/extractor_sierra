@@ -653,7 +653,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     return;
   }
   const std::vector<int16_t> &channelSamples = decodeResult.samples;
-  const int64_t halfPos = doubledPos / 2;
+  const int64_t halfPos = static_cast<int64_t>(pos);
 
   AppendPlan plan{};
   AppendPlanStatus status = prepareChannelAppend(channel, isEvenChannel,
