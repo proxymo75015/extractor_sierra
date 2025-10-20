@@ -39,7 +39,7 @@ void push32(std::vector<uint8_t> &v, uint32_t x) {
 std::vector<int16_t>
 decompress_primer_block(const std::vector<uint8_t> &rawBytes,
                         int16_t &predictor) {
-  return audio_test::decompress_without_runway(rawBytes, predictor);
+  return audio_test::decompress_primer(rawBytes, predictor);
 }
 
 std::vector<uint8_t> build_header(uint16_t primerReserved) {
