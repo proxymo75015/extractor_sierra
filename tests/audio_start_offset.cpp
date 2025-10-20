@@ -236,3 +236,49 @@ TEST_CASE("Audio start offset routed using doubled positions") {
 
   REQUIRE(evenStream.size() >= 4);
 }
+
+TEST_CASE("Audio start offset parity matches adjusted origin") {
+  fs::path tmpDir = fs::temp_directory_path();
+  fs::path input = tmpDir / "audio_start_offset_parity.rbt";
+  fs::path outDir = tmpDir / "audio_start_offset_parity_out";
+  if (fs::exists(outDir)) {
+    fs::remove_all(outDir);
+  }
+  fs::create_directories(outDir);
+
+  {
+    std::ofstream dummy(input, std::ios::binary);
+    dummy.put(0);
+  }
+
+  robot::RobotExtractor extractor(input, outDir, true);
+  RobotExtractorTester::setAudioStartOffset(extractor, 1);
+
+  std::vector<uint8_t> raw = {0x11, 0x22, 0x33, 0x44, 0x55};
+  int16_t predictor = 0;
+  auto expectedSamples = decompress_truncated_block(raw, predictor);
+  REQUIRE_FALSE(expectedSamples.empty());
+
+  std::vector<std::byte> block(kZeroPrefixBytes + raw.size(), std::byte{0});
+  for (size_t i = 0; i < raw.size(); ++i) {
+    block[kZeroPrefixBytes + i] = std::byte{raw[i]};
+  }
+
+  constexpr int32_t blockPos = 5; // absolute position shares odd parity
+  RobotExtractorTester::processAudioBlock(extractor, std::span(block),
+                                          blockPos);
+
+  const auto evenStream =
+      RobotExtractorTester::buildChannelStream(extractor, true);
+  const auto oddStream =
+      RobotExtractorTester::buildChannelStream(extractor, false);
+
+  REQUIRE_FALSE(evenStream.empty());
+  REQUIRE(oddStream.empty());
+
+  REQUIRE(evenStream.size() >= expectedSamples.size());
+  auto startIt = std::search(evenStream.begin(), evenStream.end(),
+                             expectedSamples.begin(),
+                             expectedSamples.end());
+  REQUIRE(startIt != evenStream.end());
+}
