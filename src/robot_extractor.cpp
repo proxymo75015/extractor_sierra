@@ -630,8 +630,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
       channel.predictorInitialized = true;
     }
   };
-
-  applyPredictorState(channel, decodeResult);
   
   auto hasAudibleData = [](const std::vector<int16_t> &samples) {
     return std::any_of(samples.begin(), samples.end(),
@@ -675,6 +673,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
       }
       channel.seenNonPrimerBlock = true;
     }
+    applyPredictorState(channel, decodeResult);    
     return;
   case AppendPlanStatus::Conflict:
     log_warn(m_srcPath,
