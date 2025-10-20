@@ -5,7 +5,6 @@
 #include <vector>
 
 #include "robot_extractor.hpp"
-#include "wav_helpers.hpp"
 
 using robot::RobotExtractor;
 using robot::RobotExtractorTester;
@@ -64,7 +63,7 @@ build_primer_header(uint32_t total, uint32_t evenSize, uint32_t oddSize) {
   return p;
 }
 
-TEST_CASE("Primer mismatch realigns stream and preserves primer data") {
+TEST_CASE("Primer mismatch realigns stream and skips unsafe primer data") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "primer_reserved_mismatch.rbt";
   fs::path outDir = tmpDir / "primer_reserved_mismatch_out";
@@ -111,63 +110,25 @@ TEST_CASE("Primer mismatch realigns stream and preserves primer data") {
       primerHeaderPos + static_cast<std::streamoff>(reservedSize);
   REQUIRE(file.tellg() == expectedPos);
   
-  REQUIRE(RobotExtractorTester::evenPrimerSize(extractor) ==
-          static_cast<std::streamsize>(kEvenPrimerSize));
-  REQUIRE(RobotExtractorTester::oddPrimerSize(extractor) ==
-          static_cast<std::streamsize>(kOddPrimerSize));
+  REQUIRE(RobotExtractorTester::evenPrimerSize(extractor) == 0);
+  REQUIRE(RobotExtractorTester::oddPrimerSize(extractor) == 0);
 
+  const auto &evenPrimer = RobotExtractorTester::evenPrimer(extractor);
+  const auto &oddPrimer = RobotExtractorTester::oddPrimer(extractor);
+  REQUIRE(evenPrimer.empty());
+  REQUIRE(oddPrimer.empty());
+  
   RobotExtractorTester::finalizeAudio(extractor);
 
   const auto evenStream =
       RobotExtractorTester::buildChannelStream(extractor, true);
   const auto oddStream =
       RobotExtractorTester::buildChannelStream(extractor, false);
-
+  REQUIRE(evenStream.empty());
+  REQUIRE(oddStream.empty());
+  
   fs::path stereoWav = outDir / "frame_00000.wav";
-  REQUIRE(fs::exists(stereoWav));
-
-  std::ifstream wav(stereoWav, std::ios::binary);
-  REQUIRE(wav);
-  auto layout = read_wav_layout(wav);
-  REQUIRE(layout.sampleRate == 22050u);
-  uint32_t dataBytes = layout.dataSize;
-
-  const size_t expectedFrames =
-      std::max(evenStream.size(), oddStream.size());
-  REQUIRE(dataBytes == expectedFrames * 2 * sizeof(int16_t));
-
-  std::vector<int16_t> interleaved(dataBytes / sizeof(int16_t));
-  if (!interleaved.empty()) {
-    wav.read(reinterpret_cast<char *>(interleaved.data()),
-             static_cast<std::streamsize>(dataBytes));
-    REQUIRE(wav.gcount() == static_cast<std::streamsize>(dataBytes));
-  }
-
-  std::vector<int16_t> evenFromWav;
-  std::vector<int16_t> oddFromWav;
-  evenFromWav.reserve(expectedFrames);
-  oddFromWav.reserve(expectedFrames);
-  for (size_t i = 0; i < expectedFrames; ++i) {
-    evenFromWav.push_back(interleaved[i * 2]);
-    oddFromWav.push_back(interleaved[i * 2 + 1]);
-  }
-
-  REQUIRE(evenFromWav.size() == expectedFrames);
-  REQUIRE(oddFromWav.size() == expectedFrames);
-  REQUIRE(evenStream.size() <= evenFromWav.size());
-  REQUIRE(oddStream.size() <= oddFromWav.size());
-  for (size_t i = 0; i < evenStream.size(); ++i) {
-    REQUIRE(evenFromWav[i] == evenStream[i]);
-  }
-  for (size_t i = evenStream.size(); i < evenFromWav.size(); ++i) {
-    REQUIRE(evenFromWav[i] == 0);
-  }
-  for (size_t i = 0; i < oddStream.size(); ++i) {
-    REQUIRE(oddFromWav[i] == oddStream[i]);
-  }
-  for (size_t i = oddStream.size(); i < oddFromWav.size(); ++i) {
-    REQUIRE(oddFromWav[i] == 0);
-  }
+  REQUIRE_FALSE(fs::exists(stereoWav));
 
   int nextByte = file.peek();
   REQUIRE(nextByte == 0xCC);
