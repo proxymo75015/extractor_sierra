@@ -92,7 +92,7 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
                                      std::byte{static_cast<unsigned char>(0x88)});
   int16_t evenPredictor = 0;
   auto primerSamples =
-      audio_test::decompress_without_runway(primerBytes, evenPredictor);
+      audio_test::decompress_primer(primerBytes, evenPredictor);
   (void)primerSamples;  
   uint32_t block1Pos = 0;
   const uint32_t block0Pos = 4;  
