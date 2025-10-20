@@ -563,7 +563,9 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     return;
   }
   if (!pcm.empty()) {
-    appendChannelSamples(isEven, isEven ? 0 : 1, pcm);
+    const int64_t primerHalfPos =
+        isEven ? m_audioStartOffset : m_audioStartOffset + 1;
+    appendChannelSamples(isEven, primerHalfPos, pcm);
   }
 }
 
@@ -609,7 +611,8 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   ChannelDecodeResult evenResult = decodeChannelSamples(m_evenChannelAudio);
   ChannelDecodeResult oddResult = decodeChannelSamples(m_oddChannelAudio);
 
-    const int64_t doubledPos = static_cast<int64_t>(pos) * 2;
+  const int64_t relativePos = static_cast<int64_t>(pos) - m_audioStartOffset;
+  const int64_t doubledPos = relativePos * 2;
   if ((doubledPos & 1LL) != 0) {
     throw std::runtime_error("Position audio incohérente");
   }
@@ -695,10 +698,15 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   }
 }
 
+void RobotExtractor::setAudioStartOffset(int64_t offset) {
+  m_audioStartOffset = offset;
+}
+
 RobotExtractor::AppendPlanStatus RobotExtractor::prepareChannelAppend(
     ChannelAudio &channel, bool isEven, int64_t halfPos,
     const std::vector<int16_t> &samples, AppendPlan &plan) {
-  const bool posIsEven = (halfPos & 1LL) == 0;
+  const int64_t relativeHalfPos = halfPos - m_audioStartOffset;
+  const bool posIsEven = (relativeHalfPos & 1LL) == 0;
   plan.posIsEven = posIsEven;
   if ((posIsEven && !isEven) || (!posIsEven && isEven)) {
     return AppendPlanStatus::ParityMismatch;
@@ -2071,6 +2079,7 @@ void RobotExtractor::extract() {
   m_oddChannelAudio.occupied.clear();
   m_oddChannelAudio.startHalfPos = 0;
   m_oddChannelAudio.startHalfPosInitialized = false;
+  m_audioStartOffset = 0;
   readHeader();
   readPrimer();
   readPalette();
