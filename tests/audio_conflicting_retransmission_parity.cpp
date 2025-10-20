@@ -85,7 +85,7 @@ std::vector<uint8_t> build_block(
 
 } // namespace
 
-TEST_CASE("Conflicting retransmission overwrites while parity mismatch is ignored") {
+TEST_CASE("Conflicting retransmission is rejected while parity mismatch is ignored") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "audio_conflict_parity.rbt";
   fs::path outDir = tmpDir / "audio_conflict_parity_out";
@@ -214,8 +214,7 @@ TEST_CASE("Conflicting retransmission overwrites while parity mismatch is ignore
   auto conflictSamples = decode_block(conflictBlock, predictor);
   REQUIRE_FALSE(conflictSamples.empty());
   auto expectedEvenAfterConflict = expectedEvenAfterFirst;
-  updateEvenExpected(expectedEvenAfterConflict, block1Start, conflictSamples);
-  
+
   REQUIRE(afterConflictEven == expectedEvenAfterConflict);
   REQUIRE(afterConflictOdd == baselineOdd);
 
