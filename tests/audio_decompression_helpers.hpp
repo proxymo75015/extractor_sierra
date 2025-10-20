@@ -22,6 +22,11 @@ to_bytes(const std::vector<uint8_t> &src) {
 }
 
 inline std::vector<int16_t>
+decompress_primer(std::span<const std::byte> bytes, int16_t &predictor) {
+  return robot::dpcm16_decompress(bytes, predictor);
+}
+
+inline std::vector<int16_t>
 decompress_without_runway(std::span<const std::byte> bytes,
                           int16_t &predictor) {
   auto pcm = robot::dpcm16_decompress(bytes, predictor);
@@ -33,11 +38,24 @@ decompress_without_runway(std::span<const std::byte> bytes,
 }
 
 inline std::vector<int16_t>
+decompress_primer(const std::vector<uint8_t> &src, int16_t &predictor) {
+  auto bytes = to_bytes(src);
+  return decompress_primer(
+      std::span<const std::byte>(bytes.data(), bytes.size()), predictor);
+}
+
+inline std::vector<int16_t>
 decompress_without_runway(const std::vector<uint8_t> &src,
                           int16_t &predictor) {
   auto bytes = to_bytes(src);
   return decompress_without_runway(
       std::span<const std::byte>(bytes.data(), bytes.size()), predictor);
+}
+
+inline std::vector<int16_t>
+decompress_primer(const std::vector<std::byte> &src, int16_t &predictor) {
+  return decompress_primer(
+      std::span<const std::byte>(src.data(), src.size()), predictor);
 }
 
 inline std::vector<int16_t>
