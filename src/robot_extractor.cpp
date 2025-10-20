@@ -404,14 +404,28 @@ void RobotExtractor::readPrimer() {
 
       const bool primerSizesMatchReserved =
           primerSizesSum == static_cast<std::uint64_t>(m_primerReservedSize);
+      const std::streamoff reservedEnd =
+          primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
+
       if (!primerSizesMatchReserved) {
         log_warn(m_srcPath,
                  "Somme des tailles primer incohérente avec primerReservedSize",
                  m_options);
+        m_evenPrimerSize = 0;
+        m_oddPrimerSize = 0;
+        m_evenPrimer.clear();
+        m_oddPrimer.clear();
+        m_fp.seekg(reservedEnd, std::ios::beg);
+        m_postPrimerPos = m_fp.tellg();
+        m_primerProcessed = true;
+        if (m_options.debug_index) {
+          log_error(m_srcPath,
+                    "readPrimer: position après seekg = " +
+                        std::to_string(m_fp.tellg()),
+                    m_options);
+        }
+        return;
       }
-
-      const std::streamoff reservedEnd =
-          primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
 
       auto readPrimerChannel = [this](std::vector<std::byte> &buffer,
                                       std::streamsize requestedSize,
