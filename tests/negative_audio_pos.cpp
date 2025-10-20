@@ -164,7 +164,7 @@ TEST_CASE("Audio block with position -1 is adjusted without corruption") {
   }
   int16_t evenPredictor = 0;
   auto primerSamples =
-      audio_test::decompress_without_runway(primerBytes, evenPredictor);
+      audio_test::decompress_primer(primerBytes, evenPredictor);
   (void)primerSamples;
   int16_t oddPredictor = 0;
   auto fullSamples =
