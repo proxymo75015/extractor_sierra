@@ -787,11 +787,15 @@ RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
   plan.leadingOverlap = 0;
   while (plan.leadingOverlap < plan.availableSamples) {
     size_t index = plan.startSample + plan.leadingOverlap;
-    if (index >= channel.occupied.size() || !channel.occupied[index]) {
+    if (index >= channel.occupied.size()) {
       break;
     }
-    if (channel.samples[index] != samples[plan.skipSamples + plan.leadingOverlap]) {
+    if (!channel.occupied[index]) {
       break;
+    }
+    if (channel.samples[index] !=
+        samples[plan.skipSamples + plan.leadingOverlap]) {
+      return AppendPlanStatus::Conflict;
     }
     ++plan.leadingOverlap;
   }
