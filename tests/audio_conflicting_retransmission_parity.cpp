@@ -102,7 +102,7 @@ TEST_CASE("Conflicting retransmission is rejected while parity mismatch is ignor
   data.insert(data.end(), primerEven.begin(), primerEven.end());
   int16_t predictor = 0;
   std::vector<uint8_t> primerBytes(primerEven.begin(), primerEven.end());
-  audio_test::decompress_without_runway(primerBytes, predictor);  
+  audio_test::decompress_primer(primerBytes, predictor);
 
   for (uint16_t i = 0; i < kNumFrames; ++i) {
     push16(data, 2); // frame size placeholder
