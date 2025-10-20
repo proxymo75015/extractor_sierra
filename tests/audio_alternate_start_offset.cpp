@@ -114,7 +114,7 @@ TEST_CASE("Alternate audio start offset persists across blocks") {
   std::vector<uint8_t> primerData = {0, 0, 0, 0, 0, 0, 0, 0, 10, 10, 10};
   int16_t predictor = 0;
   auto primerSamples =
-      audio_test::decompress_without_runway(primerData, predictor);
+      audio_test::decompress_primer(primerData, predictor);
   REQUIRE(primerSamples.size() == 3);
 
   BlockInfo block0;
