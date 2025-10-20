@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "robot_extractor.hpp"
+#include "audio_decompression_helpers.hpp"
 
 using robot::RobotExtractor;
 using robot::RobotExtractorTester;
@@ -63,7 +64,7 @@ build_primer_header(uint32_t total, uint32_t evenSize, uint32_t oddSize) {
   return p;
 }
 
-TEST_CASE("Primer mismatch realigns stream and skips unsafe primer data") {
+TEST_CASE("Primer mismatch preserves primer data while realigning stream") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "primer_reserved_mismatch.rbt";
   fs::path outDir = tmpDir / "primer_reserved_mismatch_out";
@@ -110,13 +111,32 @@ TEST_CASE("Primer mismatch realigns stream and skips unsafe primer data") {
       primerHeaderPos + static_cast<std::streamoff>(reservedSize);
   REQUIRE(file.tellg() == expectedPos);
   
-  REQUIRE(RobotExtractorTester::evenPrimerSize(extractor) == 0);
-  REQUIRE(RobotExtractorTester::oddPrimerSize(extractor) == 0);
+  REQUIRE(RobotExtractorTester::evenPrimerSize(extractor) ==
+          static_cast<std::streamsize>(kEvenPrimerSize));
+  REQUIRE(RobotExtractorTester::oddPrimerSize(extractor) ==
+          static_cast<std::streamsize>(kOddPrimerSize));
 
   const auto &evenPrimer = RobotExtractorTester::evenPrimer(extractor);
   const auto &oddPrimer = RobotExtractorTester::oddPrimer(extractor);
-  REQUIRE(evenPrimer.empty());
-  REQUIRE(oddPrimer.empty());
+  REQUIRE(evenPrimer.size() == evenPrimerBytes.size());
+  REQUIRE(oddPrimer.size() == oddPrimerBytes.size());
+  for (size_t i = 0; i < evenPrimer.size(); ++i) {
+    REQUIRE(evenPrimer[i] == std::byte{evenPrimerBytes[i]});
+  }
+  for (size_t i = 0; i < oddPrimer.size(); ++i) {
+    REQUIRE(oddPrimer[i] == std::byte{oddPrimerBytes[i]});
+  }
+
+  const std::vector<uint8_t> evenPrimerVec(evenPrimerBytes.begin(),
+                                           evenPrimerBytes.end());
+  const std::vector<uint8_t> oddPrimerVec(oddPrimerBytes.begin(),
+                                          oddPrimerBytes.end());
+  int16_t evenPredictor = 0;
+  int16_t oddPredictor = 0;
+  const auto evenExpected =
+      audio_test::decompress_without_runway(evenPrimerVec, evenPredictor);
+  const auto oddExpected =
+      audio_test::decompress_without_runway(oddPrimerVec, oddPredictor);
   
   RobotExtractorTester::finalizeAudio(extractor);
 
@@ -124,11 +144,15 @@ TEST_CASE("Primer mismatch realigns stream and skips unsafe primer data") {
       RobotExtractorTester::buildChannelStream(extractor, true);
   const auto oddStream =
       RobotExtractorTester::buildChannelStream(extractor, false);
-  REQUIRE(evenStream.empty());
-  REQUIRE(oddStream.empty());
-  
+  REQUIRE(evenStream == evenExpected);
+  REQUIRE(oddStream == oddExpected);
+
   fs::path stereoWav = outDir / "frame_00000.wav";
-  REQUIRE_FALSE(fs::exists(stereoWav));
+  if (!evenExpected.empty() || !oddExpected.empty()) {
+    REQUIRE(fs::exists(stereoWav));
+  } else {
+    REQUIRE_FALSE(fs::exists(stereoWav));
+  }
 
   int nextByte = file.peek();
   REQUIRE(nextByte == 0xCC);
