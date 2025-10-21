@@ -707,9 +707,6 @@ RobotExtractor::AppendPlanStatus RobotExtractor::prepareChannelAppend(
   const int64_t relativeHalfPos = halfPos - m_audioStartOffset;
   const bool posIsEven = (relativeHalfPos & 1LL) == 0;
   plan.posIsEven = posIsEven;
-  if ((posIsEven && !isEven) || (!posIsEven && isEven)) {
-    return AppendPlanStatus::ParityMismatch;
-  }
   if (samples.empty()) {
     return AppendPlanStatus::Skip;
   }
@@ -720,9 +717,6 @@ RobotExtractor::AppendPlanStatus RobotExtractor::prepareChannelAppend(
     adjustedHalfPos = 0;
   } else if (halfPos < channel.startHalfPos) {
     const int64_t deltaHalf = channel.startHalfPos - halfPos;
-    if ((deltaHalf & 1LL) != 0) {
-      return AppendPlanStatus::ParityMismatch;
-    }
     const size_t deltaSamples = static_cast<size_t>(deltaHalf / 2);
     if (deltaSamples != 0) {
       channel.samples.insert(channel.samples.begin(), deltaSamples, 0);
@@ -741,12 +735,6 @@ RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
     const std::vector<int16_t> &samples, AppendPlan &plan) const {
   if (samples.empty()) {
     return AppendPlanStatus::Skip;
-  }
-  if (plan.posIsEven && !isEven) {
-    return AppendPlanStatus::ParityMismatch;
-  }
-  if (!plan.posIsEven && isEven) {
-    return AppendPlanStatus::ParityMismatch;
   }
   int64_t startHalf = halfPos;
   int64_t startSampleSigned = 0;
