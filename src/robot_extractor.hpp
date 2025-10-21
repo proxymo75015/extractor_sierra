@@ -157,7 +157,8 @@ private:
   void readPalette();
   void ensurePrimerProcessed();
   void processPrimerChannel(std::vector<std::byte> &primer, bool isEven);
-  void process_audio_block(std::span<const std::byte> block, int32_t pos);
+  void process_audio_block(std::span<const std::byte> block, int32_t pos,
+                           bool zeroCompressed = false);
   void setAudioStartOffset(int64_t offset);
   void readSizesAndCues(bool allowShortFile = false);
   bool exportFrame(int frameNo, nlohmann::json &frameJson);
