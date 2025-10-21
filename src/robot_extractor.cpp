@@ -1018,12 +1018,70 @@ void RobotExtractor::finalizeAudio() {
   if (evenStream.empty() && oddStream.empty()) {
     return;
   }
+  const bool hasEvenData = !evenStream.empty();
+  const bool hasOddData = !oddStream.empty();
+
+  int64_t jointMinHalfPos = 0;
+  bool jointMinInitialized = false;
+  auto considerStart = [&](const ChannelAudio &channel, bool hasData) {
+    if (!hasData || !channel.startHalfPosInitialized) {
+      return;
+    }
+    if (!jointMinInitialized) {
+      jointMinHalfPos = channel.startHalfPos;
+      jointMinInitialized = true;
+    } else {
+      jointMinHalfPos = std::min(jointMinHalfPos, channel.startHalfPos);
+    }
+  };
+  considerStart(m_evenChannelAudio, hasEvenData);
+  considerStart(m_oddChannelAudio, hasOddData);
+  if (!jointMinInitialized) {
+    jointMinHalfPos = 0;
+    jointMinInitialized = true;
+  }
+
+  auto applyLeadingSilence = [&](std::vector<int16_t> &stream,
+                                 const ChannelAudio &channel, bool isEven) {
+    if (stream.empty() || !channel.startHalfPosInitialized) {
+      return;
+    }
+    int64_t relativeHalfPos = channel.startHalfPos - jointMinHalfPos;
+    if (relativeHalfPos <= 0) {
+      return;
+    }
+    int64_t adjust = 0;
+    if ((relativeHalfPos & 1LL) != 0 && isEven && (jointMinHalfPos & 1LL) != 0) {
+      adjust = 1;
+    }
+    const int64_t leadingSamples64 = (relativeHalfPos + adjust) / 2;
+    if (leadingSamples64 <= 0) {
+      return;
+    }
+    if (leadingSamples64 >
+        static_cast<int64_t>(std::numeric_limits<size_t>::max())) {
+      throw std::runtime_error("Décalage audio dépasse la capacité");
+    }
+    const size_t leadingSamples = static_cast<size_t>(leadingSamples64);
+    stream.insert(stream.begin(), leadingSamples, 0);
+  };
+
+  applyLeadingSilence(evenStream, m_evenChannelAudio, true);
+  applyLeadingSilence(oddStream, m_oddChannelAudio, false);
+
   const size_t maxSamples = std::max(evenStream.size(), oddStream.size());
+  if (hasEvenData) {
+    evenStream.resize(maxSamples, 0);
+  }
+  if (hasOddData) {
+    oddStream.resize(maxSamples, 0);
+  }
+
   std::vector<int16_t> mono;
   mono.reserve(maxSamples * 2);
   for (size_t i = 0; i < maxSamples; ++i) {
     const int16_t evenSample = i < evenStream.size() ? evenStream[i] : 0;
-    const int16_t oddSample = i < oddStream.size() ? oddStream[i] : 0;    
+    const int16_t oddSample = i < oddStream.size() ? oddStream[i] : 0;
     mono.push_back(evenSample);
     // Conserver l'ordre pair puis impair tel que décrit dans ScummVM/robot.h.
     mono.push_back(oddSample);
