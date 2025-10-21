@@ -587,14 +587,14 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
 }
 
 void RobotExtractor::process_audio_block(std::span<const std::byte> block,
-                                         int32_t pos) {
+                                         int32_t pos, bool zeroCompressed) {
   ensurePrimerProcessed();
   if (!m_extractAudio) {
     return;
   }
   std::span<const std::byte> blockBytes = block;
   std::vector<std::byte> zeroPrefixed;
-  const bool needsZeroCompressTrim = block.size() < kRobotRunwayBytes;
+  bool needsZeroCompressTrim = zeroCompressed;
   if (block.size() < kRobotRunwayBytes) {
     const size_t zeroPrefix = kRobotZeroCompressSize;
     if (block.size() > std::numeric_limits<size_t>::max() - zeroPrefix) {
@@ -607,6 +607,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
       std::copy(block.begin(), block.end(), dst);
     }
     blockBytes = zeroPrefixed;
+    needsZeroCompressTrim = true;    
   }
   struct ChannelDecodeResult {
     std::vector<int16_t> samples;
@@ -1947,6 +1948,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             }
           } else {
             std::vector<std::byte> block;
+            bool zeroCompressed = false;            
             if (size == expectedAudioBlockSize) {
               const size_t expectedSize =
                   expectedAudioBlockSize > 0
@@ -1977,9 +1979,10 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                     block.begin() + static_cast<std::ptrdiff_t>(zeroPrefix);
                 std::copy(truncated.begin(), truncated.end(), dst);
               }
+              zeroCompressed = true;              
             }
             if (!block.empty()) {
-              process_audio_block(block, pos);
+              process_audio_block(block, pos, zeroCompressed);
             }
           }
         }
