@@ -411,54 +411,54 @@ void RobotExtractor::readPrimer() {
                  m_options);
       }
 
-      auto readPrimerChannel = [this](std::vector<std::byte> &buffer,
-                                      std::streamsize requestedSize,
-                                      const char *channelLabel) {
-        if (requestedSize <= 0) {
-          return;
-        }
-
-        const std::streamoff channelStart = m_fp.tellg();
-        const std::streamsize toRead = checked_streamsize(buffer.size());
-
+      std::vector<std::byte> reservedData;
+      if (m_primerReservedSize > 0) {
+        reservedData.assign(static_cast<size_t>(m_primerReservedSize), std::byte{0});
         auto oldMask = m_fp.exceptions();
         m_fp.exceptions(std::ios::goodbit);
-        m_fp.read(reinterpret_cast<char *>(buffer.data()), toRead);
-        const std::streamsize got = m_fp.gcount();
+        m_fp.read(reinterpret_cast<char *>(reservedData.data()),
+                  checked_streamsize(reservedData.size()));
+        const std::streamsize got = std::max<std::streamsize>(0, m_fp.gcount());
         m_fp.exceptions(oldMask);
-
-        if (got < toRead) {
-          m_fp.clear();
-          const std::streamsize safeGot = std::max<std::streamsize>(0, got);
-          const auto bytesRead = static_cast<size_t>(safeGot);
-          if (bytesRead < buffer.size()) {
-            std::fill(buffer.begin() + static_cast<std::ptrdiff_t>(bytesRead),
-                      buffer.end(), std::byte{0});
+        if (static_cast<size_t>(got) < reservedData.size()) {
+          reservedData.resize(static_cast<size_t>(got));
+        }
+      }
+      
+      size_t reservedOffset = 0;
+      const auto assignPrimer = [&](std::vector<std::byte> &dest,
+                                    std::streamsize requestedSize,
+                                    const char *channelLabel) {
+        if (requestedSize <= 0) {
+          dest.clear();
+          return;
+        }
+        const size_t targetSize = static_cast<size_t>(requestedSize);
+        dest.assign(targetSize, std::byte{0});
+        size_t copied = 0;
+        if (reservedOffset < reservedData.size()) {
+          const size_t availableBytes = reservedData.size() - reservedOffset;
+          copied = std::min(targetSize, availableBytes);
+          if (copied > 0) {
+            std::copy_n(reservedData.begin() +
+                            static_cast<std::ptrdiff_t>(reservedOffset),
+                        static_cast<std::ptrdiff_t>(copied), dest.begin());
+            reservedOffset += copied;
           }
-
+        }
+        if (copied < targetSize) {
           log_warn(m_srcPath,
                    std::string("Primer audio ") + channelLabel +
                        " tronqué, complétion avec des zéros",
                    m_options);
-
-          const std::streamoff truncatedPos =
-              channelStart + static_cast<std::streamoff>(safeGot);
-          m_fp.seekg(truncatedPos, std::ios::beg);
         }
       };
 
-      m_evenPrimer.resize(static_cast<size_t>(m_evenPrimerSize));
-      m_oddPrimer.resize(static_cast<size_t>(m_oddPrimerSize));
-      readPrimerChannel(m_evenPrimer, m_evenPrimerSize, "pair");
-      readPrimerChannel(m_oddPrimer, m_oddPrimerSize, "impair");
+      assignPrimer(m_evenPrimer, m_evenPrimerSize, "pair");
+      assignPrimer(m_oddPrimer, m_oddPrimerSize, "impair");
 
-      std::streamoff afterPrimerDataPos = m_fp.tellg();
-      if (reservedEnd > afterPrimerDataPos) {
-        m_fp.seekg(reservedEnd, std::ios::beg);
-        m_postPrimerPos = m_fp.tellg();
-      } else {
-        m_postPrimerPos = afterPrimerDataPos;
-      }
+      m_fp.seekg(reservedEnd, std::ios::beg);
+      m_postPrimerPos = m_fp.tellg();
     }
     if (m_options.debug_index) {
       log_error(m_srcPath,
