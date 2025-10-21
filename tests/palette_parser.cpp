@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
+#include <string>
 
 #include "palette_helpers.hpp"
 #include "robot_extractor.hpp"
@@ -120,6 +121,35 @@ TEST_CASE(
   REQUIRE(parsed.entries[5].r == colors[1].r);
   REQUIRE(parsed.entries[5].g == colors[1].g);
   REQUIRE(parsed.entries[5].b == colors[1].b);
+}
+
+TEST_CASE("Truncated big-endian Hunk palette conversion fails") {
+  fs::path tmpDir = fs::temp_directory_path() / "palette_parser";
+  fs::create_directories(tmpDir);
+  fs::path input = tmpDir / "be_truncated.rbt";
+  fs::path outDir = tmpDir / "be_truncated_out";
+  fs::create_directories(outDir);
+  if (!fs::exists(input)) {
+    std::ofstream out(input, std::ios::binary);
+  }
+
+  std::vector<test_palette::Color> colors{{true, 5, 15, 25}};
+  auto raw = test_palette::build_hunk_palette(colors, 2, false, true, {}, true);
+  if (!raw.empty()) {
+    raw.pop_back();
+  }
+
+  robot::RobotExtractor extractor(input, outDir, false);
+  RobotExtractorTester::palette(extractor) = raw;
+  RobotExtractorTester::bigEndian(extractor) = true;
+
+  try {
+    (void)RobotExtractorTester::parsePalette(extractor);
+    FAIL("No exception thrown");
+  } catch (const std::runtime_error &e) {
+    REQUIRE(std::string(e.what()).find("Palette SCI HunkPalette tronquée") !=
+            std::string::npos);
+  }
 }
 
 TEST_CASE("Hunk palette preserves remap data and shared flags") {
