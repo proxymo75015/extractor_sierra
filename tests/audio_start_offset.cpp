@@ -12,6 +12,8 @@
 #include "audio_decompression_helpers.hpp"
 #include "robot_extractor.hpp"
 
+using robot::RobotExtractorTester;
+
 namespace fs = std::filesystem;
 
 namespace {
