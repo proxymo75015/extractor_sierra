@@ -80,7 +80,7 @@ uint32_t read_u32_be(std::span<const std::byte> data, size_t offset) {
 
 void write_span_le16(std::vector<std::byte> &data, size_t offset, uint16_t value) {
   if (offset + 1 >= data.size()) {
-    return;
+    throw std::runtime_error("Palette SCI HunkPalette tronquée");
   }
   data[offset] = std::byte{static_cast<uint8_t>(value & 0xFF)};
   data[offset + 1] = std::byte{static_cast<uint8_t>(value >> 8)};
@@ -88,7 +88,7 @@ void write_span_le16(std::vector<std::byte> &data, size_t offset, uint16_t value
 
 void write_span_le32(std::vector<std::byte> &data, size_t offset, uint32_t value) {
   if (offset + 3 >= data.size()) {
-    return;
+    throw std::runtime_error("Palette SCI HunkPalette tronquée");
   }
   data[offset] = std::byte{static_cast<uint8_t>(value & 0xFF)};
   data[offset + 1] = std::byte{static_cast<uint8_t>((value >> 8) & 0xFF)};
