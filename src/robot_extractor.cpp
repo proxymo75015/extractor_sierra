@@ -108,6 +108,23 @@ void trim_runway_samples(std::vector<int16_t> &samples) {
       samples.begin() + static_cast<std::ptrdiff_t>(kRobotRunwaySamples);
   samples.erase(samples.begin(), runwayEnd);
 }
+
+void trim_zero_compress_padding(std::vector<int16_t> &samples) {
+  constexpr size_t kZeroCompressPaddingSamples =
+      (kRobotZeroCompressSize > kRobotRunwaySamples)
+          ? (kRobotZeroCompressSize - kRobotRunwaySamples)
+          : 0;
+  if (kZeroCompressPaddingSamples == 0) {
+    return;
+  }
+  if (samples.size() <= kZeroCompressPaddingSamples) {
+    samples.clear();
+    return;
+  }
+  const auto paddingEnd =
+      samples.begin() + static_cast<std::ptrdiff_t>(kZeroCompressPaddingSamples);
+  samples.erase(samples.begin(), paddingEnd);
+}
 } // namespace
 
 RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath,
@@ -576,7 +593,8 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     return;
   }
   std::span<const std::byte> blockBytes = block;
-  std::vector<std::byte> zeroPrefixed;  
+  std::vector<std::byte> zeroPrefixed;
+  const bool needsZeroCompressTrim = block.size() < kRobotRunwayBytes;
   if (block.size() < kRobotRunwayBytes) {
     const size_t zeroPrefix = kRobotZeroCompressSize;
     if (block.size() > std::numeric_limits<size_t>::max() - zeroPrefix) {
@@ -601,7 +619,10 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     int16_t localPredictor =
         channel.predictorInitialized ? channel.predictor : 0;
     auto decoded = dpcm16_decompress(blockBytes, localPredictor);
-    trim_runway_samples(decoded);    
+    trim_runway_samples(decoded);
+    if (needsZeroCompressTrim) {
+      trim_zero_compress_padding(decoded);
+    }
     result.finalPredictor = localPredictor;
     result.predictorValid = true;
     result.samples = std::move(decoded);
