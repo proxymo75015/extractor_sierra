@@ -556,6 +556,7 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
   }
   int16_t predictor = channel.predictorInitialized ? channel.predictor : 0;
   auto pcm = dpcm16_decompress(std::span(primer), predictor);
+  trim_runway_samples(pcm);
   channel.predictor = predictor;
   channel.predictorInitialized = true;
   if (!m_extractAudio) {
