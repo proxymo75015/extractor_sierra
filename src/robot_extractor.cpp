@@ -757,6 +757,9 @@ RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
   if (samples.empty()) {
     return AppendPlanStatus::Skip;
   }
+  if (plan.posIsEven != isEven) {
+    return AppendPlanStatus::ParityMismatch;
+  }  
   int64_t startHalf = halfPos;
   int64_t startSampleSigned = 0;
   if (startHalf >= 0) {
