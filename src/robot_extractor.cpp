@@ -652,8 +652,9 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   const int64_t halfPos = static_cast<int64_t>(pos);
 
   AppendPlan plan{};
-  AppendPlanStatus status = prepareChannelAppend(channel, isEvenChannel,
-                                                 halfPos, channelSamples, plan);
+  AppendPlanStatus status =
+      prepareChannelAppend(channel, isEvenChannel, halfPos, channelSamples, plan,
+                           zeroCompressed);
   
   switch (status) {
   case AppendPlanStatus::Ok:
@@ -701,10 +702,12 @@ void RobotExtractor::setAudioStartOffset(int64_t offset) {
 
 RobotExtractor::AppendPlanStatus RobotExtractor::prepareChannelAppend(
     ChannelAudio &channel, bool isEven, int64_t halfPos,
-    const std::vector<int16_t> &samples, AppendPlan &plan) {
+    const std::vector<int16_t> &samples, AppendPlan &plan,
+    bool zeroCompressed) {
   const int64_t relativeHalfPos = halfPos - m_audioStartOffset;
   const bool posIsEven = (relativeHalfPos & 1LL) == 0;
   plan.posIsEven = posIsEven;
+  plan.zeroCompressedBlock = zeroCompressed;
   if (samples.empty()) {
     return AppendPlanStatus::Skip;
   }
@@ -719,6 +722,8 @@ RobotExtractor::AppendPlanStatus RobotExtractor::prepareChannelAppend(
     if (deltaSamples != 0) {
       channel.samples.insert(channel.samples.begin(), deltaSamples, 0);
       channel.occupied.insert(channel.occupied.begin(), deltaSamples, 0);
+      channel.zeroCompressed.insert(channel.zeroCompressed.begin(),
+                                    deltaSamples, 0);      
     }
     channel.startHalfPos = halfPos;
     adjustedHalfPos = 0;
@@ -773,9 +778,19 @@ RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
     if (!channel.occupied[index]) {
       break;
     }
+    if (index >= channel.zeroCompressed.size() ||
+        channel.zeroCompressed[index] == 0) {
+      if (channel.samples[index] !=
+          samples[plan.skipSamples + plan.leadingOverlap]) {
+        return AppendPlanStatus::Conflict;
+      }
+      ++plan.leadingOverlap;
+      continue;
+    }
+    // Existing data derived from a zero-compressed block is replaceable.    
     if (channel.samples[index] !=
         samples[plan.skipSamples + plan.leadingOverlap]) {
-      return AppendPlanStatus::Conflict;
+      break;
     }
     ++plan.leadingOverlap;
   }
@@ -816,26 +831,31 @@ void RobotExtractor::finalizeChannelAppend(
   if (channel.samples.size() < plan.trimmedStart) {
     channel.samples.resize(plan.trimmedStart, 0);
     channel.occupied.resize(plan.trimmedStart, 0);
+    channel.zeroCompressed.resize(plan.trimmedStart, 0);    
   }
   if (channel.samples.size() < plan.requiredSize) {
     channel.samples.resize(plan.requiredSize, 0);
     channel.occupied.resize(plan.requiredSize, 0);
+    channel.zeroCompressed.resize(plan.requiredSize, 0);    
   }
   for (size_t i = plan.leadingOverlap; i < plan.availableSamples; ++i) {
     size_t index = plan.startSample + i;
     channel.samples[index] = samples[plan.skipSamples + i];
     channel.occupied[index] = 1;
+    channel.zeroCompressed[index] = plan.zeroCompressedBlock ? 1 : 0;    
   }
 }
 void RobotExtractor::appendChannelSamples(bool isEven, int64_t halfPos,
-                                          const std::vector<int16_t> &samples) {
+                                          const std::vector<int16_t> &samples,
+                                          bool zeroCompressed) {
   if (samples.empty()) {
     return;
   }
   ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
   AppendPlan plan{};
   AppendPlanStatus status =
-      prepareChannelAppend(channel, isEven, halfPos, samples, plan);
+      prepareChannelAppend(channel, isEven, halfPos, samples, plan,
+                           zeroCompressed);
   switch (status) {
   case AppendPlanStatus::Ok:
   case AppendPlanStatus::Skip:
@@ -2121,10 +2141,12 @@ void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
 void RobotExtractor::extract() {
   m_evenChannelAudio.samples.clear();
   m_evenChannelAudio.occupied.clear();
+  m_evenChannelAudio.zeroCompressed.clear();  
   m_evenChannelAudio.startHalfPos = 0;
   m_evenChannelAudio.startHalfPosInitialized = false;
   m_oddChannelAudio.samples.clear();
   m_oddChannelAudio.occupied.clear();
+  m_oddChannelAudio.zeroCompressed.clear();  
   m_oddChannelAudio.startHalfPos = 0;
   m_oddChannelAudio.startHalfPosInitialized = false;
   m_audioStartOffset = 0;
