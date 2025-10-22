@@ -68,8 +68,8 @@ std::vector<uint8_t> build_primer_header() {
   return p;
 }
 
-std::vector<int16_t> decode_block(const std::vector<uint8_t> &bytes,
-                                  int16_t &predictor) {
+std::vector<int16_t> decode_block(const std::vector<uint8_t> &bytes) {
+  int16_t predictor = 0;
   return audio_test::decompress_without_runway(bytes, predictor);
 }
 
@@ -197,7 +197,7 @@ TEST_CASE("Conflicting retransmission is rejected while parity mismatch is ignor
       buffer[offset + i] = samples[i];
     }
   };
-  auto block1Samples = decode_block(block1, predictor);
+  auto block1Samples = decode_block(block1);
   REQUIRE_FALSE(block1Samples.empty());
   const int64_t block1Start = block1Pos / 2;
   updateEvenExpected(expectedEvenAfterFirst, block1Start, block1Samples);
@@ -211,7 +211,7 @@ TEST_CASE("Conflicting retransmission is rejected while parity mismatch is ignor
   auto afterConflictOdd =
       robot::RobotExtractorTester::buildChannelStream(extractor, false);
 
-  auto conflictSamples = decode_block(conflictBlock, predictor);
+  auto conflictSamples = decode_block(conflictBlock);
   REQUIRE_FALSE(conflictSamples.empty());
   auto expectedEvenAfterConflict = expectedEvenAfterFirst;
 
@@ -223,8 +223,7 @@ TEST_CASE("Conflicting retransmission is rejected while parity mismatch is ignor
       robot::RobotExtractorTester::buildChannelStream(extractor, true);
   auto afterParityOdd =
       robot::RobotExtractorTester::buildChannelStream(extractor, false);
-  int16_t predictorForParity = predictor;
-  auto paritySamples = decode_block(parityBlock, predictorForParity);
+  auto paritySamples = decode_block(parityBlock);
 
   const int64_t parityStart = parityPos / 2;
   updateEvenExpected(expectedEvenAfterConflict, parityStart, paritySamples);
