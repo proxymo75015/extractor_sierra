@@ -572,25 +572,21 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
 
 void RobotExtractor::process_audio_block(std::span<const std::byte> block,
                                          int32_t pos, bool zeroCompressed) {
-  (void)zeroCompressed;
   ensurePrimerProcessed();
   if (!m_extractAudio) {
     return;
   }
   std::span<const std::byte> blockBytes = block;
-  std::vector<std::byte> zeroPrefixed;
-  if (block.size() < kRobotRunwayBytes) {
-    const size_t zeroPrefix = kRobotZeroCompressSize;
-    if (block.size() > std::numeric_limits<size_t>::max() - zeroPrefix) {
-      throw std::runtime_error("Taille de bloc audio trop grande");
-    }
-    zeroPrefixed.assign(zeroPrefix + block.size(), std::byte{0});
+  std::vector<std::byte> runwayPadded;
+  if (!zeroCompressed && block.size() < kRobotRunwayBytes) {
+    const size_t runwayPrefix = kRobotRunwayBytes - block.size();
+    runwayPadded.assign(runwayPrefix + block.size(), std::byte{0});
     if (!block.empty()) {
-      auto dst = zeroPrefixed.begin() +
-                 static_cast<std::ptrdiff_t>(zeroPrefix);
+      auto dst = runwayPadded.begin() +
+                 static_cast<std::ptrdiff_t>(runwayPrefix);
       std::copy(block.begin(), block.end(), dst);
     }
-    blockBytes = zeroPrefixed;
+    blockBytes = runwayPadded;
   }
   struct ChannelDecodeResult {
     std::vector<int16_t> samples;
