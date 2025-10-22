@@ -33,11 +33,12 @@ static void push32(std::vector<uint8_t> &v, uint32_t x) {
 
 static std::vector<int16_t>
 decompress_truncated_block(const std::vector<uint8_t> &raw,
-                           int16_t &predictor) {
+                           int16_t & /*predictor*/) {
   std::vector<std::byte> block(kZeroPrefixBytes + raw.size(), std::byte{0});
   for (size_t i = 0; i < raw.size(); ++i) {
     block[kZeroPrefixBytes + i] = std::byte{raw[i]};
   }
+  int16_t predictor = 0;  
   return audio_test::decompress_without_runway(block, predictor);
 }
 
