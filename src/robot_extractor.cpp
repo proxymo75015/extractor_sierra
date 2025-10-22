@@ -109,22 +109,6 @@ void trim_runway_samples(std::vector<int16_t> &samples) {
   samples.erase(samples.begin(), runwayEnd);
 }
 
-void trim_zero_compress_padding(std::vector<int16_t> &samples) {
-  constexpr size_t kZeroCompressPaddingSamples =
-      (kRobotZeroCompressSize > kRobotRunwaySamples)
-          ? (kRobotZeroCompressSize - kRobotRunwaySamples)
-          : 0;
-  if (kZeroCompressPaddingSamples == 0) {
-    return;
-  }
-  if (samples.size() <= kZeroCompressPaddingSamples) {
-    samples.clear();
-    return;
-  }
-  const auto paddingEnd =
-      samples.begin() + static_cast<std::ptrdiff_t>(kZeroCompressPaddingSamples);
-  samples.erase(samples.begin(), paddingEnd);
-}
 } // namespace
 
 RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath,
@@ -588,13 +572,13 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
 
 void RobotExtractor::process_audio_block(std::span<const std::byte> block,
                                          int32_t pos, bool zeroCompressed) {
+  (void)zeroCompressed;
   ensurePrimerProcessed();
   if (!m_extractAudio) {
     return;
   }
   std::span<const std::byte> blockBytes = block;
   std::vector<std::byte> zeroPrefixed;
-  bool needsZeroCompressTrim = zeroCompressed;
   if (block.size() < kRobotRunwayBytes) {
     const size_t zeroPrefix = kRobotZeroCompressSize;
     if (block.size() > std::numeric_limits<size_t>::max() - zeroPrefix) {
@@ -607,7 +591,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
       std::copy(block.begin(), block.end(), dst);
     }
     blockBytes = zeroPrefixed;
-    needsZeroCompressTrim = true;    
   }
   struct ChannelDecodeResult {
     std::vector<int16_t> samples;
@@ -621,9 +604,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
         channel.predictorInitialized ? channel.predictor : int16_t{0};
     auto decoded = dpcm16_decompress(blockBytes, localPredictor);
     trim_runway_samples(decoded);
-    if (needsZeroCompressTrim) {
-      trim_zero_compress_padding(decoded);
-    }
     result.finalPredictor = localPredictor;
     result.predictorValid = true;
     result.samples = std::move(decoded);
