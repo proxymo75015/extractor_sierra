@@ -82,12 +82,13 @@ std::vector<uint8_t> build_primer_header(uint32_t total, uint32_t evenSize,
 }
 
 std::vector<int16_t> decompress_truncated_block(
-    const std::vector<uint8_t> &raw, int16_t &predictor) {
+    const std::vector<uint8_t> &raw) {
   std::vector<uint8_t> block(kZeroPrefixBytes + raw.size(), 0);
   for (size_t i = 0; i < raw.size(); ++i) {
     block[kZeroPrefixBytes + i] = raw[i];
   }
-  return audio_test::decompress_without_runway(block, predictor);
+  int16_t blockPredictor = 0;
+  return audio_test::decompress_without_runway(block, blockPredictor);
 }
 
 std::optional<size_t> find_alignment(const std::vector<int16_t> &stream,
@@ -160,12 +161,10 @@ TEST_CASE("Audio start offset routed using doubled positions") {
   std::array<BlockInfo, 2> blocks;
   blocks[0].position = 3;
   blocks[0].raw = {0x12, 0x34, 0x56, 0x78, 0x9A};
-  blocks[0].samples =
-      decompress_truncated_block(blocks[0].raw, oddPredictor);
+  blocks[0].samples = decompress_truncated_block(blocks[0].raw);
   blocks[1].position = 4096;
   blocks[1].raw = {0xAB, 0xCD, 0xEF, 0x10, 0x24};
-  blocks[1].samples =
-      decompress_truncated_block(blocks[1].raw, evenPredictor);
+  blocks[1].samples = decompress_truncated_block(blocks[1].raw);
 
   for (const auto &block : blocks) {
     data.push_back(0);
@@ -258,7 +257,7 @@ TEST_CASE("Audio start offset parity matches adjusted origin") {
 
   std::vector<uint8_t> raw = {0x11, 0x22, 0x33, 0x44, 0x55};
   int16_t predictor = 0;
-  auto expectedSamples = decompress_truncated_block(raw, predictor);
+  auto expectedSamples = decompress_truncated_block(raw);
   REQUIRE_FALSE(expectedSamples.empty());
 
   std::vector<std::byte> block(kZeroPrefixBytes + raw.size(), std::byte{0});
