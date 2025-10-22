@@ -166,9 +166,9 @@ TEST_CASE("Audio block with position -1 is adjusted without corruption") {
   auto primerSamples =
       audio_test::decompress_primer(primerBytes, evenPredictor);
   (void)primerSamples;
-  int16_t oddPredictor = 0;
+  int16_t blockPredictor = 0;
   auto fullSamples =
-      audio_test::decompress_without_runway(fullBlock, oddPredictor);
+      audio_test::decompress_without_runway(fullBlock, blockPredictor);
   audio_test::ChannelExpectation oddExpected;
   audio_test::append_expected(oddExpected, -1, fullSamples);
   auto evenStream = robot::RobotExtractorTester::buildChannelStream(extractor, true);
