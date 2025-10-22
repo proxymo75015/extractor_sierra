@@ -148,7 +148,8 @@ TEST_CASE("Audio block with runway triggers error") {
   REQUIRE(payload.size() == kTruncatedPayloadBytes);
   std::vector<std::byte> block = zeroPrefix;
   block.insert(block.end(), payload.begin(), payload.end());
-  const auto blockSamples = decompress_without_runway(block, predictor);
+  int16_t blockPredictor = 0;
+  const auto blockSamples = decompress_without_runway(block, blockPredictor);
   REQUIRE(!blockSamples.empty());
 
   const size_t blockStart = static_cast<size_t>(kBlockPosHalfSamples / 2);
