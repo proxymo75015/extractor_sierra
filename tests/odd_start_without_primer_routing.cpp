@@ -59,12 +59,12 @@ std::vector<uint8_t> build_header() {
   return h;
 }
 
-std::vector<int16_t> decompress_block(const std::vector<uint8_t> &raw,
-                                      int16_t &predictor) {
+std::vector<int16_t> decompress_block(const std::vector<uint8_t> &raw) {
   std::vector<std::byte> block(kZeroPrefixBytes + raw.size(), std::byte{0});
   for (size_t i = 0; i < raw.size(); ++i) {
     block[kZeroPrefixBytes + i] = std::byte{raw[i]};
   }
+  int16_t predictor = 0;    
   return audio_test::decompress_without_runway(block, predictor);
 }
 
@@ -126,13 +126,11 @@ TEST_CASE("Odd-start audio without primer uses odd stream") {
   std::array<BlockInfo, 2> blocks;
   blocks[0].position = 3;
   blocks[0].raw = {0x21, 0x43, 0x65, 0x87, 0xA9};
-  int16_t oddPredictor = 0;
-  int16_t evenPredictor = 0;
-  blocks[0].samples = decompress_block(blocks[0].raw, oddPredictor);
+  blocks[0].samples = decompress_block(blocks[0].raw);
 
   blocks[1].position = 6;
   blocks[1].raw = {0xBA, 0xDC, 0xFE, 0x10, 0x32};
-  blocks[1].samples = decompress_block(blocks[1].raw, evenPredictor);
+  blocks[1].samples = decompress_block(blocks[1].raw);
 
   for (const auto &block : blocks) {
     data.push_back(0);
