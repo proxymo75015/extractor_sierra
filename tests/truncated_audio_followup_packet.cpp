@@ -133,8 +133,9 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   for (uint8_t b : block0PayloadBytes) {
     block0Compressed.push_back(static_cast<std::byte>(b));
   }
+  int16_t block0Predictor = 0;
   expectedBlock0 =
-      audio_test::decompress_without_runway(block0Compressed, evenPredictor);
+      audio_test::decompress_without_runway(block0Compressed, block0Predictor);
   const size_t block0SampleCount = expectedBlock0.size();
   const size_t block0StartSample = block0Pos / 2;
   block1Pos = static_cast<uint32_t>((block0StartSample + block0SampleCount) * 2);
@@ -159,8 +160,9 @@ TEST_CASE("Truncated audio block keeps stream aligned") {
   for (uint8_t b : payload1) {
     block1Compressed.push_back(static_cast<std::byte>(b));
   }
+  int16_t block1Predictor = 0;  
   expectedBlock1 =
-      audio_test::decompress_without_runway(block1Compressed, evenPredictor);
+      audio_test::decompress_without_runway(block1Compressed, block1Predictor);
 
   std::ofstream out(input, std::ios::binary);
   out.write(reinterpret_cast<const char *>(data.data()),
