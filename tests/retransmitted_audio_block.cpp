@@ -68,8 +68,8 @@ static std::vector<uint8_t> build_primer_header() {
   return p;
 }
 
-static std::vector<int16_t> decode_block(const std::vector<uint8_t> &bytes,
-                                         int16_t &predictor) {
+static std::vector<int16_t> decode_block(const std::vector<uint8_t> &bytes) {
+  int16_t predictor = 0;
   return audio_test::decompress_without_runway(bytes, predictor);
 }
 
@@ -193,9 +193,9 @@ TEST_CASE("Retransmitted audio blocks append only fresh data") {
   auto primerSamples =
       audio_test::decompress_primer(primerBytes, evenPredictor);
   (void)primerSamples;
-  auto expectedBlock1 = decode_block(block1, evenPredictor);
-  auto expectedBlock2 = decode_block(block2, evenPredictor);
-  auto expectedBlock3 = decode_block(block3, evenPredictor);
+  auto expectedBlock1 = decode_block(block1);
+  auto expectedBlock2 = decode_block(block2);
+  auto expectedBlock3 = decode_block(block3);
 
   const size_t block1Start = block1Pos / 2;
   const size_t block2Start = block2Pos / 2;
