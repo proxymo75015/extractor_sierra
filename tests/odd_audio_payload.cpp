@@ -131,7 +131,8 @@ TEST_CASE("Odd-sized audio payload throws") {
 
   std::vector<std::byte> block(kZeroPrefixBytes + 1, std::byte{0});
   block.back() = std::byte{static_cast<unsigned char>(0x88)};
-  const auto blockSamples = decompress_without_runway(block, evenPredictor);
+  int16_t blockPredictor = 0;
+  const auto blockSamples = decompress_without_runway(block, blockPredictor);
 
   const size_t blockStart = static_cast<size_t>(kBlockPosHalfSamples / 2);
   const size_t baseSample = primerSamples.empty() ? blockStart : size_t{0};
