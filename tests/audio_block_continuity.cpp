@@ -142,16 +142,18 @@ TEST_CASE("Audio stream fills gaps with interpolation") {
   std::vector<uint8_t> blockDataA(primerData.end() - kRunwayBytes,
                                   primerData.end());
   blockDataA.insert(blockDataA.end(), blockPayloadA.begin(), blockPayloadA.end());
+  int16_t blockAPredictor = 0;
   auto expectedBlockA =
-      audio_test::decompress_without_runway(blockDataA, predictor);
-
+      audio_test::decompress_without_runway(blockDataA, blockAPredictor);
+  
   std::vector<uint8_t> blockPayloadB = {0x11, 0x33, 0x55, 0x77,
                                         0x99, 0xBB, 0xDD, 0xFF};
   std::vector<uint8_t> blockDataB(primerData.begin(), primerData.begin() +
                                                         static_cast<std::ptrdiff_t>(kRunwayBytes));
   blockDataB.insert(blockDataB.end(), blockPayloadB.begin(), blockPayloadB.end());
+  int16_t blockBPredictor = 0;
   auto expectedBlockB =
-      audio_test::decompress_without_runway(blockDataB, predictor);
+      audio_test::decompress_without_runway(blockDataB, blockBPredictor);
 
   const uint32_t primerReserved =
       static_cast<uint32_t>(kPrimerHeaderSize + primerData.size());
@@ -235,7 +237,6 @@ TEST_CASE("Audio blocks remain contiguous after runway removal") {
                                      0x98, 0xBA, 0xDC, 0xFE};
   int16_t predictor = 0;
   auto expectedPrimer = audio_test::decompress_primer(primerData, predictor);
-  const int16_t predictorAfterPrimer = predictor;
 
   std::vector<uint8_t> blockRunway = {0x08, 0x18, 0x28, 0x38,
                                       0x48, 0x58, 0x68, 0x78};
@@ -243,21 +244,17 @@ TEST_CASE("Audio blocks remain contiguous after runway removal") {
                                         0xA9, 0xCB, 0xED, 0x0F};
   std::vector<uint8_t> blockDataA = blockRunway;
   blockDataA.insert(blockDataA.end(), blockPayloadA.begin(), blockPayloadA.end());
+  int16_t blockAPredictor = 0;
   auto expectedBlockA =
-      audio_test::decompress_without_runway(blockDataA, predictor);
-  const bool blockAHasAudio = std::any_of(
-      expectedBlockA.begin(), expectedBlockA.end(),
-      [](int16_t sample) { return sample != 0; });
-  if (!blockAHasAudio) {
-    predictor = predictorAfterPrimer;
-  }
+      audio_test::decompress_without_runway(blockDataA, blockAPredictor);
 
   std::vector<uint8_t> blockPayloadB = {0x11, 0x33, 0x55, 0x77,
                                         0x99, 0xBB, 0xDD, 0xFF};
   std::vector<uint8_t> blockDataB = blockRunway;
   blockDataB.insert(blockDataB.end(), blockPayloadB.begin(), blockPayloadB.end());
+  int16_t blockBPredictor = 0;
   auto expectedBlockB =
-      audio_test::decompress_without_runway(blockDataB, predictor);
+      audio_test::decompress_without_runway(blockDataB, blockBPredictor);
 
   const uint32_t primerReserved =
       static_cast<uint32_t>(kPrimerHeaderSize + primerData.size());
@@ -340,8 +337,9 @@ TEST_CASE("Audio blocks honor absolute positions when reordered") {
   std::vector<uint8_t> blockHighData = highRunway;
   blockHighData.insert(blockHighData.end(), highPayload.begin(),
                        highPayload.end());
+  int16_t highPredictor = 0;
   auto expectedHigh =
-      audio_test::decompress_without_runway(blockHighData, predictor);
+      audio_test::decompress_without_runway(blockHighData, highPredictor);
 
   std::vector<uint8_t> lowRunway = {0x08, 0x18, 0x28, 0x38,
                                     0x48, 0x58, 0x68, 0x78};
@@ -349,8 +347,9 @@ TEST_CASE("Audio blocks honor absolute positions when reordered") {
                                      0xA0, 0xC0, 0xE0, 0x00};
   std::vector<uint8_t> blockLowData = lowRunway;
   blockLowData.insert(blockLowData.end(), lowPayload.begin(), lowPayload.end());
+  int16_t lowPredictor = 0;
   auto expectedLow =
-      audio_test::decompress_without_runway(blockLowData, predictor);
+      audio_test::decompress_without_runway(blockLowData, lowPredictor);
 
   const uint32_t primerReserved =
       static_cast<uint32_t>(kPrimerHeaderSize + primerData.size());
