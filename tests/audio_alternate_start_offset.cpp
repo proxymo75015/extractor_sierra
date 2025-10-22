@@ -120,13 +120,21 @@ TEST_CASE("Alternate audio start offset persists across blocks") {
   BlockInfo block0;
   block0.position = 4; // requires alternate offset
   block0.raw = {0, 0, 0, 0, 0, 0, 0, 0, 20, 10, 10, 10, 10, 10, 10, 10};
-  block0.samples = audio_test::decompress_without_runway(block0.raw, predictor);
+  {
+    int16_t blockPredictor = 0;
+    block0.samples =
+        audio_test::decompress_without_runway(block0.raw, blockPredictor);
+  }
   REQUIRE(block0.samples.size() == 8);
 
   BlockInfo block1;
   block1.position = 20;
   block1.raw = {0, 0, 0, 0, 0, 0, 0, 0, 100, 10, 10, 10, 10, 10, 10, 10};
-  block1.samples = audio_test::decompress_without_runway(block1.raw, predictor);
+  {
+    int16_t blockPredictor = 0;
+    block1.samples =
+        audio_test::decompress_without_runway(block1.raw, blockPredictor);
+  }
   REQUIRE(block1.samples.size() == 8);
 
   const uint32_t primerTotal =
