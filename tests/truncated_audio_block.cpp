@@ -138,7 +138,8 @@ TEST_CASE("Truncated audio block triggers error") {
                                std::byte{0});
   block[kZeroPrefixBytes + 0] = std::byte{static_cast<unsigned char>(0x88)};
   block[kZeroPrefixBytes + 1] = std::byte{static_cast<unsigned char>(0x77)};
-  const auto blockSamples = decompress_without_runway(block, evenPredictor);
+  int16_t blockPredictor = 0;
+  const auto blockSamples = decompress_without_runway(block, blockPredictor);
 
   audio_test::ChannelExpectation expectedEven;
   audio_test::append_expected(expectedEven, 0, primerSamples);
