@@ -131,12 +131,12 @@ TEST_CASE("Primer mismatch preserves primer data while realigning stream") {
                                            evenPrimerBytes.end());
   const std::vector<uint8_t> oddPrimerVec(oddPrimerBytes.begin(),
                                           oddPrimerBytes.end());
-  int16_t evenPredictor = 0;
-  int16_t oddPredictor = 0;
+  int16_t evenBlockPredictor = 0;
   const auto evenExpected =
-      audio_test::decompress_without_runway(evenPrimerVec, evenPredictor);
+      audio_test::decompress_without_runway(evenPrimerVec, evenBlockPredictor);
+  int16_t oddBlockPredictor = 0;
   const auto oddExpected =
-      audio_test::decompress_without_runway(oddPrimerVec, oddPredictor);
+      audio_test::decompress_without_runway(oddPrimerVec, oddBlockPredictor);
   
   RobotExtractorTester::finalizeAudio(extractor);
 
