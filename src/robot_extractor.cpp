@@ -545,21 +545,18 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     }    
     return;
   }
-  ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;  
   if (primer.size() < kRobotRunwayBytes) {
     const char *channelLabel = isEven ? "pair" : "impair";
     log_warn(m_srcPath,
              std::string("Primer audio ") + channelLabel +
                  " trop court (" +
-                 std::to_string(static_cast<unsigned long long>(primer.size())) +
+                  std::to_string(static_cast<unsigned long long>(primer.size())) +
                  " octets), décompressé malgré tout",
              m_options);
   }
-  int16_t predictor = channel.predictorInitialized ? channel.predictor : 0;
+  int16_t predictor = 0;
   auto pcm = dpcm16_decompress(std::span(primer), predictor);
   trim_runway_samples(pcm);
-  channel.predictor = predictor;
-  channel.predictorInitialized = true;
   if (!m_extractAudio) {
     return;
   }
@@ -588,27 +585,16 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     }
     blockBytes = runwayPadded;
   }
-  struct ChannelDecodeResult {
-    std::vector<int16_t> samples;
-    int16_t finalPredictor = 0;
-    bool predictorValid = false;
-  };
-
-  auto decodeChannelSamples = [&](const ChannelAudio &channel) {
-    ChannelDecodeResult result;
-    int16_t localPredictor =
-        channel.predictorInitialized ? channel.predictor : int16_t{0};
+  auto decodeChannelSamples = [&]() {
+    int16_t localPredictor = 0;
     auto decoded = dpcm16_decompress(blockBytes, localPredictor);
     trim_runway_samples(decoded);
-    result.finalPredictor = localPredictor;
-    result.predictorValid = true;
-    result.samples = std::move(decoded);
-    return result;
+    return decoded;
   };
 
-  ChannelDecodeResult evenResult = decodeChannelSamples(m_evenChannelAudio);
-  ChannelDecodeResult oddResult = decodeChannelSamples(m_oddChannelAudio);
-
+  std::vector<int16_t> evenSamples = decodeChannelSamples();
+  std::vector<int16_t> oddSamples = decodeChannelSamples();
+  
   const int64_t relativePos = static_cast<int64_t>(pos) - m_audioStartOffset;
   const int64_t doubledPos = relativePos * 2;
   if ((doubledPos & 1LL) != 0) {
@@ -618,16 +604,8 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   const bool isEvenChannel = (doubledPos & 3LL) == 0;
   ChannelAudio &channel =
       isEvenChannel ? m_evenChannelAudio : m_oddChannelAudio;
-  const ChannelDecodeResult &decodeResult =
-      isEvenChannel ? evenResult : oddResult;
-
-  auto applyPredictorState = [](ChannelAudio &channel,
-                                const ChannelDecodeResult &result) {
-    if (result.predictorValid) {
-      channel.predictor = result.finalPredictor;
-      channel.predictorInitialized = true;
-    }
-  };
+  const std::vector<int16_t> &decodeResult =
+      isEvenChannel ? evenSamples : oddSamples;
   
   auto hasAudibleData = [](const std::vector<int16_t> &samples) {
     return std::any_of(samples.begin(), samples.end(),
@@ -635,8 +613,8 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   };
 
   if (pos == 0) {
-    const bool hasAudioData = hasAudibleData(evenResult.samples) ||
-                              hasAudibleData(oddResult.samples);
+    const bool hasAudioData = hasAudibleData(evenSamples) ||
+                              hasAudibleData(oddSamples);
     if (hasAudioData) {
       log_warn(m_srcPath,
                "Bloc audio ignoré en position zéro (données audibles ignorées)",
@@ -648,7 +626,7 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     }
     return;
   }
-  const std::vector<int16_t> &channelSamples = decodeResult.samples;
+  const std::vector<int16_t> &channelSamples = decodeResult;
   const int64_t halfPos = static_cast<int64_t>(pos);
 
   AppendPlan plan{};
@@ -672,7 +650,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
       }
       channel.seenNonPrimerBlock = true;
     }
-    applyPredictorState(channel, decodeResult);    
     return;
   case AppendPlanStatus::Conflict:
     log_warn(m_srcPath,
