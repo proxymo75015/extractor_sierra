@@ -253,8 +253,6 @@ private:
     std::vector<int16_t> samples;
     std::vector<uint8_t> occupied;
     std::vector<uint8_t> zeroCompressed;
-    int16_t predictor = 0;
-    bool predictorInitialized = false;
     int64_t startHalfPos = 0;
     bool startHalfPosInitialized = false;
     bool seenNonPrimerBlock = false;
