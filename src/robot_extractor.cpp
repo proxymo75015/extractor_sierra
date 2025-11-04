@@ -109,23 +109,6 @@ void trim_runway_samples(std::vector<int16_t> &samples) {
   samples.erase(samples.begin(), runwayEnd);
 }
 
-void trim_zero_compress_padding(std::vector<int16_t> &samples) {
-  if (kRobotZeroCompressSize <= sizeof(int16_t) * kRobotRunwaySamples) {
-    return;
-  }
-  static_assert(kRobotZeroCompressSize % sizeof(int16_t) == 0,
-                "Zero-compress padding must align with sample size");
-  const size_t zeroPaddingSamples =
-      (kRobotZeroCompressSize / sizeof(int16_t)) - kRobotRunwaySamples;
-  if (samples.size() <= zeroPaddingSamples) {
-    samples.clear();
-    return;
-  }
-  samples.erase(samples.begin(),
-                samples.begin() +
-                    static_cast<std::ptrdiff_t>(zeroPaddingSamples));
-}
-
 } // namespace
 
 RobotExtractor::RobotExtractor(const std::filesystem::path &srcPath,
@@ -630,9 +613,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     int16_t localPredictor = source.predictorInitialized ? source.predictor : 0;
     decoded.samples = dpcm16_decompress(blockBytes, localPredictor);
     trim_runway_samples(decoded.samples);
-    if (zeroCompressed) {
-      trim_zero_compress_padding(decoded.samples);
-    }    
     decoded.finalPredictor = localPredictor;
     decoded.predictorValid = source.predictorInitialized || !blockBytes.empty();
     return decoded;
