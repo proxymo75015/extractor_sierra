@@ -10,6 +10,7 @@
 #include <fstream>
 #include <nlohmann/json.hpp>
 #include <limits>
+#include <optional>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -166,9 +167,10 @@ private:
                 size_t blockIndex, bool isEvenChannel,
                 uint16_t numChannels = 1,
                 bool appendChannelSuffix = true);
-  void appendChannelSamples(bool isEven, int64_t halfPos,
-                            const std::vector<int16_t> &samples,
-                            bool zeroCompressed = false);
+  void appendChannelSamples(
+      bool isEven, int64_t halfPos, const std::vector<int16_t> &samples,
+      bool zeroCompressed = false,
+      std::optional<int16_t> finalPredictor = std::nullopt);
   size_t celPixelLimit() const;
   size_t rgbaBufferLimit() const;
   struct ChannelAudio;
@@ -258,6 +260,8 @@ private:
     bool seenNonPrimerBlock = false;
     bool hasAcceptedPos = false;
     int32_t lastAcceptedPos = 0;
+    int16_t predictor = 0;
+    bool predictorInitialized = false;
   };
   ChannelAudio m_evenChannelAudio;
   ChannelAudio m_oddChannelAudio;
