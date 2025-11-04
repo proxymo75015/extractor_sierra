@@ -16,7 +16,6 @@ namespace fs = std::filesystem;
 namespace {
 
 constexpr size_t kZeroPrefixBytes = robot::kRobotZeroCompressSize;
-constexpr size_t kRunwaySamples = robot::kRobotRunwaySamples;
 
 std::vector<int16_t> decompress_truncated_block(
     const std::vector<uint8_t> &raw) {
