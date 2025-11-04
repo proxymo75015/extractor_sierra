@@ -23,7 +23,14 @@ to_bytes(const std::vector<uint8_t> &src) {
 
 inline std::vector<int16_t>
 decompress_primer(std::span<const std::byte> bytes, int16_t &predictor) {
-  return robot::dpcm16_decompress(bytes, predictor);
+  auto pcm = robot::dpcm16_decompress(bytes, predictor);
+  if (pcm.size() <= robot::kRobotRunwaySamples) {
+    return {};
+  }
+  pcm.erase(pcm.begin(),
+            pcm.begin() +
+                static_cast<std::ptrdiff_t>(robot::kRobotRunwaySamples));
+  return pcm;
 }
 
 inline std::vector<int16_t>
@@ -33,8 +40,28 @@ decompress_without_runway(std::span<const std::byte> bytes,
   if (pcm.size() <= robot::kRobotRunwaySamples) {
     return {};
   }
-  return {pcm.begin() + static_cast<std::ptrdiff_t>(robot::kRobotRunwaySamples),
-          pcm.end()};
+  auto start = pcm.begin() +
+               static_cast<std::ptrdiff_t>(robot::kRobotRunwaySamples);
+  std::vector<int16_t> trimmed(start, pcm.end());
+  if (bytes.size() >= robot::kRobotZeroCompressSize) {
+    static_assert(robot::kRobotZeroCompressSize % sizeof(int16_t) == 0,
+                  "Zero-compress padding must align with sample size");
+    constexpr size_t kZeroPrefixSamples =
+        robot::kRobotZeroCompressSize / sizeof(int16_t);
+    const size_t zeroPaddingSamples =
+        (kZeroPrefixSamples > robot::kRobotRunwaySamples)
+            ? (kZeroPrefixSamples - robot::kRobotRunwaySamples)
+            : 0;
+    if (trimmed.size() <= zeroPaddingSamples) {
+      trimmed.clear();
+    } else {
+      trimmed.erase(
+          trimmed.begin(),
+          trimmed.begin() +
+              static_cast<std::ptrdiff_t>(zeroPaddingSamples));
+    }
+  }
+  return trimmed;
 }
 
 inline std::vector<int16_t>
