@@ -580,7 +580,7 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
   if (!pcm.empty()) {
     const int64_t primerHalfPos =
         isEven ? m_audioStartOffset : m_audioStartOffset + 1;
-    appendChannelSamples(isEven, primerHalfPos, pcm, false, predictor);
+    appendChannelSamples(isEven, primerHalfPos, pcm, 0, predictor);
   }
 }
 
@@ -655,10 +655,21 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   const std::vector<int16_t> &channelSamples = decoded.samples;
   const int64_t halfPos = static_cast<int64_t>(pos);
 
+  size_t zeroCompressedPrefixSamples = 0;
+  if (zeroCompressed) {
+    constexpr size_t zeroPrefixSamples =
+        kRobotZeroCompressSize / sizeof(int16_t);
+    if (zeroPrefixSamples > kRobotRunwaySamples) {
+      zeroCompressedPrefixSamples =
+          std::min(channelSamples.size(),
+                   zeroPrefixSamples - kRobotRunwaySamples);
+    }
+  }
+  
   AppendPlan plan{};
-  AppendPlanStatus status =
-      prepareChannelAppend(channel, isEvenChannel, halfPos, channelSamples, plan,
-                           zeroCompressed);
+  AppendPlanStatus status = prepareChannelAppend(
+      channel, isEvenChannel, halfPos, channelSamples, plan,
+      zeroCompressedPrefixSamples);
 
   auto updatePredictor = [&](ChannelAudio &target,
                              const DecodedChannelSamples &decodedSamples) {
@@ -719,11 +730,10 @@ void RobotExtractor::setAudioStartOffset(int64_t offset) {
 RobotExtractor::AppendPlanStatus RobotExtractor::prepareChannelAppend(
     ChannelAudio &channel, bool isEven, int64_t halfPos,
     const std::vector<int16_t> &samples, AppendPlan &plan,
-    bool zeroCompressed) {
+    size_t zeroCompressedPrefixSamples) {
   const int64_t relativeHalfPos = halfPos - m_audioStartOffset;
   const bool posIsEven = (relativeHalfPos & 1LL) == 0;
   plan.posIsEven = posIsEven;
-  plan.zeroCompressedBlock = zeroCompressed;
   if (samples.empty()) {
     return AppendPlanStatus::Skip;
   }
@@ -746,7 +756,21 @@ RobotExtractor::AppendPlanStatus RobotExtractor::prepareChannelAppend(
   } else {
     adjustedHalfPos = halfPos - channel.startHalfPos;
   }
-  return planChannelAppend(channel, isEven, adjustedHalfPos, samples, plan);
+  AppendPlanStatus status =
+      planChannelAppend(channel, isEven, adjustedHalfPos, samples, plan);
+
+  if (status != AppendPlanStatus::Skip) {
+    size_t prefix = 0;
+    if (zeroCompressedPrefixSamples > plan.skipSamples) {
+      prefix = zeroCompressedPrefixSamples - plan.skipSamples;
+      prefix = std::min(prefix, plan.availableSamples);
+    }
+    plan.zeroCompressedPrefix = prefix;
+  } else {
+    plan.zeroCompressedPrefix = 0;
+  }
+
+  return status;
 }
 
 RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
@@ -858,20 +882,21 @@ void RobotExtractor::finalizeChannelAppend(
     size_t index = plan.startSample + i;
     channel.samples[index] = samples[plan.skipSamples + i];
     channel.occupied[index] = 1;
-    channel.zeroCompressed[index] = plan.zeroCompressedBlock ? 1 : 0;    
+    channel.zeroCompressed[index] =
+        (i < plan.zeroCompressedPrefix) ? 1 : 0;
   }
 }
 void RobotExtractor::appendChannelSamples(
     bool isEven, int64_t halfPos, const std::vector<int16_t> &samples,
-    bool zeroCompressed, std::optional<int16_t> finalPredictor) {
+    size_t zeroCompressedPrefixSamples,
+    std::optional<int16_t> finalPredictor) {
   if (samples.empty() && !finalPredictor.has_value()) {
     return;
   }
   ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
   AppendPlan plan{};
-  AppendPlanStatus status =
-      prepareChannelAppend(channel, isEven, halfPos, samples, plan,
-                           zeroCompressed);
+  AppendPlanStatus status = prepareChannelAppend(
+      channel, isEven, halfPos, samples, plan, zeroCompressedPrefixSamples);
   auto updatePredictor = [&]() {
     if (!finalPredictor.has_value()) {
       if (samples.empty()) {
