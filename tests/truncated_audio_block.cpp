@@ -20,7 +20,6 @@ constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
 constexpr size_t kZeroPrefixBytes = robot::kRobotZeroCompressSize;
 constexpr size_t kRunwayBytes = robot::kRobotRunwayBytes;
-constexpr size_t kRunwaySamples = robot::kRobotRunwayBytes;
 constexpr size_t kTruncatedPayloadBytes = 2;
 constexpr uint32_t kBlockPosHalfSamples = 4;
 
@@ -139,7 +138,7 @@ TEST_CASE("Truncated audio block triggers error") {
   block[kZeroPrefixBytes + 0] = std::byte{static_cast<unsigned char>(0x88)};
   block[kZeroPrefixBytes + 1] = std::byte{static_cast<unsigned char>(0x77)};
   int16_t blockPredictor = 0;
-  const auto blockSamples = decompress_without_runway(block, blockPredictor);
+  auto blockSamples = decompress_without_runway(block, blockPredictor);
 
   audio_test::ChannelExpectation expectedEven;
   audio_test::append_expected(expectedEven, 0, primerSamples);
