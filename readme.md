@@ -1,5 +1,5 @@
 Robot Extractor v1.0.0
-Extracts animations and audio from Atari Robot (.rbt) files, compatible with ScummVM's Robot file format (versions 4, 5, and 6).
+Extracts animations and audio from Atari Robot (.rbt) files, compatible with ScummVM's Robot file format (versions 5 and 6).
 The palette data in the input file must contain a multiple of 3 bytes (RGB triples).
 Prerequisites
 
@@ -55,13 +55,14 @@ Format Audio
 The exported WAV files are in stereo 16-bit 22.05 kHz format with even samples on the left channel and odd samples on the right channel.
 
 Compatibility
-This tool is designed to be compatible with ScummVM's Robot file format (versions 4, 5, and 6). It handles LZS decompression, DPCM-16 audio decoding, and palette-based RGBA conversion.
+This tool is designed to be compatible with ScummVM's Robot file format (versions 5 and 6). It handles LZS decompression, DPCM-16 audio decoding, and palette-based RGBA conversion.
 History
 
 Earlier revisions of this project bundled a legacy standalone extractor at `src/old/robot_extractor.old` (version 1.2.8). The file has been removed for clarity, but it can still be accessed through the repository's Git history if needed.
 License
 
 BSD 3-Clause License
+
 
 
 
