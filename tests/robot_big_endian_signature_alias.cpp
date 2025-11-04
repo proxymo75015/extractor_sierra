@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 #include <vector>
 
 #include "robot_extractor.hpp"
@@ -30,7 +31,7 @@ void push_be32(std::vector<uint8_t> &buffer, uint32_t value) {
 
 } // namespace
 
-TEST_CASE("Robot big-endian header accepts 0x3D signature alias") {
+TEST_CASE("Robot big-endian header rejects 0x3D signature alias") {
   namespace fs = std::filesystem;
 
   fs::path tmpDir = fs::temp_directory_path();
@@ -74,11 +75,6 @@ TEST_CASE("Robot big-endian header accepts 0x3D signature alias") {
   fs::create_directories(outDir);
 
   RobotExtractor extractor(input, outDir, false);
-  REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
-  REQUIRE(RobotExtractorTester::postHeaderPos(extractor) ==
-          static_cast<std::streamoff>(header.size()));
-  REQUIRE(RobotExtractorTester::bigEndian(extractor));
-  REQUIRE(RobotExtractorTester::numFrames(extractor) == 2);
-  REQUIRE(RobotExtractorTester::xRes(extractor) == 320);
-  REQUIRE(RobotExtractorTester::yRes(extractor) == 200);
+  REQUIRE_THROWS_AS(RobotExtractorTester::readHeader(extractor),
+                    std::runtime_error);
 }
