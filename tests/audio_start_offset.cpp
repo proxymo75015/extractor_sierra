@@ -22,7 +22,6 @@ constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
                                        2 * sizeof(uint32_t);
 constexpr uint16_t kAudioBlockSize = 24;
 constexpr size_t kZeroPrefixBytes = robot::kRobotZeroCompressSize;
-constexpr size_t kRunwaySamples = robot::kRobotRunwaySamples;
 constexpr size_t kBlockDataBytes =
     static_cast<size_t>(kAudioBlockSize) - robot::kRobotAudioHeaderSize;
 
