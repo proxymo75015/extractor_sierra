@@ -110,11 +110,13 @@ void trim_runway_samples(std::vector<int16_t> &samples) {
 }
 
 void trim_zero_compress_padding(std::vector<int16_t> &samples) {
-  if (kRobotZeroCompressSize <= kRobotRunwaySamples) {
+  if (kRobotZeroCompressSize <= sizeof(int16_t) * kRobotRunwaySamples) {
     return;
   }
+  static_assert(kRobotZeroCompressSize % sizeof(int16_t) == 0,
+                "Zero-compress padding must align with sample size");
   const size_t zeroPaddingSamples =
-      kRobotZeroCompressSize - kRobotRunwaySamples;
+      (kRobotZeroCompressSize / sizeof(int16_t)) - kRobotRunwaySamples;
   if (samples.size() <= zeroPaddingSamples) {
     samples.clear();
     return;
