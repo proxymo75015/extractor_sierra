@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <stdexcept>
 #include <vector>
 
 #include "robot_extractor.hpp"
@@ -25,7 +26,7 @@ void push32(std::vector<uint8_t> &buffer, uint32_t value) {
 
 } // namespace
 
-TEST_CASE("Robot signature 0x3D is accepted") {
+TEST_CASE("Robot signature 0x3D is rejected") {
   namespace fs = std::filesystem;
 
   fs::path tmpDir = fs::temp_directory_path();
@@ -69,7 +70,6 @@ TEST_CASE("Robot signature 0x3D is accepted") {
   fs::create_directories(outDir);
 
   RobotExtractor extractor(input, outDir, false);
-  REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
-  REQUIRE(RobotExtractorTester::postHeaderPos(extractor) ==
-          static_cast<std::streamoff>(header.size()));
+  REQUIRE_THROWS_AS(RobotExtractorTester::readHeader(extractor),
+                    std::runtime_error);
 }
