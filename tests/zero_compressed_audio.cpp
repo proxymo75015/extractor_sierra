@@ -110,7 +110,11 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
     fs::remove(input);
   }
 
+  static_assert(robot::kRobotZeroCompressSize % sizeof(int16_t) == 0,
+                "Zero-compress padding must align with sample size");
   constexpr size_t kZeroPrefix = robot::kRobotZeroCompressSize;
+  constexpr size_t kZeroPrefixSamples =
+      robot::kRobotZeroCompressSize / sizeof(int16_t);
   std::array<uint8_t, 2> audioPayload{0x10, 0x32};
   std::vector<uint8_t> payload(audioPayload.begin(), audioPayload.end());
   auto data = build_robot_with_audio(
@@ -197,8 +201,8 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
   const size_t runwaySamples = robot::kRobotRunwaySamples;
   REQUIRE(decoded.size() >= runwaySamples);
   constexpr size_t kZeroCompressPaddingSamples =
-      (robot::kRobotZeroCompressSize > robot::kRobotRunwaySamples)
-          ? (robot::kRobotZeroCompressSize - robot::kRobotRunwaySamples)
+      (kZeroPrefixSamples > robot::kRobotRunwaySamples)
+          ? (kZeroPrefixSamples - robot::kRobotRunwaySamples)
           : 0;
   const size_t trimSamples =
       std::min(decoded.size(), runwaySamples + kZeroCompressPaddingSamples);
@@ -210,7 +214,19 @@ TEST_CASE("Zero-compressed audio block expands runway and payload") {
   int16_t payloadPredictor = 0;
   auto payloadSamplesVector =
       robot::dpcm16_decompress(std::span(payloadBytes), payloadPredictor);
-  REQUIRE(actualSamples == payloadSamplesVector);
+  constexpr size_t kZeroPaddingSamples =
+      (kZeroPrefixSamples > robot::kRobotRunwaySamples)
+          ? (kZeroPrefixSamples - robot::kRobotRunwaySamples)
+          : 0;
+  REQUIRE(actualSamples.size() ==
+          kZeroPaddingSamples + payloadSamplesVector.size());
+  REQUIRE(std::all_of(actualSamples.begin(),
+                      actualSamples.begin() +
+                          static_cast<std::ptrdiff_t>(kZeroPaddingSamples),
+                      [](int16_t sample) { return sample == 0; }));
+  REQUIRE(std::equal(payloadSamplesVector.begin(), payloadSamplesVector.end(),
+                     actualSamples.begin() +
+                         static_cast<std::ptrdiff_t>(kZeroPaddingSamples)));
   REQUIRE(payloadPredictor == combinedPredictor);
 }
 
