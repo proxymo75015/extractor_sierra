@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
+#include <span>
 #include <vector>
 
 #include "robot_extractor.hpp"
@@ -181,6 +182,31 @@ TEST_CASE("Primer plus court que la piste d'élan est utilisé") {
         robot::RobotExtractorTester::buildChannelStream(extractor, true);
     const auto oddStream =
         robot::RobotExtractorTester::buildChannelStream(extractor, false);
-    REQUIRE(evenStream.size() == evenSize);
-    REQUIRE(oddStream.size() == oddSize);
+
+    auto decodePrimerSamples = [](const auto &bytes) {
+      if (bytes.empty()) {
+        return std::vector<int16_t>{};
+      }
+      std::vector<std::byte> primerBytes;
+      primerBytes.reserve(bytes.size());
+      for (auto value : bytes) {
+        primerBytes.push_back(static_cast<std::byte>(value));
+      }
+      int16_t predictor = 0;
+      auto decoded =
+          robot::dpcm16_decompress(std::span(primerBytes), predictor);
+      if (decoded.size() <= robot::kRobotRunwaySamples) {
+        return std::vector<int16_t>{};
+      }
+      decoded.erase(
+          decoded.begin(),
+          decoded.begin() +
+              static_cast<std::ptrdiff_t>(robot::kRobotRunwaySamples));
+      return decoded;
+    };
+
+    const auto expectedEven = decodePrimerSamples(evenBytes);
+    const auto expectedOdd = decodePrimerSamples(oddBytes);
+    REQUIRE(evenStream == expectedEven);
+    REQUIRE(oddStream == expectedOdd);
 }
