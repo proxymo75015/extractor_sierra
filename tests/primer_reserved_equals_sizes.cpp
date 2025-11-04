@@ -108,9 +108,11 @@ TEST_CASE("Primer reserved size matches channel sizes") {
 
   const auto primerDataStart = RobotExtractorTester::primerPosition(extractor);
   const auto postPrimer = RobotExtractorTester::postPrimerPos(extractor);
-  REQUIRE(postPrimer ==
-          primerDataStart +
-              static_cast<std::streamoff>(robot::kRobotRunwayBytes));
+  const auto evenPrimerSize =
+      robot::RobotExtractorTester::evenPrimerSize(extractor);
+  const auto oddPrimerSize =
+      robot::RobotExtractorTester::oddPrimerSize(extractor);
+  REQUIRE(postPrimer == primerDataStart + evenPrimerSize + oddPrimerSize);
 
   REQUIRE_NOTHROW(RobotExtractorTester::readPalette(extractor));
   const auto &palette = RobotExtractorTester::palette(extractor);
