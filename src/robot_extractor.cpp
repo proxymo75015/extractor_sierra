@@ -209,11 +209,7 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
         "Impossible de repositionner le flux au début de l'en-tête Robot");
   }
 
-  const uint16_t rawSig = read_scalar<uint16_t>(m_fp, false);
-  uint16_t sig = rawSig;
-  if (sig == 0x3d) {
-    sig = kRobotSig;
-  }
+  const uint16_t sig = read_scalar<uint16_t>(m_fp, false);
   if (sig != kRobotSig) {
     throw std::runtime_error("Signature Robot invalide");
   }
