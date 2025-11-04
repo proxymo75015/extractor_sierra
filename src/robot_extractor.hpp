@@ -170,7 +170,7 @@ private:
                 bool appendChannelSuffix = true);
   void appendChannelSamples(
       bool isEven, int64_t halfPos, const std::vector<int16_t> &samples,
-      bool zeroCompressed = false,
+      size_t zeroCompressedPrefixSamples = 0,
       std::optional<int16_t> finalPredictor = std::nullopt);
   size_t celPixelLimit() const;
   size_t rgbaBufferLimit() const;
@@ -182,10 +182,10 @@ private:
     size_t leadingOverlap = 0;
     size_t trimmedStart = 0;
     size_t requiredSize = 0;
+    size_t zeroCompressedPrefix = 0;
     bool negativeAdjusted = false;
     bool negativeIgnored = false;
     bool posIsEven = true;
-    bool zeroCompressedBlock = false;
   };
   enum class AppendPlanStatus { Skip, Ok, Conflict, ParityMismatch };
   AppendPlanStatus planChannelAppend(const ChannelAudio &channel, bool isEven,
@@ -196,7 +196,7 @@ private:
                                         int64_t halfPos,
                                         const std::vector<int16_t> &samples,
                                         AppendPlan &plan,
-                                        bool zeroCompressed = false);
+                                        size_t zeroCompressedPrefixSamples = 0);
   void finalizeChannelAppend(ChannelAudio &channel, bool isEven,
                              int64_t halfPos,
                              const std::vector<int16_t> &samples,
