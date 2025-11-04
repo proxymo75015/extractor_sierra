@@ -1,8 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
+#include <span>
 #include <vector>
 
+#include "audio_decompression_helpers.hpp"
 #include "robot_extractor.hpp"
 
 namespace fs = std::filesystem;
@@ -103,6 +105,23 @@ TEST_CASE("Zero audio position is skipped") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
+  const auto evenStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, true);
+  const auto oddStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, false);
+  REQUIRE(oddStream.empty());
+
+  std::vector<std::byte> primerBytes(kRunwayBytes, std::byte{0x88});
+  int16_t predictor = 0;
+  auto decodedPrimer =
+      robot::dpcm16_decompress(std::span(primerBytes), predictor);
+  REQUIRE(decodedPrimer.size() >= robot::kRobotRunwaySamples);
+  decodedPrimer.erase(
+      decodedPrimer.begin(),
+      decodedPrimer.begin() +
+          static_cast<std::ptrdiff_t>(robot::kRobotRunwaySamples));
+  REQUIRE(evenStream == decodedPrimer);
+  
   auto wavStereo = outDir / "frame_00000.wav";
-  REQUIRE_FALSE(fs::exists(wavStereo));
+  REQUIRE(fs::exists(wavStereo));
 }
