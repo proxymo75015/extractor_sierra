@@ -458,8 +458,13 @@ void RobotExtractor::readPrimer() {
       assignPrimer(m_evenPrimer, m_evenPrimerSize, "pair");
       assignPrimer(m_oddPrimer, m_oddPrimerSize, "impair");
 
-      m_fp.seekg(reservedEnd, std::ios::beg);
-      m_postPrimerPos = m_fp.tellg();
+      const std::streamoff afterPrimerDataPos = m_fp.tellg();
+      if (reservedEnd > afterPrimerDataPos) {
+        m_fp.seekg(reservedEnd, std::ios::beg);
+        m_postPrimerPos = m_fp.tellg();
+      } else {
+        m_postPrimerPos = afterPrimerDataPos;
+      }
     }
     if (m_options.debug_index) {
       log_error(m_srcPath,
