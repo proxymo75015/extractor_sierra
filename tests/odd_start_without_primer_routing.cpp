@@ -16,7 +16,6 @@ namespace {
 constexpr uint16_t kNumFrames = 2;
 constexpr uint32_t kAudioBlockSize = 24;
 constexpr size_t kZeroPrefixBytes = robot::kRobotZeroCompressSize;
-constexpr size_t kRunwaySamples = robot::kRobotRunwaySamples;
 constexpr size_t kBlockDataBytes =
     static_cast<size_t>(kAudioBlockSize) - robot::kRobotAudioHeaderSize;
 
