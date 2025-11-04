@@ -101,8 +101,11 @@ TEST_CASE("Primer sizes exceeding reserved space keep alignment") {
 
   const auto primerDataStart = RobotExtractorTester::primerPosition(extractor);
   const auto postPrimer = RobotExtractorTester::postPrimerPos(extractor);
-  REQUIRE(postPrimer ==
-          primerDataStart + static_cast<std::streamoff>(primerReservedSize));
+  const auto evenPrimerSize =
+      robot::RobotExtractorTester::evenPrimerSize(extractor);
+  const auto oddPrimerSize =
+      robot::RobotExtractorTester::oddPrimerSize(extractor);
+  REQUIRE(postPrimer == primerDataStart + evenPrimerSize + oddPrimerSize);
 
   const auto &evenPrimer = RobotExtractorTester::evenPrimer(extractor);
   REQUIRE(evenPrimer.size() == evenSize);
