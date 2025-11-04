@@ -22,7 +22,6 @@ constexpr uint32_t kPrimerHeaderSize = sizeof(uint32_t) + sizeof(int16_t) +
 constexpr uint16_t kAudioBlockSize = 24;
 constexpr size_t kZeroPrefixBytes = robot::kRobotZeroCompressSize;
 constexpr size_t kRunwayBytes = robot::kRobotRunwayBytes;
-constexpr size_t kRunwaySamples = robot::kRobotRunwayBytes;
 constexpr size_t kTruncatedPayloadBytes = 2;
 constexpr size_t kBlockBytes = static_cast<size_t>(kAudioBlockSize) -
                                robot::kRobotAudioHeaderSize;
@@ -149,7 +148,7 @@ TEST_CASE("Audio block with runway triggers error") {
   std::vector<std::byte> block = zeroPrefix;
   block.insert(block.end(), payload.begin(), payload.end());
   int16_t blockPredictor = 0;
-  const auto blockSamples = decompress_without_runway(block, blockPredictor);
+  auto blockSamples = decompress_without_runway(block, blockPredictor);
   REQUIRE(!blockSamples.empty());
 
   const size_t blockStart = static_cast<size_t>(kBlockPosHalfSamples / 2);
