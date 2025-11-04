@@ -608,13 +608,13 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     bool predictorValid = false;
   };
 
-  auto decodeChannelSamples = [&](const ChannelAudio &source) {
+  auto decodeChannelSamples = [&](const ChannelAudio & /*source*/) {
     DecodedChannelSamples decoded;
-    int16_t localPredictor = source.predictorInitialized ? source.predictor : 0;
+    int16_t localPredictor = 0;
     decoded.samples = dpcm16_decompress(blockBytes, localPredictor);
     trim_runway_samples(decoded.samples);
     decoded.finalPredictor = localPredictor;
-    decoded.predictorValid = source.predictorInitialized || !blockBytes.empty();
+    decoded.predictorValid = !blockBytes.empty();
     return decoded;
   };
 
