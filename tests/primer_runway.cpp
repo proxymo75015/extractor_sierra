@@ -2,6 +2,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
 #include <fstream>
+#include <span>
 #include <vector>
 
 #include "robot_extractor.hpp"
@@ -100,9 +101,41 @@ TEST_CASE("Primer WAV excludes runway samples") {
   robot::RobotExtractor extractor(input, outDir, true);
   REQUIRE_NOTHROW(extractor.extract());
 
+  const auto evenStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, true);
+  const auto oddStream =
+      robot::RobotExtractorTester::buildChannelStream(extractor, false);
+  REQUIRE(oddStream.empty());
+
+  std::vector<uint8_t> primerData;
+  primerData.reserve(robot::kRobotRunwayBytes + 2);
+  for (size_t i = 0; i < robot::kRobotRunwayBytes; ++i) {
+    primerData.push_back(static_cast<uint8_t>(i));
+  }
+  primerData.push_back(0x88);
+  primerData.push_back(0x77);
+  std::vector<std::byte> primerBytes;
+  primerBytes.reserve(primerData.size());
+  for (uint8_t value : primerData) {
+    primerBytes.push_back(static_cast<std::byte>(value));
+  }
+  int16_t predictor = 0;
+  auto decodedPrimer =
+      robot::dpcm16_decompress(std::span(primerBytes), predictor);
+  REQUIRE(decodedPrimer.size() >= robot::kRobotRunwaySamples);
+  decodedPrimer.erase(
+      decodedPrimer.begin(),
+      decodedPrimer.begin() +
+          static_cast<std::ptrdiff_t>(robot::kRobotRunwaySamples));
+  REQUIRE(evenStream == decodedPrimer);
+  
   auto wavPath = outDir / "frame_00000.wav";
   REQUIRE(fs::exists(wavPath));
-  REQUIRE(fs::file_size(wavPath) == 52); // 44 header + 8 data bytes (stéréo)
+  const size_t channelSamples =
+      std::max(evenStream.size(), oddStream.size());
+  const uintmax_t expectedDataBytes =
+      static_cast<uintmax_t>(channelSamples * sizeof(int16_t) * 2);
+  REQUIRE(fs::file_size(wavPath) == 44 + expectedDataBytes);
 
   std::ifstream wav(wavPath, std::ios::binary);
   REQUIRE(wav);
