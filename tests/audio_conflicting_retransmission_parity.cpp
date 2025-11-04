@@ -68,8 +68,8 @@ std::vector<uint8_t> build_primer_header() {
   return p;
 }
 
-std::vector<int16_t> decode_block(const std::vector<uint8_t> &bytes) {
-  int16_t predictor = 0;
+std::vector<int16_t> decode_block(const std::vector<uint8_t> &bytes,
+                                  int16_t &predictor) {
   return audio_test::decompress_without_runway(bytes, predictor);
 }
 
@@ -100,9 +100,10 @@ TEST_CASE("Conflicting retransmission is rejected while parity mismatch is ignor
   std::array<uint8_t, robot::kRobotRunwayBytes> primerEven{};
   primerEven.fill(0x88);
   data.insert(data.end(), primerEven.begin(), primerEven.end());
-  int16_t predictor = 0;
+  int16_t evenPredictor = 0;
+  int16_t oddPredictor = 0;
   std::vector<uint8_t> primerBytes(primerEven.begin(), primerEven.end());
-  audio_test::decompress_primer(primerBytes, predictor);
+  audio_test::decompress_primer(primerBytes, evenPredictor);
 
   for (uint16_t i = 0; i < kNumFrames; ++i) {
     push16(data, 2); // frame size placeholder
@@ -143,9 +144,12 @@ TEST_CASE("Conflicting retransmission is rejected while parity mismatch is ignor
       0x98, 0x99, 0x9A, 0x9B, 0x9C, 0x9D, 0x9E, 0x9F};
   const std::array<uint8_t, robot::kRobotRunwayBytes> parityTail = {
       0xB8, 0xB7, 0xB6, 0xB5, 0xB4, 0xB3, 0xB2, 0xB1};
+  const std::array<uint8_t, robot::kRobotRunwayBytes> postConflictTail = {
+      0xC8, 0xC7, 0xC6, 0xC5, 0xC4, 0xC3, 0xC2, 0xC1};  
 
   auto block1 = build_block(runwayBlock1, block1Tail);
   auto conflictBlock = build_block(runwayBlock1, conflictTail);
+  auto postConflictBlock = build_block(runwayBlock1, postConflictTail);  
   auto parityBlock = build_block(runwayBlock1, parityTail);
 
   auto processBlock = [&](const std::vector<uint8_t> &raw, int32_t pos) {
@@ -197,11 +201,13 @@ TEST_CASE("Conflicting retransmission is rejected while parity mismatch is ignor
       buffer[offset + i] = samples[i];
     }
   };
-  auto block1Samples = decode_block(block1);
+  auto block1Samples = decode_block(block1, evenPredictor);
   REQUIRE_FALSE(block1Samples.empty());
   const int64_t block1Start = block1Pos / 2;
   updateEvenExpected(expectedEvenAfterFirst, block1Start, block1Samples);
-
+  const int32_t postConflictPos =
+      block1Pos + static_cast<int32_t>(block1Samples.size() * 2);
+  
   REQUIRE(afterFirstEven == expectedEvenAfterFirst);
   REQUIRE(afterFirstOdd == baselineOdd);
 
@@ -211,19 +217,32 @@ TEST_CASE("Conflicting retransmission is rejected while parity mismatch is ignor
   auto afterConflictOdd =
       robot::RobotExtractorTester::buildChannelStream(extractor, false);
 
-  auto conflictSamples = decode_block(conflictBlock);
+  auto conflictSamples = decode_block(conflictBlock, evenPredictor);
   REQUIRE_FALSE(conflictSamples.empty());
   auto expectedEvenAfterConflict = expectedEvenAfterFirst;
 
   REQUIRE(afterConflictEven == expectedEvenAfterConflict);
   REQUIRE(afterConflictOdd == baselineOdd);
 
+  auto postConflictSamples = decode_block(postConflictBlock, evenPredictor);
+  REQUIRE_FALSE(postConflictSamples.empty());
+  REQUIRE_NOTHROW(processBlock(postConflictBlock, postConflictPos));
+  auto afterPostConflictEven =
+      robot::RobotExtractorTester::buildChannelStream(extractor, true);
+  auto afterPostConflictOdd =
+      robot::RobotExtractorTester::buildChannelStream(extractor, false);
+  const int64_t postConflictStart = postConflictPos / 2;
+  updateEvenExpected(expectedEvenAfterConflict, postConflictStart,
+                     postConflictSamples);
+  REQUIRE(afterPostConflictEven == expectedEvenAfterConflict);
+  REQUIRE(afterPostConflictOdd == baselineOdd);
+  
   REQUIRE_NOTHROW(processBlock(parityBlock, parityPos));
   auto afterParityEven =
       robot::RobotExtractorTester::buildChannelStream(extractor, true);
   auto afterParityOdd =
       robot::RobotExtractorTester::buildChannelStream(extractor, false);
-  auto paritySamples = decode_block(parityBlock);
+  auto paritySamples = decode_block(parityBlock, oddPredictor);
 
   const int64_t parityStart = parityPos / 2;
   updateEvenExpected(expectedEvenAfterConflict, parityStart, paritySamples);
