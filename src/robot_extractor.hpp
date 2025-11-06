@@ -183,6 +183,7 @@ private:
     size_t trimmedStart = 0;
     size_t requiredSize = 0;
     size_t zeroCompressedPrefix = 0;
+    size_t inputOffset = 0;
     bool negativeAdjusted = false;
     bool negativeIgnored = false;
     bool posIsEven = true;
@@ -191,7 +192,8 @@ private:
   AppendPlanStatus planChannelAppend(const ChannelAudio &channel, bool isEven,
                                      int64_t halfPos,
                                      const std::vector<int16_t> &samples,
-                                     AppendPlan &plan) const;
+                                     AppendPlan &plan,
+                                     size_t inputOffset = 0) const;
   AppendPlanStatus prepareChannelAppend(ChannelAudio &channel, bool isEven,
                                         int64_t halfPos,
                                         const std::vector<int16_t> &samples,
