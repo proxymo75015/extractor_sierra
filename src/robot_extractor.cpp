@@ -490,6 +490,18 @@ void RobotExtractor::readPrimer() {
     m_primerInvalid = true;
   }
 
+  if (m_hasAudio) {
+    const auto evenPrimerSize64 = static_cast<int64_t>(m_evenPrimerSize);
+    if (evenPrimerSize64 < 0) {
+      throw std::runtime_error("Taille de primer audio pair négative");
+    }
+    if (evenPrimerSize64 > std::numeric_limits<int64_t>::max() / 2) {
+      throw std::runtime_error(
+          "Décalage audio pair dépasse la capacité de l'entier 64 bits");
+    }
+    m_audioStartOffset = evenPrimerSize64 * 2;
+  }
+  
   if (!m_extractAudio) {
     ensurePrimerProcessed();
   }
