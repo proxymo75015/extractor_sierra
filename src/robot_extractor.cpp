@@ -737,6 +737,8 @@ RobotExtractor::AppendPlanStatus RobotExtractor::prepareChannelAppend(
   if (samples.empty()) {
     return AppendPlanStatus::Skip;
   }
+  size_t inputOffset = 0;
+  size_t adjustedZeroPrefix = zeroCompressedPrefixSamples;  
   int64_t adjustedHalfPos = halfPos;
   if (!channel.startHalfPosInitialized) {
     channel.startHalfPos = halfPos;
@@ -744,25 +746,31 @@ RobotExtractor::AppendPlanStatus RobotExtractor::prepareChannelAppend(
     adjustedHalfPos = 0;
   } else if (halfPos < channel.startHalfPos) {
     const int64_t deltaHalf = channel.startHalfPos - halfPos;
+    if ((deltaHalf & 1LL) != 0) {
+      return AppendPlanStatus::ParityMismatch;
+    }    
     const size_t deltaSamples = static_cast<size_t>(deltaHalf / 2);
-    if (deltaSamples != 0) {
-      channel.samples.insert(channel.samples.begin(), deltaSamples, 0);
-      channel.occupied.insert(channel.occupied.begin(), deltaSamples, 0);
-      channel.zeroCompressed.insert(channel.zeroCompressed.begin(),
-                                    deltaSamples, 0);      
+    if (deltaSamples >= samples.size()) {
+      return AppendPlanStatus::Skip;  
     }
-    channel.startHalfPos = halfPos;
+    inputOffset = deltaSamples;
     adjustedHalfPos = 0;
+    if (adjustedZeroPrefix > inputOffset) {
+      adjustedZeroPrefix -= inputOffset;
+    } else {
+      adjustedZeroPrefix = 0;
+    }
   } else {
     adjustedHalfPos = halfPos - channel.startHalfPos;
   }
   AppendPlanStatus status =
-      planChannelAppend(channel, isEven, adjustedHalfPos, samples, plan);
+      planChannelAppend(channel, isEven, adjustedHalfPos, samples, plan,
+                        inputOffset);
 
   if (status != AppendPlanStatus::Skip) {
     size_t prefix = 0;
-    if (zeroCompressedPrefixSamples > plan.skipSamples) {
-      prefix = zeroCompressedPrefixSamples - plan.skipSamples;
+    if (adjustedZeroPrefix > plan.skipSamples) {
+      prefix = adjustedZeroPrefix - plan.skipSamples;
       prefix = std::min(prefix, plan.availableSamples);
     }
     plan.zeroCompressedPrefix = prefix;
@@ -775,13 +783,16 @@ RobotExtractor::AppendPlanStatus RobotExtractor::prepareChannelAppend(
 
 RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
     const ChannelAudio &channel, bool isEven, int64_t halfPos,
-    const std::vector<int16_t> &samples, AppendPlan &plan) const {
-  if (samples.empty()) {
+    const std::vector<int16_t> &samples, AppendPlan &plan,
+    size_t inputOffset) const {
+  if (samples.empty() || inputOffset >= samples.size()) {
     return AppendPlanStatus::Skip;
   }
   if (plan.posIsEven != isEven) {
     return AppendPlanStatus::ParityMismatch;
-  }  
+  }
+  plan.inputOffset = inputOffset;
+  const size_t effectiveSize = samples.size() - plan.inputOffset;
   int64_t startHalf = halfPos;
   int64_t startSampleSigned = 0;
   if (startHalf >= 0) {
@@ -792,7 +803,7 @@ RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
   if (startSampleSigned < 0) {
     plan.negativeAdjusted = true;
     plan.skipSamples = static_cast<size_t>(-startSampleSigned);
-    if (plan.skipSamples >= samples.size()) {
+    if (plan.skipSamples >= effectiveSize) {
       plan.negativeIgnored = true;
       return AppendPlanStatus::Skip;
     }
@@ -800,7 +811,7 @@ RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
   } else {
     plan.startSample = static_cast<size_t>(startSampleSigned);
   }
-  plan.availableSamples = samples.size() - plan.skipSamples;
+  plan.availableSamples = effectiveSize - plan.skipSamples;
   if (plan.availableSamples == 0) {
     return AppendPlanStatus::Skip;
   }
@@ -821,15 +832,15 @@ RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
     if (index >= channel.zeroCompressed.size() ||
         channel.zeroCompressed[index] == 0) {
       if (channel.samples[index] !=
-          samples[plan.skipSamples + plan.leadingOverlap]) {
+          samples[plan.inputOffset + plan.skipSamples + plan.leadingOverlap]) {
         return AppendPlanStatus::Conflict;
       }
       ++plan.leadingOverlap;
       continue;
     }
-    // Existing data derived from a zero-compressed block is replaceable.    
+    // Existing data derived from a zero-compressed block is replaceable.
     if (channel.samples[index] !=
-        samples[plan.skipSamples + plan.leadingOverlap]) {
+        samples[plan.inputOffset + plan.skipSamples + plan.leadingOverlap]) {
       break;
     }
     ++plan.leadingOverlap;
@@ -880,7 +891,8 @@ void RobotExtractor::finalizeChannelAppend(
   }
   for (size_t i = plan.leadingOverlap; i < plan.availableSamples; ++i) {
     size_t index = plan.startSample + i;
-    channel.samples[index] = samples[plan.skipSamples + i];
+    channel.samples[index] =
+        samples[plan.inputOffset + plan.skipSamples + i];
     channel.occupied[index] = 1;
     channel.zeroCompressed[index] =
         (i < plan.zeroCompressedPrefix) ? 1 : 0;
