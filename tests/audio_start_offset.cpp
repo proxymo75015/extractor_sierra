@@ -121,6 +121,50 @@ struct BlockInfo {
 
 } // namespace
 
+TEST_CASE("Audio start offset derived from even primer size") {
+  fs::path tmpDir = fs::temp_directory_path();
+  fs::path input = tmpDir / "audio_start_offset_header.rbt";
+  fs::path outDir = tmpDir / "audio_start_offset_header_out";
+  if (fs::exists(outDir)) {
+    fs::remove_all(outDir);
+  }
+  fs::create_directories(outDir);
+
+  std::vector<uint8_t> evenPrimerData = {0, 1, 2, 3, 4};
+  std::vector<uint8_t> oddPrimerData = {5, 6, 7, 8};
+
+  const uint32_t primerDataSize = static_cast<uint32_t>(evenPrimerData.size() +
+                                                        oddPrimerData.size());
+  const uint16_t primerReserved = static_cast<uint16_t>(kPrimerHeaderSize +
+                                                        primerDataSize);
+
+  auto data = build_header(primerReserved);
+  auto primerHeader = build_primer_header(
+      kPrimerHeaderSize + primerDataSize,
+      static_cast<uint32_t>(evenPrimerData.size()),
+      static_cast<uint32_t>(oddPrimerData.size()));
+  data.insert(data.end(), primerHeader.begin(), primerHeader.end());
+  data.insert(data.end(), evenPrimerData.begin(), evenPrimerData.end());
+  data.insert(data.end(), oddPrimerData.begin(), oddPrimerData.end());
+
+  // Ajoute quelques octets de remplissage après la zone réservée au primer.
+  data.resize(data.size() + 32, 0);
+
+  std::ofstream out(input, std::ios::binary);
+  out.write(reinterpret_cast<const char *>(data.data()),
+            static_cast<std::streamsize>(data.size()));
+  out.close();
+
+  robot::RobotExtractor extractor(input, outDir, true);
+  REQUIRE_NOTHROW(robot::RobotExtractorTester::readHeader(extractor));
+  REQUIRE_NOTHROW(robot::RobotExtractorTester::readPrimer(extractor));
+
+  const int64_t expectedOffset =
+      static_cast<int64_t>(evenPrimerData.size()) * 2;
+  REQUIRE(robot::RobotExtractorTester::audioStartOffset(extractor) ==
+          expectedOffset);
+}
+
 TEST_CASE("Audio start offset routed using doubled positions") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "audio_start_offset.rbt";
