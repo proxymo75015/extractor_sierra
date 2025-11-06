@@ -356,6 +356,9 @@ struct RobotExtractorTester {
   static void setAudioStartOffset(RobotExtractor &r, int64_t offset) {
     r.setAudioStartOffset(offset);
   }
+  static int64_t audioStartOffset(const RobotExtractor &r) {
+    return r.m_audioStartOffset;
+  }
   static void writeWav(RobotExtractor &r, const std::vector<int16_t> &samples,
                        uint32_t sampleRate, size_t blockIndex,
                        bool isEvenChannel, uint16_t numChannels = 1,
