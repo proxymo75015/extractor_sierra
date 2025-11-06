@@ -394,25 +394,14 @@ void RobotExtractor::readPrimer() {
       const std::streamoff reservedEnd =
           primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
 
-      if (primerSizesSum != static_cast<std::uint64_t>(m_primerReservedSize)) {
+      if (primerSizesSum != reservedDataSize) {
         log_warn(m_srcPath,
-                 "Somme des tailles primer incohérente avec primerReservedSize",
+                 "Somme des tailles primer incohérente avec l'espace réservé",
                  m_options);
-        m_evenPrimer.clear();
-        m_oddPrimer.clear();
-        if (reservedEnd > afterPrimerHeaderPos) {
-          m_fp.seekg(reservedEnd, std::ios::beg);
-          m_postPrimerPos = m_fp.tellg();
-        } else {
-          m_postPrimerPos = afterPrimerHeaderPos;
-        }
-        m_primerProcessed = true;
         if (m_options.debug_index) {
           log_error(m_srcPath,
-                    "readPrimer: primer ignoré en raison d'un mismatch",
-                    m_options);
+                    "readPrimer: primer relu malgré un mismatch", m_options);
         }
-        return;
       }
       
       if (primerSizesSum > reservedDataSize) {
