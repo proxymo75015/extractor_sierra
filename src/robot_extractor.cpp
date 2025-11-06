@@ -391,6 +391,30 @@ void RobotExtractor::readPrimer() {
       const std::uint64_t reservedDataSize =
           reservedSize >= primerHeaderSizeU ? (reservedSize - primerHeaderSizeU) : 0;
 
+      const std::streamoff reservedEnd =
+          primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
+
+      if (primerSizesSum != static_cast<std::uint64_t>(m_primerReservedSize)) {
+        log_warn(m_srcPath,
+                 "Somme des tailles primer incohérente avec primerReservedSize",
+                 m_options);
+        m_evenPrimer.clear();
+        m_oddPrimer.clear();
+        if (reservedEnd > afterPrimerHeaderPos) {
+          m_fp.seekg(reservedEnd, std::ios::beg);
+          m_postPrimerPos = m_fp.tellg();
+        } else {
+          m_postPrimerPos = afterPrimerHeaderPos;
+        }
+        m_primerProcessed = true;
+        if (m_options.debug_index) {
+          log_error(m_srcPath,
+                    "readPrimer: primer ignoré en raison d'un mismatch",
+                    m_options);
+        }
+        return;
+      }
+      
       if (primerSizesSum > reservedDataSize) {
         log_warn(m_srcPath,
                  "Tailles de primer dépassent l'espace réservé", m_options);
@@ -399,15 +423,6 @@ void RobotExtractor::readPrimer() {
         log_error(m_srcPath,
                   "readPrimer: primer plus petit que primerReservedSize",
                   m_options);
-      }
-
-      const std::streamoff reservedEnd =
-          primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
-
-      if (primerSizesSum != static_cast<std::uint64_t>(m_primerReservedSize)) {
-        log_warn(m_srcPath,
-                 "Somme des tailles primer incohérente avec primerReservedSize",
-                 m_options);
       }
 
       const std::int64_t reservedDataAvailable =
