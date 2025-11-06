@@ -5,8 +5,6 @@
 #include <vector>
 
 #include "robot_extractor.hpp"
-#include "audio_decompression_helpers.hpp"
-
 using robot::RobotExtractor;
 using robot::RobotExtractorTester;
 
@@ -64,7 +62,7 @@ build_primer_header(uint32_t total, uint32_t evenSize, uint32_t oddSize) {
   return p;
 }
 
-TEST_CASE("Primer mismatch preserves primer data while realigning stream") {
+TEST_CASE("Primer mismatch skips primer data while realigning stream") {
   fs::path tmpDir = fs::temp_directory_path();
   fs::path input = tmpDir / "primer_reserved_mismatch.rbt";
   fs::path outDir = tmpDir / "primer_reserved_mismatch_out";
@@ -118,25 +116,8 @@ TEST_CASE("Primer mismatch preserves primer data while realigning stream") {
 
   const auto &evenPrimer = RobotExtractorTester::evenPrimer(extractor);
   const auto &oddPrimer = RobotExtractorTester::oddPrimer(extractor);
-  REQUIRE(evenPrimer.size() == evenPrimerBytes.size());
-  REQUIRE(oddPrimer.size() == oddPrimerBytes.size());
-  for (size_t i = 0; i < evenPrimer.size(); ++i) {
-    REQUIRE(evenPrimer[i] == std::byte{evenPrimerBytes[i]});
-  }
-  for (size_t i = 0; i < oddPrimer.size(); ++i) {
-    REQUIRE(oddPrimer[i] == std::byte{oddPrimerBytes[i]});
-  }
-
-  const std::vector<uint8_t> evenPrimerVec(evenPrimerBytes.begin(),
-                                           evenPrimerBytes.end());
-  const std::vector<uint8_t> oddPrimerVec(oddPrimerBytes.begin(),
-                                          oddPrimerBytes.end());
-  int16_t evenBlockPredictor = 0;
-  const auto evenExpected =
-      audio_test::decompress_without_runway(evenPrimerVec, evenBlockPredictor);
-  int16_t oddBlockPredictor = 0;
-  const auto oddExpected =
-      audio_test::decompress_without_runway(oddPrimerVec, oddBlockPredictor);
+  REQUIRE(evenPrimer.empty());
+  REQUIRE(oddPrimer.empty());
   
   RobotExtractorTester::finalizeAudio(extractor);
 
@@ -144,15 +125,11 @@ TEST_CASE("Primer mismatch preserves primer data while realigning stream") {
       RobotExtractorTester::buildChannelStream(extractor, true);
   const auto oddStream =
       RobotExtractorTester::buildChannelStream(extractor, false);
-  REQUIRE(evenStream == evenExpected);
-  REQUIRE(oddStream == oddExpected);
+  REQUIRE(evenStream.empty());
+  REQUIRE(oddStream.empty());
 
   fs::path stereoWav = outDir / "frame_00000.wav";
-  if (!evenExpected.empty() || !oddExpected.empty()) {
-    REQUIRE(fs::exists(stereoWav));
-  } else {
-    REQUIRE_FALSE(fs::exists(stereoWav));
-  }
+  REQUIRE_FALSE(fs::exists(stereoWav));
 
   int nextByte = file.peek();
   REQUIRE(nextByte == 0xCC);
