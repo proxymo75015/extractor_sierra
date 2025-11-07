@@ -23,6 +23,21 @@ TEST_CASE("detect_endianness uses version field") {
     }
     fs::remove(lePath);
 
+    // Little-endian version 4 sample
+    fs::path leV4Path = fs::temp_directory_path() / "robot_le_v4.rbt";
+    {
+        std::array<uint8_t, 8> data{};
+        data[6] = 0x04; // version 4 little-endian
+        data[7] = 0x00;
+        std::ofstream out(leV4Path, std::ios::binary);
+        out.write(reinterpret_cast<const char*>(data.data()), data.size());
+    }
+    {
+        std::ifstream in(leV4Path, std::ios::binary);
+        REQUIRE_FALSE(detect_endianness(in));
+    }
+    fs::remove(leV4Path);
+    
     // Big-endian sample
     fs::path bePath = fs::temp_directory_path() / "robot_be.rbt";
     {
