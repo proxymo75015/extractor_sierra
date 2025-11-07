@@ -594,8 +594,7 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     return;
   }
   if (!pcm.empty()) {
-    const int64_t primerHalfPos =
-        isEven ? m_audioStartOffset : m_audioStartOffset + 1;
+    const int64_t primerHalfPos = isEven ? 0 : 1;
     appendChannelSamples(isEven, primerHalfPos, pcm, 0, predictor);
   }
 }
