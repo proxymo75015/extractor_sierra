@@ -147,7 +147,7 @@ void RobotExtractor::readHeader() {
 
   m_postHeaderPos = m_fp.tellg();
   
-  if (m_version < 5 || m_version > 6) {
+  if (m_version < 4 || m_version > 6) {
     throw std::runtime_error("Version Robot non supportée: " +
                              std::to_string(m_version));
   }
@@ -180,7 +180,7 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   }
 
   m_version = read_scalar<uint16_t>(m_fp, m_bigEndian);
-  if (m_version < 5 || m_version > 6) {
+  if (m_version < 4 || m_version > 6) {
     throw std::runtime_error("Version Robot non supportée: " +
                              std::to_string(m_version));
   }
