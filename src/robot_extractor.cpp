@@ -2006,16 +2006,11 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             throw std::runtime_error("Taille audio invalide");
           }
           if (!silentAudioBlock && size > expectedAudioBlockSize) {
-            const std::string logMessage =
-                "Taille de bloc audio inattendue: " +
-                std::to_string(size) + " (maximum " +
-                std::to_string(expectedAudioBlockSize) +
-                ") — troncature appliquée";
-            log_warn(m_srcPath, logMessage, m_options);
-            size = expectedAudioBlockSize >
-                           static_cast<int64_t>(std::numeric_limits<int32_t>::max())
-                       ? std::numeric_limits<int32_t>::max()
-                       : static_cast<int32_t>(expectedAudioBlockSize);
+            throw std::runtime_error(
+                "Taille de bloc audio inattendue: " + std::to_string(size) +
+                " (maximum " +
+                std::to_string(static_cast<long long>(expectedAudioBlockSize)) +
+                ")");
           }
           if (silentAudioBlock) {
             int64_t bytesToSkip = static_cast<int64_t>(audioBlkLen) - consumed;
