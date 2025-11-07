@@ -749,14 +749,15 @@ RobotExtractor::AppendPlanStatus RobotExtractor::prepareChannelAppend(
     ChannelAudio &channel, bool isEven, int64_t halfPos,
     const std::vector<int16_t> &samples, AppendPlan &plan,
     size_t zeroCompressedPrefixSamples) {
-  const int64_t relativeHalfPos = halfPos - m_audioStartOffset;
+  const int64_t originalHalfPos = halfPos;
+  const int64_t relativeHalfPos = originalHalfPos - m_audioStartOffset;
   const bool posIsEven = (relativeHalfPos & 1LL) == 0;
   plan.posIsEven = posIsEven;
   if (samples.empty()) {
     return AppendPlanStatus::Skip;
   }
   size_t inputOffset = 0;
-  size_t adjustedZeroPrefix = zeroCompressedPrefixSamples;  
+  size_t adjustedZeroPrefix = zeroCompressedPrefixSamples;
   int64_t adjustedHalfPos = halfPos;
   if (!channel.startHalfPosInitialized) {
     channel.startHalfPos = halfPos;
@@ -781,9 +782,9 @@ RobotExtractor::AppendPlanStatus RobotExtractor::prepareChannelAppend(
   } else {
     adjustedHalfPos = halfPos - channel.startHalfPos;
   }
-  AppendPlanStatus status =
-      planChannelAppend(channel, isEven, adjustedHalfPos, samples, plan,
-                        inputOffset);
+  AppendPlanStatus status = planChannelAppend(channel, isEven, adjustedHalfPos,
+                                             originalHalfPos, samples, plan,
+                                             inputOffset);
 
   if (status != AppendPlanStatus::Skip) {
     size_t prefix = 0;
@@ -801,12 +802,16 @@ RobotExtractor::AppendPlanStatus RobotExtractor::prepareChannelAppend(
 
 RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
     const ChannelAudio &channel, bool isEven, int64_t halfPos,
+    int64_t originalHalfPos,
     const std::vector<int16_t> &samples, AppendPlan &plan,
     size_t inputOffset) const {
   if (samples.empty() || inputOffset >= samples.size()) {
     return AppendPlanStatus::Skip;
   }
-  if (plan.posIsEven != isEven) {
+  const bool packetIsEven =
+      ((originalHalfPos - m_audioStartOffset) & 1LL) == 0;
+  plan.posIsEven = packetIsEven;
+  if (packetIsEven != isEven) {
     return AppendPlanStatus::ParityMismatch;
   }
   plan.inputOffset = inputOffset;
