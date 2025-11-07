@@ -143,13 +143,8 @@ TEST_CASE("Truncated big-endian Hunk palette conversion fails") {
   RobotExtractorTester::palette(extractor) = raw;
   RobotExtractorTester::bigEndian(extractor) = true;
 
-  try {
-    (void)RobotExtractorTester::parsePalette(extractor);
-    FAIL("No exception thrown");
-  } catch (const std::runtime_error &e) {
-    REQUIRE(std::string(e.what()).find("Palette SCI HunkPalette tronquée") !=
-            std::string::npos);
-  }
+  auto parsed = RobotExtractorTester::parsePalette(extractor);
+  REQUIRE_FALSE(parsed.valid);
 }
 
 TEST_CASE("Hunk palette preserves remap data and shared flags") {
