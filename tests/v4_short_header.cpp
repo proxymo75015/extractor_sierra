@@ -1,6 +1,4 @@
 #include <catch2/catch_test_macros.hpp>
-#include <catch2/matchers/catch_matchers_exception.hpp>
-#include <catch2/matchers/catch_matchers_string.hpp>
 #include <filesystem>
 #include <fstream>
 #include <ios>
@@ -24,7 +22,7 @@ static void push32(std::vector<uint8_t> &v, uint32_t x) {
     v.push_back(static_cast<uint8_t>((x >> 24) & 0xFF));
 }
 
-TEST_CASE("Version 4 header is rejected") {
+TEST_CASE("Version 4 header without extended fields is accepted") {
     fs::path tmpDir = fs::temp_directory_path();
     fs::path input = tmpDir / "v4_short_header.rbt";
     fs::path outDir = tmpDir / "v4_short_header_out";
@@ -68,8 +66,30 @@ TEST_CASE("Version 4 header is rejected") {
 
     RobotExtractor extractor(input, outDir, false);
 
-    REQUIRE_THROWS_MATCHES(RobotExtractorTester::readHeader(extractor),
-                           std::runtime_error,
-                           Catch::Matchers::Message(
-                               "Version Robot non supportée: 4"));
+    REQUIRE_NOTHROW(RobotExtractorTester::readHeader(extractor));
+    CHECK(RobotExtractorTester::numFrames(extractor) == 1);
+    CHECK(RobotExtractorTester::postHeaderPos(extractor) ==
+          static_cast<std::streamoff>(headerSize));
+
+    // No palette or audio primer are stored, so the helpers should operate
+    // without consuming additional data beyond the reserved header section.
+    REQUIRE_NOTHROW(RobotExtractorTester::readPrimer(extractor));
+    REQUIRE_NOTHROW(RobotExtractorTester::readPalette(extractor));
+    REQUIRE_NOTHROW(RobotExtractorTester::readSizesAndCues(extractor));
+
+    const auto &frames = RobotExtractorTester::frameSizes(extractor);
+    REQUIRE(frames.size() == 1);
+    CHECK(frames[0] == 2);
+
+    const auto &packets = RobotExtractorTester::packetSizes(extractor);
+    REQUIRE(packets.size() == 1);
+    CHECK(packets[0] == 2);
+
+    const auto &fixedSizes = RobotExtractorTester::fixedCelSizes(extractor);
+    for (uint32_t size : fixedSizes) {
+        CHECK(size == 0);
+    }
+
+    fs::remove(input);
+    fs::remove_all(outDir);
 }
