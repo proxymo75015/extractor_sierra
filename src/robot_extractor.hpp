@@ -190,7 +190,7 @@ private:
   };
   enum class AppendPlanStatus { Skip, Ok, Conflict, ParityMismatch };
   AppendPlanStatus planChannelAppend(const ChannelAudio &channel, bool isEven,
-                                     int64_t halfPos,
+                                     int64_t halfPos, int64_t originalHalfPos,
                                      const std::vector<int16_t> &samples,
                                      AppendPlan &plan,
                                      size_t inputOffset = 0) const;
