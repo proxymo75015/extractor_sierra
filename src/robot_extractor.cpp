@@ -1536,9 +1536,6 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
         throw std::runtime_error("Taille de frame négative");
       }
       uint32_t tmp = static_cast<uint32_t>(tmpSigned);
-      if (tmp < 2) {
-        throw std::runtime_error("Frame size too small");
-      }
       m_frameSizes[i] = tmp;
       if (m_options.debug_index && i < kDebugCount) {
         log_error(m_srcPath,
@@ -1565,9 +1562,6 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
   default:
     for (size_t i = 0; i < m_numFrames; ++i) {
       uint16_t tmp = read_scalar<uint16_t>(m_fp, m_bigEndian);
-      if (tmp < 2) {
-        throw std::runtime_error("Frame size too small");
-      }
       m_frameSizes[i] = tmp;
       if (m_options.debug_index && i < kDebugCount) {
         log_error(m_srcPath,
@@ -1697,8 +1691,21 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
   }
   m_frameBuffer.resize(frameSize);
   read_exact(m_fp, m_frameBuffer.data(), m_frameBuffer.size());
-  uint16_t numCels = read_scalar<uint16_t>(
-      std::span(m_frameBuffer).subspan(0, 2), m_bigEndian);
+  uint16_t numCels = 0;
+  size_t offset = 0;
+  if (m_frameBuffer.size() >= 2) {
+    numCels = read_scalar<uint16_t>(
+        std::span(m_frameBuffer).subspan(0, 2), m_bigEndian);
+    offset = 2;
+  } else {
+    if (!m_frameBuffer.empty() && m_options.debug_index) {
+      log_error(m_srcPath,
+                "Frame " + std::to_string(frameNo) +
+                    " plus courte que le champ numCels — traitée comme vide",
+                m_options);
+    }
+    offset = m_frameBuffer.size();
+  }
   if (numCels > static_cast<uint16_t>(m_maxCelsPerFrame)) {
     log_warn(m_srcPath,
              "Nombre de cels excessif dans la frame " + std::to_string(frameNo) +
@@ -1714,8 +1721,6 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
 
   frameJson["frame"] = frameNo;
   frameJson["cels"] = nlohmann::json::array();
-
-  size_t offset = 2;
   ParsedPalette parsedPalette;
   bool paletteUsable = false;
   auto dumpPaletteFallback = [&]() {
