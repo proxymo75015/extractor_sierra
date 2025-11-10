@@ -217,7 +217,8 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   if (m_primerZeroCompressFlag != 0 && m_primerZeroCompressFlag != 1) {
     log_warn(m_srcPath,
              "Valeur primerZeroCompress inattendue: " +
-                 std::to_string(m_primerZeroCompressFlag),
+                 std::to_string(m_primerZeroCompressFlag) +
+                 " (attendu 0 ou 1, mais accepté pour compatibilité)",
              m_options);
   }
   m_fp.seekg(2, std::ios::cur);
@@ -233,9 +234,19 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
              m_options);
   }
   m_paletteSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
-  m_primerReservedSize = read_scalar<uint16_t>(m_fp, m_bigEndian); // raw header value
+  m_primerReservedSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
   m_xRes = read_scalar<int16_t>(m_fp, m_bigEndian);
   m_yRes = read_scalar<int16_t>(m_fp, m_bigEndian);
+  
+  // Correction 1: Gérer xRes/yRes == 0 avec valeurs par défaut
+  if (m_xRes == 0 || m_yRes == 0) {
+    log_warn(m_srcPath, 
+             "Résolution nulle détectée, utilisation de valeurs par défaut (640x480)", 
+             m_options);
+    if (m_xRes == 0) m_xRes = 640;
+    if (m_yRes == 0) m_yRes = 480;
+  }
+  
   m_hasPalette = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
   m_hasAudio = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
   if (m_hasAudio && m_audioBlkSize < kRobotAudioHeaderSize) {
@@ -246,18 +257,21 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   }
   m_fp.seekg(2, std::ios::cur);
   m_frameRate = read_scalar<int16_t>(m_fp, m_bigEndian);
+  
+  // Correction 2: Assouplir la validation frameRate (accepter > 120)
   if (m_frameRate <= 0) {
     log_warn(m_srcPath,
-             "Fréquence d'image non positive dans l'en-tête: " +
-                 std::to_string(m_frameRate) + ", utilisation de 1",
+             "Fréquence d'image invalide (" + std::to_string(m_frameRate) +
+                 "), utilisation de 1 fps par défaut",
              m_options);
     m_frameRate = 1;
   } else if (m_frameRate > 120) {
     log_warn(m_srcPath,
-             "Fréquence d'image élevée dans l'en-tête: " +
-                 std::to_string(m_frameRate),
+             "Fréquence d'image élevée détectée: " + std::to_string(m_frameRate) +
+                 " fps (inhabituel mais accepté)",
              m_options);
   }
+  
   m_isHiRes = read_scalar<int16_t>(m_fp, m_bigEndian) != 0;
   m_maxSkippablePackets = read_scalar<int16_t>(m_fp, m_bigEndian);
   m_maxCelsPerFrame = read_scalar<int16_t>(m_fp, m_bigEndian);
@@ -275,11 +289,22 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   }
   m_fixedCelSizes.fill(0);
   m_reservedHeaderSpace.fill(0);
-  // Champs supplémentaires présents dans les versions prises en charge (5 et 6).
-  if (m_version >= 5) {
-    for (auto &size : m_fixedCelSizes) {
-      size = read_scalar<uint32_t>(m_fp, m_bigEndian);
+  
+  // Correction 3: Lire maxCelArea comme int32_t signé (version >= 6)
+  if (m_version >= 6) {
+    for (int i = 0; i < 4; ++i) {
+      int32_t val = read_scalar<int32_t>(m_fp, m_bigEndian);
+      if (val < 0) {
+        log_warn(m_srcPath, 
+                 "maxCelArea négatif détecté (" + std::to_string(val) + "), utilisation de 0", 
+                 m_options);
+        val = 0;
+      }
+      m_fixedCelSizes[i] = static_cast<uint32_t>(val);
     }
+  }
+  
+  if (m_version >= 5) {
     for (auto &reserved : m_reservedHeaderSpace) {
       reserved = read_scalar<uint32_t>(m_fp, m_bigEndian);
     }
@@ -1530,6 +1555,19 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
       throw std::runtime_error(
           "Échec du repositionnement avant les tables d'index");
     }
+  }
+
+  // Correction 4: Ajouter l'alignement 2048 octets comme dans ScummVM
+  constexpr std::streamoff kRobotFrameSize = 2048;
+  std::streamoff currentPos = m_fp.tellg();
+  std::streamoff bytesRemaining = (currentPos - m_fileOffset) % kRobotFrameSize;
+  if (bytesRemaining != 0) {
+    std::streamoff alignmentOffset = kRobotFrameSize - bytesRemaining;
+    m_fp.seekg(currentPos + alignmentOffset, std::ios::beg);
+    if (!m_fp) {
+      throw std::runtime_error("Échec de l'alignement avant tables d'index");
+    }
+    currentPos = m_fp.tellg();
   }
 
   m_frameSizes.resize(m_numFrames);

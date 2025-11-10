@@ -77,40 +77,42 @@ inline int validate_expand_params(std::span<std::byte> target,
 inline void expand_cel(std::span<std::byte> target,
                        std::span<const std::byte> source, uint16_t w,
                        uint16_t h, uint8_t scale) {
-  const std::byte *tBegin = target.data();
-  const std::byte *tEnd = tBegin + target.size();
-  const std::byte *sBegin = source.data();
-  const std::byte *sEnd = sBegin + source.size();
-  if (rangesOverlap(tBegin, tEnd, sBegin, sEnd))
-    throw std::runtime_error("target and source must not overlap");
-
-  const int sourceHeight =
-      detail::validate_expand_params(target, source, w, h, scale);
-
-  const std::byte *srcBase = source.data();
-  std::byte *destBase = target.data();
-  const size_t rowBytes = static_cast<size_t>(w);
-  std::byte *const destEnd = destBase + target.size();
-  int remainder = 0;
-
-  for (int remaining = sourceHeight; remaining > 0; --remaining) {
-    remainder += static_cast<int>(h);
-    int linesToDraw = remainder / sourceHeight;
-    remainder %= sourceHeight;
-
-    for (int i = 0; i < linesToDraw; ++i) {
-      if (destBase >= destEnd) {
-        throw std::runtime_error("Expansion de cel hors limites");
-      }
-      std::memcpy(destBase, srcBase, rowBytes);
-      destBase += rowBytes;
-    }
-
-    srcBase += rowBytes;
+  // Correction 5: Autoriser verticalScale > 100 (retirer la vérification scale > 100)
+  if (scale == 0) {
+    throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
 
-  if (destBase != destEnd) {
-    throw std::runtime_error("Expansion de cel incohérente");
+  const uint16_t source_h = (h * scale) / 100;
+  if (source_h == 0) {
+    throw std::runtime_error("Hauteur source invalide après échelle");
+  }
+
+  const std::size_t expected_source = static_cast<std::size_t>(w) * source_h;
+  if (source.size() < expected_source) {
+    throw std::runtime_error("Taille source insuffisante");
+  }
+
+  const std::size_t expected_target = static_cast<std::size_t>(w) * h;
+  if (target.size() < expected_target) {
+    throw std::runtime_error("Taille cible insuffisante");
+  }
+
+  const std::size_t yStep = (static_cast<std::size_t>(source_h) << 16) / h;
+  std::size_t yFrac = 0;
+  for (std::size_t y = 0; y < h; ++y) {
+    const std::size_t sourceRow = yFrac >> 16;
+    if (sourceRow >= source_h) {
+      throw std::runtime_error("Ligne source hors limites");
+    }
+    const std::size_t sourceOffset = sourceRow * w;
+    const std::size_t targetOffset = y * w;
+    if (sourceOffset + w > source.size() ||
+        targetOffset + w > target.size()) {
+      throw std::runtime_error("Débordement lors de l'expansion de cel");
+    }
+    std::copy_n(source.begin() + static_cast<std::ptrdiff_t>(sourceOffset), w,
+                target.begin() + static_cast<std::ptrdiff_t>(targetOffset));
+    yFrac += yStep;
   }
 }
 
