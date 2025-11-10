@@ -89,7 +89,7 @@ inline void expand_cel(std::span<std::byte> target,
   // const int sourceHeight = (celHeight * _verticalScaleFactor) / 100;
   // Donc si scale=50, source_h devrait être h/2, pas h*50/100
   // CORRECTION:
-  const uint16_t source_h = (static_cast<uint32_t>(h) * scale) / 100;
+  const uint16_t source_h = (static_cast<uint32_t>(h) * 100) / scale;
   
   if (source_h == 0) {
     throw std::runtime_error("Hauteur source invalide après échelle");
