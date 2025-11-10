@@ -77,11 +77,11 @@ inline int validate_expand_params(std::span<std::byte> target,
 inline void expand_cel(std::span<std::byte> target,
                        std::span<const std::byte> source, uint16_t w,
                        uint16_t h, uint8_t scale) {
-  // Correction 5: Autoriser verticalScale > 100 (retirer la vérification scale > 100)
   if (scale == 0) {
     throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
-
+  
+  // ScummVM permet scale > 100 (voir ScummVM/robot.cpp:1334)
   const uint16_t source_h = (h * scale) / 100;
   if (source_h == 0) {
     throw std::runtime_error("Hauteur source invalide après échelle");
@@ -97,22 +97,25 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Taille cible insuffisante");
   }
 
-  const std::size_t yStep = (static_cast<std::size_t>(source_h) << 16) / h;
-  std::size_t yFrac = 0;
-  for (std::size_t y = 0; y < h; ++y) {
-    const std::size_t sourceRow = yFrac >> 16;
-    if (sourceRow >= source_h) {
-      throw std::runtime_error("Ligne source hors limites");
+  // Algorithme de ScummVM (voir ScummVM/robot.cpp:1334-1351)
+  const int16_t numerator = static_cast<int16_t>(h);
+  const int16_t denominator = static_cast<int16_t>(source_h);
+  int remainder = 0;
+  
+  const std::byte* sourcePtr = source.data() + (source_h - 1) * w;
+  std::byte* targetPtr = target.data() + (h - 1) * w;
+  
+  for (int16_t y = source_h - 1; y >= 0; --y) {
+    remainder += numerator;
+    int16_t linesToDraw = remainder / denominator;
+    remainder %= denominator;
+    
+    while (linesToDraw-- > 0) {
+      std::copy_n(sourcePtr, w, targetPtr);
+      targetPtr -= w;
     }
-    const std::size_t sourceOffset = sourceRow * w;
-    const std::size_t targetOffset = y * w;
-    if (sourceOffset + w > source.size() ||
-        targetOffset + w > target.size()) {
-      throw std::runtime_error("Débordement lors de l'expansion de cel");
-    }
-    std::copy_n(source.begin() + static_cast<std::ptrdiff_t>(sourceOffset), w,
-                target.begin() + static_cast<std::ptrdiff_t>(targetOffset));
-    yFrac += yStep;
+    
+    sourcePtr -= w;
   }
 }
 

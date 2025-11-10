@@ -161,44 +161,27 @@ void RobotExtractor::readHeader() {
 
 void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_bigEndian = bigEndian;
-  
-  // ScummVM suppose TOUJOURS que l'en-tête commence à l'offset 0
   m_fileOffset = 0;
-  const std::streampos headerStart = 0;
   
-  m_fp.seekg(headerStart);
-  if (!m_fp) {
-    throw std::runtime_error(
-        "Impossible d'accéder au champ version de l'en-tête Robot");
+  // Lire signature (déjà lue pour l'endianness)
+  m_fp.seekg(0);
+  uint16_t signature = read_scalar<uint16_t>(m_fp, false); // toujours LE
+  if (signature != 0x16) {
+    throw std::runtime_error("Signature Robot invalide: 0x" + 
+                             std::to_string(signature));
   }
-
+  
+  // Sauter 'SOL\0' (4 octets)
+  m_fp.seekg(4, std::ios::cur);
+  
+  // Lire version avec l'endianness détectée
   m_version = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (m_version < 4 || m_version > 6) {
     throw std::runtime_error("Version Robot non supportée: " +
                              std::to_string(m_version));
   }
 
-  m_fp.clear();
-  m_fp.seekg(headerStart);
-  if (!m_fp) {
-    throw std::runtime_error(
-        "Impossible de repositionner le flux au début de l'en-tête Robot");
-  }
-
-  const uint16_t sig = read_scalar<uint16_t>(m_fp, false);
-  if (sig != kRobotSig) {
-    throw std::runtime_error("Signature Robot invalide");
-  }
-  std::array<char, 4> sol;
-  m_fp.read(sol.data(), checked_streamsize(sol.size()));
-  if (sol != std::array<char, 4>{'S', 'O', 'L', '\0'}) {
-    throw std::runtime_error("Tag SOL invalide");
-  }
-  const uint16_t versionFromHeader = read_scalar<uint16_t>(m_fp, m_bigEndian);
-  if (versionFromHeader != m_version) {
-    throw std::runtime_error(
-        "Version Robot incohérente entre les lectures successives");
-  }
+  // Continuer la lecture selon ScummVM/robot.cpp:532+
   m_audioBlkSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (m_audioBlkSize > kMaxAudioBlockSize) {
     throw std::runtime_error("Taille de bloc audio invalide dans l'en-tête: " +
@@ -590,25 +573,29 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
   }
 
   const uint8_t zeroCompress = read_u8(primer, 0);
+  m_fp.seekg(2, std::ios::cur); // skip unused byte
   const uint16_t compSize = read_u16(primer, 2);
   const uint16_t uncompSize = read_u16(primer, 4);
+  const int16_t samplePredictor = read_i16(primer, 6);
+  // skip 2 bytes unused (offset 8-9)
 
-  // Correction critique: Vérification alignée sur ScummVM
+  // Vérification alignée sur ScummVM (voir ScummVM/robot.cpp:1001+)
+  const size_t kRobotAudioHeaderSize = 10;
+  const size_t availableData = primer.size() - kRobotAudioHeaderSize;
+  
   // ScummVM vérifie: compressedSize > dataSize - kRobotAudioHeaderSize
-  const size_t availableData = primer.size() - headerSize;
   if (compSize > availableData) {
-    log_warn(m_srcPath,
-             "Taille compressée du canal primer (" + std::to_string(compSize) +
-                 ") dépasse les données disponibles (" +
-                 std::to_string(availableData) + ")",
-             m_options);
+    throw std::runtime_error(
+        "Taille compressée du canal primer (" + std::to_string(compSize) +
+        ") dépasse les données disponibles (" +
+        std::to_string(availableData) + ")");
   }
 
   std::vector<std::byte> uncompressed;
   std::span<const std::byte> audioData;
 
   if (zeroCompress != 0) {
-    // Décompression zero-compressed comme dans ScummVM
+    // Décompression zero-compressed
     uncompressed.resize(uncompSize);
     
     size_t writePos = 0;
@@ -618,63 +605,42 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
       const uint8_t marker = read_u8(primer, readPos++);
       
       if (marker == 0) {
-        // Marqueur de zéros - lire le compte
         if (readPos >= primer.size()) {
           break;
         }
-        const uint8_t zeroCount = read_u8(primer, readPos++);
+        const uint8_t count = read_u8(primer, readPos++);
+        const size_t zeroCount = (count == 0) ? 256 : count;
         
-        // Écrire zeroCount zéros
-        const size_t zerosToWrite = std::min(
-            static_cast<size_t>(zeroCount), 
-            uncompSize - writePos
-        );
-        std::fill_n(uncompressed.begin() + writePos, zerosToWrite, std::byte{0});
-        writePos += zerosToWrite;
-      } else {
-        // Données non compressées
-        if (writePos < uncompSize) {
-          uncompressed[writePos++] = std::byte{marker};
+        for (size_t i = 0; i < zeroCount && writePos < uncompSize; ++i) {
+          uncompressed[writePos++] = std::byte{0};
         }
+      } else {
+        uncompressed[writePos++] = static_cast<std::byte>(marker);
       }
     }
     
-    if (writePos != uncompSize) {
-      log_warn(m_srcPath,
-               "Taille décompressée du primer (" + std::to_string(writePos) +
-                   ") ne correspond pas à la taille attendue (" +
-                   std::to_string(uncompSize) + ")",
-               m_options);
-    }
-    
-    audioData = uncompressed;
+    audioData = std::span(uncompressed);
   } else {
     // Données non compressées
-    if (headerSize + compSize > primer.size()) {
-      throw std::runtime_error("Données primer non compressées trop courtes");
-    }
-    audioData = std::span<const std::byte>(primer).subspan(headerSize, compSize);
+    audioData = std::span(primer).subspan(headerSize, compSize);
   }
 
-  // Décoder les échantillons audio
-  std::vector<int16_t> samples;
-  samples.reserve(audioData.size() / 2);
-
-  for (size_t i = 0; i + 1 < audioData.size(); i += 2) {
-    const int16_t sample = static_cast<int16_t>(
-        (std::to_integer<uint8_t>(audioData[i + 1]) << 8) |
-        std::to_integer<uint8_t>(audioData[i])
-    );
-    samples.push_back(sample);
+  // Décompression DPCM
+  int16_t predictor = samplePredictor;
+  auto decompressed = dpcm16_decompress(audioData, predictor);
+  
+  // Retirer les échantillons de runway (4 premiers)
+  if (decompressed.size() > kRobotRunwaySamples) {
+    decompressed.erase(decompressed.begin(), 
+                      decompressed.begin() + kRobotRunwaySamples);
   }
-
-  if (!samples.empty()) {
-    const int64_t halfPos = 0;
-    const size_t zeroCompressedPrefixSamples = zeroCompress != 0 ? samples.size() : 0;
-    const std::optional<int16_t> finalPredictor = 
-        samples.empty() ? std::nullopt : std::optional<int16_t>(samples.back());
-    
-    appendChannelSamples(isEven, halfPos, samples, zeroCompressedPrefixSamples, finalPredictor);
+  
+  if (isEven) {
+    m_evenStream = std::move(decompressed);
+    m_evenPredictor = predictor;
+  } else {
+    m_oddStream = std::move(decompressed);
+    m_oddPredictor = predictor;
   }
 }
 
@@ -1587,197 +1553,77 @@ void RobotExtractor::readPalette() {
 
 void RobotExtractor::readSizesAndCues(bool allowShortFile) {
   StreamExceptionGuard guard(m_fp);
-  if (m_options.debug_index) {
-    log_error(m_srcPath,
-              "readSizesAndCues: position initiale = " +
-                  std::to_string(m_fp.tellg()),
-              m_options);
-  }
-
-  const std::uintmax_t fileSize = m_fileSize;
-  const std::streamoff expectedPos =
-      m_postPrimerPos + static_cast<std::streamoff>(m_paletteSize);
-  std::streamoff pos = m_fp.tellg();
-  if (pos != expectedPos) {
-    log_warn(m_srcPath,
-             "Flux désaligné avant les tables d'index: position actuelle " +
-                 std::to_string(pos) + ", repositionnement à " +
-                 std::to_string(expectedPos),
-             m_options);
-    m_fp.seekg(expectedPos, std::ios::beg);
-    if (!m_fp) {
-      throw std::runtime_error(
-          "Échec du repositionnement avant les tables d'index");
+  
+  // Lire les tailles de frames
+  m_frameSizes.resize(m_numFrames);
+  m_packetSizes.resize(m_numFrames);
+  
+  switch(m_version) {
+  case 5:
+    for (size_t i = 0; i < m_numFrames; ++i) {
+      m_frameSizes[i] = read_scalar<uint16_t>(m_fp, m_bigEndian);
     }
+    for (size_t i = 0; i < m_numFrames; ++i) {
+      m_packetSizes[i] = read_scalar<uint16_t>(m_fp, m_bigEndian);
+    }
+    break;
+  case 6:
+    for (size_t i = 0; i < m_numFrames; ++i) {
+      int32_t val = read_scalar<int32_t>(m_fp, m_bigEndian);
+      if (val < 0) {
+        throw std::runtime_error("Taille de frame négative");
+      }
+      m_frameSizes[i] = static_cast<uint32_t>(val);
+    }
+    for (size_t i = 0; i < m_numFrames; ++i) {
+      int32_t val = read_scalar<int32_t>(m_fp, m_bigEndian);
+      if (val < 0) {
+        throw std::runtime_error("Taille de paquet négative");
+      }
+      m_packetSizes[i] = static_cast<uint32_t>(val);
+    }
+    break;
+  default:
+    throw std::runtime_error("Version non supportée pour les tables d'index");
   }
-
-  // Lire les cue times
+  
+  // Lire les cue times (256 entrées)
   m_cueTimes.resize(256);
   for (auto &cueTime : m_cueTimes) {
     cueTime = read_scalar<int32_t>(m_fp, m_bigEndian);
   }
   
-  // Lire les cue values
+  // Lire les cue values (256 entrées)
   m_cueValues.resize(256);
   for (auto &cueValue : m_cueValues) {
     cueValue = read_scalar<uint16_t>(m_fp, m_bigEndian);
   }
   
-  // PUIS aligner sur 2048 octets
+  // MAINTENANT aligner sur 2048 octets (voir ScummVM/robot.cpp:501)
   constexpr std::streamoff kRobotFrameSize = 2048;
   std::streamoff currentPos = m_fp.tellg();
   std::streamoff bytesRemaining = (currentPos - m_fileOffset) % kRobotFrameSize;
   if (bytesRemaining != 0) {
-    m_fp.seekg(kRobotFrameSize - bytesRemaining, std::ios::cur);
+    std::streamoff padding = kRobotFrameSize - bytesRemaining;
+    m_fp.seekg(padding, std::ios::cur);
   }
-
-  m_frameSizes.resize(m_numFrames);
-  m_packetSizes.resize(m_numFrames);
-  constexpr size_t kDebugCount = 5;
-  switch (m_version) {
-  case 6:
-    for (size_t i = 0; i < m_numFrames; ++i) {
-      int32_t tmpSigned = read_scalar<int32_t>(m_fp, m_bigEndian);
-      if (tmpSigned < 0) {
-        throw std::runtime_error("Taille de frame négative");
-      }
-      uint32_t tmp = static_cast<uint32_t>(tmpSigned);
-      m_frameSizes[i] = tmp;
-      if (m_options.debug_index && i < kDebugCount) {
-        log_error(m_srcPath,
-                  "frameSizes[" + std::to_string(i) + "] = " +
-                      std::to_string(tmp),
-                  m_options);
-      }
+  
+  // Enregistrer la position des données de frames
+  m_recordPositions.clear();
+  m_recordPositions.push_back(m_fp.tellg());
+  
+  // Calculer les positions suivantes
+  for (size_t i = 0; i < m_numFrames - 1; ++i) {
+    std::streamoff nextPos = m_recordPositions[i] + 
+                             static_cast<std::streamoff>(m_packetSizes[i]);
+    // Aligner chaque record sur 2048 octets
+    std::streamoff remainder = (nextPos - m_fileOffset) % kRobotFrameSize;
+    if (remainder != 0) {
+      nextPos += kRobotFrameSize - remainder;
     }
-    for (size_t i = 0; i < m_numFrames; ++i) {
-      int32_t tmpSigned = read_scalar<int32_t>(m_fp, m_bigEndian);
-      if (tmpSigned < 0) {
-        throw std::runtime_error("Taille de paquet négative");
-      }
-      uint32_t tmp = static_cast<uint32_t>(tmpSigned);
-      m_packetSizes[i] = tmp;
-      if (m_options.debug_index && i < kDebugCount) {
-        log_error(m_srcPath,
-                  "packetSizes[" + std::to_string(i) + "] = " +
-                      std::to_string(tmp),
-                  m_options);
-      }
-    }
-    break;
-  default:
-    for (size_t i = 0; i < m_numFrames; ++i) {
-      uint16_t tmp = read_scalar<uint16_t>(m_fp, m_bigEndian);
-      m_frameSizes[i] = tmp;
-      if (m_options.debug_index && i < kDebugCount) {
-        log_error(m_srcPath,
-                  "frameSizes[" + std::to_string(i) + "] = " +
-                      std::to_string(tmp),
-                  m_options);
-      }
-    }
-    for (size_t i = 0; i < m_numFrames; ++i) {
-      uint16_t tmp = read_scalar<uint16_t>(m_fp, m_bigEndian);
-      m_packetSizes[i] = tmp;
-      if (m_options.debug_index && i < kDebugCount) {
-        log_error(m_srcPath,
-                  "packetSizes[" + std::to_string(i) + "] = " +
-                      std::to_string(tmp),
-                  m_options);
-      }
-    }
-    break;
+    m_recordPositions.push_back(nextPos);
   }
-  std::uintmax_t totalFrameSize = 0;
-  std::uintmax_t totalPacketSize = 0;
-  constexpr std::uintmax_t maxUint = std::numeric_limits<std::uintmax_t>::max();  
-  for (size_t i = 0; i < m_frameSizes.size(); ++i) {
-    if (m_packetSizes[i] < m_frameSizes[i]) {
-      log_warn(m_srcPath,
-               "Packet size < frame size (i=" + std::to_string(i) +
-                   ", frame=" + std::to_string(m_frameSizes[i]) +
-                   ", packet=" + std::to_string(m_packetSizes[i]) +
-                   ") — ajustement à la taille de frame",
-               m_options);
-      m_packetSizes[i] = m_frameSizes[i];
-    }
-    uint64_t maxSize64 =
-        static_cast<uint64_t>(m_frameSizes[i]) +
-        (m_hasAudio ? static_cast<uint64_t>(m_audioBlkSize) : 0);
-    if (maxSize64 > UINT32_MAX) {
-      if (m_options.debug_index) {
-        log_error(m_srcPath,
-                  "Frame size + audio block size exceeds UINT32_MAX (i=" +
-                      std::to_string(i) + ", frame=" +
-                      std::to_string(m_frameSizes[i]) + ", packet=" +
-                      std::to_string(m_packetSizes[i]) + ")",
-                  m_options);
-      }      
-      throw std::runtime_error(
-          "Frame size + audio block size exceeds UINT32_MAX");
-    }
-    uint32_t maxSize = static_cast<uint32_t>(maxSize64);
-    if (m_packetSizes[i] > maxSize) {
-      std::string message =
-          "Packet size > frame size + audio block size (i=" +
-          std::to_string(i) + ", frame=" + std::to_string(m_frameSizes[i]) +
-          ", packet=" + std::to_string(m_packetSizes[i]) + ", max=" +
-          std::to_string(maxSize) + ")";
-      log_warn(m_srcPath, message, m_options);
-    }
-    const uint32_t frameSize = m_frameSizes[i];
-    const uint32_t packetSize = m_packetSizes[i];
-    if (frameSize > maxUint - totalFrameSize) {
-      throw std::runtime_error(
-          "Somme des tailles de frame dépasse la capacité maximale");
-    }
-    if (packetSize > maxUint - totalPacketSize) {
-      throw std::runtime_error(
-          "Somme des tailles de paquets dépasse la capacité maximale");
-    }
-    totalFrameSize += frameSize;
-    totalPacketSize += packetSize;    
-  }
-  for (auto &time : m_cueTimes) {
-    time = read_scalar<int32_t>(m_fp, m_bigEndian);
-  }
-  for (auto &value : m_cueValues) {
-    value = read_scalar<uint16_t>(m_fp, m_bigEndian);
-  }
-  std::streamoff posAfter = m_fp.tellg();
-  if (posAfter < 0) {
-    throw std::runtime_error(
-        "Position de lecture invalide après les tables d'index");
-  }
-  if (posAfter < m_fileOffset) {
-    throw std::runtime_error(
-        "Position des tables Robot avant le début déclaré du fichier");
-  }
-  std::streamoff bytesRemaining = (posAfter - m_fileOffset) % 2048;
-  if (bytesRemaining != 0) {
-    m_fp.seekg(2048 - bytesRemaining, std::ios::cur);
-  }
-  std::streamoff frameDataPos = m_fp.tellg();
-  if (frameDataPos < 0) {
-    throw std::runtime_error("Position de début des frames invalide");
-  }
-  const std::uintmax_t frameDataOffset = static_cast<std::uintmax_t>(frameDataPos);
-  if (frameDataOffset > fileSize) {
-    throw std::runtime_error("Les tables d'index dépassent la taille du fichier");
-  }
-  const std::uintmax_t remainingBytes = fileSize - frameDataOffset;
-  if (!allowShortFile) {
-    if (totalFrameSize > remainingBytes) {
-      throw std::runtime_error(
-          "Somme des tailles de frame dépasse les données restantes du fichier");
-    }
-    if (totalPacketSize > remainingBytes) {
-      throw std::runtime_error(
-          "Somme des tailles de paquets dépasse les données restantes du fichier");
-    }
-  }  
 }
-
 bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
   StreamExceptionGuard guard(m_fp);
   std::streamoff curPos = m_fp.tellg();
