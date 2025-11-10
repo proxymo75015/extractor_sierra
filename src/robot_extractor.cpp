@@ -1623,17 +1623,24 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
     }
   }
 
-  // Correction 4: Ajouter l'alignement 2048 octets comme dans ScummVM
+  // Lire les cue times
+  m_cueTimes.resize(256);
+  for (auto &cueTime : m_cueTimes) {
+    cueTime = read_scalar<int32_t>(m_fp, m_bigEndian);
+  }
+  
+  // Lire les cue values
+  m_cueValues.resize(256);
+  for (auto &cueValue : m_cueValues) {
+    cueValue = read_scalar<uint16_t>(m_fp, m_bigEndian);
+  }
+  
+  // PUIS faire l'alignement
   constexpr std::streamoff kRobotFrameSize = 2048;
   std::streamoff currentPos = m_fp.tellg();
   std::streamoff bytesRemaining = (currentPos - m_fileOffset) % kRobotFrameSize;
   if (bytesRemaining != 0) {
-    std::streamoff alignmentOffset = kRobotFrameSize - bytesRemaining;
-    m_fp.seekg(currentPos + alignmentOffset, std::ios::beg);
-    if (!m_fp) {
-      throw std::runtime_error("Échec de l'alignement avant tables d'index");
-    }
-    currentPos = m_fp.tellg();
+    m_fp.seekg(kRobotFrameSize - bytesRemaining, std::ios::cur);
   }
 
   m_frameSizes.resize(m_numFrames);
