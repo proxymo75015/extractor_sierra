@@ -627,12 +627,24 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
 
   // Décompression DPCM
   int16_t predictor = samplePredictor;
-  auto decompressed = dpcm16_decompress(audioData, predictor);
+  std::vector<int16_t> decompressed = 
+      dpcm16_decompress(std::span(decompData), predictor);
   
-  // Retirer les échantillons de runway (4 premiers)
+  // CORRECTION: selon ScummVM/robot.h:238-247
+  // Le runway (premiers kRobotRunwaySamples échantillons) ne doit PAS être écrit
   if (decompressed.size() > kRobotRunwaySamples) {
-    decompressed.erase(decompressed.begin(), 
-                      decompressed.begin() + kRobotRunwaySamples);
+    decompressed.erase(
+        decompressed.begin(), 
+        decompressed.begin() + static_cast<std::ptrdiff_t>(kRobotRunwaySamples)
+    );
+  } else {
+    // Si le primer est plus court que le runway, il est entièrement consommé
+    log_warn(m_srcPath, 
+             "Primer " + std::string(isEven ? "pair" : "impair") + 
+             " plus court que le runway (" + 
+             std::to_string(decompressed.size()) + " échantillons)", 
+             m_options);
+    decompressed.clear();
   }
   
   if (isEven) {
@@ -690,100 +702,50 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
     throw std::runtime_error("Position audio incohérente");
   }
 
-  const bool isEvenChannel = (doubledPos & 3LL) == 0;
-  ChannelAudio &channel =
-      isEvenChannel ? m_evenChannelAudio : m_oddChannelAudio;
-  const DecodedChannelSamples &decoded =
-      isEvenChannel ? evenDecoded : oddDecoded;
+  const uint8_t blockFlags = read_u8(blockBytes, 0);
+  const uint8_t blockUnk = read_u8(blockBytes, 1);
+  // CORRECTION: selon ScummVM/robot.cpp:174-176
+  // const int32 audioPosition = audioRecordBuffer[2] | (audioRecordBuffer[3] << 8);
+  // Pas de division par 2 ici
+  const uint16_t audioPosition = read_u16(blockBytes, 2);
+  const uint16_t audioLen = read_u16(blockBytes, 4);
   
-  auto hasAudibleData = [](const std::vector<int16_t> &samples) {
-    return std::any_of(samples.begin(), samples.end(),
-                       [](int16_t sample) { return sample != 0; });
-  };
+  // La position est déjà en demi-échantillons selon le format Robot
+  const bool isEvenChannel = (audioPosition % 2) == 0;
+  const size_t targetIndex = audioPosition / 2;
+  
+  const ChannelAudio &sourceChannel = isEvenChannel ? m_evenChannelAudio : m_oddChannelAudio;
+  ChannelAudio &targetChannel = isEvenChannel ? m_evenChannelAudio : m_oddChannelAudio;
 
-  if (pos == 0) {
-    const bool hasAudioData = hasAudibleData(evenDecoded.samples) ||
-                              hasAudibleData(oddDecoded.samples);
-    if (hasAudioData) {
-      log_warn(m_srcPath,
-               "Bloc audio ignoré en position zéro (données audibles ignorées)",
-               m_options);
-    } else {
-      log_warn(m_srcPath,
-               "Bloc audio ignoré en position zéro (données silencieuses)",
-               m_options);
-    }
+  if (targetIndex < 0) {
+    throw std::runtime_error("Position audio cible invalide");
+  }
+
+  if (targetIndex < static_cast<size_t>(sourceChannel.startHalfPos)) {
+    // Cas où le paquet audio commence avant le début connu
+    log_warn(m_srcPath,
+             "Bloc audio avant le début connu à la position " +
+                 std::to_string(static_cast<long long>(targetIndex)),
+             m_options);
     return;
   }
-  const std::vector<int16_t> &channelSamples = decoded.samples;
-  const int64_t halfPos = static_cast<int64_t>(pos);
 
-  size_t zeroCompressedPrefixSamples = 0;
-  if (zeroCompressed) {
-    constexpr size_t zeroPrefixSamples =
-        kRobotZeroCompressSize / sizeof(int16_t);
-    if (zeroPrefixSamples > kRobotRunwaySamples) {
-      zeroCompressedPrefixSamples =
-          std::min(channelSamples.size(),
-                   zeroPrefixSamples - kRobotRunwaySamples);
-    }
+  if (targetIndex > static_cast<size_t>(sourceChannel.startHalfPos) &&
+      !sourceChannel.seenNonPrimerBlock) {
+    // Ignorer les blocs audio avant le premier bloc non-primer
+    log_warn(m_srcPath,
+             "Bloc audio ignoré avant le premier bloc non-primer à la position " +
+                 std::to_string(static_cast<long long>(targetIndex)),
+             m_options);
+    return;
   }
-  
+
   AppendPlan plan{};
   AppendPlanStatus status = prepareChannelAppend(
-      channel, isEvenChannel, halfPos, channelSamples, plan,
-      zeroCompressedPrefixSamples);
+      targetChannel, isEvenChannel, targetIndex, sourceChannel.samples, plan);
 
-  auto updatePredictor = [&](ChannelAudio &target,
-                             const DecodedChannelSamples &decodedSamples) {
-    if (!decodedSamples.predictorValid) {
-      return;
-    }
-    target.predictor = decodedSamples.finalPredictor;
-    target.predictorInitialized = true;
-  };
-
-  switch (status) {
-  case AppendPlanStatus::Ok:
-  case AppendPlanStatus::Skip:
-    finalizeChannelAppend(channel, isEvenChannel, halfPos, channelSamples, plan,
-                          status);
-    updatePredictor(channel, decoded);    
-    if (status == AppendPlanStatus::Ok) {
-      if (channel.hasAcceptedPos) {
-        if (static_cast<int32_t>(halfPos) > channel.lastAcceptedPos) {
-          channel.lastAcceptedPos = static_cast<int32_t>(halfPos);
-        }
-      } else {
-        channel.lastAcceptedPos = static_cast<int32_t>(halfPos);
-        channel.hasAcceptedPos = true;
-      }
-      channel.seenNonPrimerBlock = true;
-    }
-    return;
-  case AppendPlanStatus::Conflict:
-    log_warn(m_srcPath,
-             "Bloc audio ignoré en raison d'un conflit à la position " +
-                 std::to_string(static_cast<long long>(pos)),
-             m_options);
-    updatePredictor(channel, decoded);    
-    return;
-  case AppendPlanStatus::ParityMismatch:
-    if (plan.posIsEven) {
-      log_warn(m_srcPath,
-               "Bloc audio ignoré (position paire reçue pour le canal impair) à la position " +
-                   std::to_string(static_cast<long long>(pos)),
-               m_options);
-      updatePredictor(m_evenChannelAudio, evenDecoded);      
-    } else {
-      log_warn(m_srcPath,
-               "Bloc audio ignoré (position impaire reçue pour le canal pair) à la position " +
-                   std::to_string(static_cast<long long>(pos)),
-               m_options);
-      updatePredictor(m_oddChannelAudio, oddDecoded);      
-    }
-    return;
-  }
+  finalizeChannelAppend(targetChannel, isEvenChannel, targetIndex, sourceChannel.samples, plan,
+                        status);
 }
 
 void RobotExtractor::setAudioStartOffset(int64_t offset) {
@@ -1212,8 +1174,11 @@ void RobotExtractor::finalizeAudio() {
   for (size_t i = 0; i < maxSamples; ++i) {
     const int16_t evenSample = i < evenStream.size() ? evenStream[i] : 0;
     const int16_t oddSample = i < oddStream.size() ? oddStream[i] : 0;
+    // CORRECTION: selon ScummVM/robot.h:238-240, l'ordre doit être:
+    // "copy every sample from the decompressed source outside of the DPCM
+    // runway into every *other* sample of the final audio buffer (1 -> 2, 2 -> 4, 3 -> 6)"
+    // Cela signifie: even sur index pairs, odd sur index impairs
     mono.push_back(evenSample);
-    // Conserver l'ordre pair puis impair tel que décrit dans ScummVM/robot.h.
     mono.push_back(oddSample);
   }
   writeWav(mono, kSampleRate, 0, true, 2, false);
@@ -1587,22 +1552,24 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
     throw std::runtime_error("Version non supportée pour les tables d'index");
   }
   
-  // Lire les cue times (256 entrées)
+  // Lire les cue times (256 x 4 octets)
   m_cueTimes.resize(256);
   for (auto &cueTime : m_cueTimes) {
     cueTime = read_scalar<int32_t>(m_fp, m_bigEndian);
   }
   
-  // Lire les cue values (256 entrées)
+  // Lire les cue values (256 x 2 octets)
   m_cueValues.resize(256);
   for (auto &cueValue : m_cueValues) {
     cueValue = read_scalar<uint16_t>(m_fp, m_bigEndian);
   }
   
-  // MAINTENANT aligner sur 2048 octets (voir ScummVM/robot.cpp:501)
+  // CORRECTION: selon ScummVM/robot.cpp:501-505
+  // L'alignement doit se faire APRÈS les cues
   constexpr std::streamoff kRobotFrameSize = 2048;
   std::streamoff currentPos = m_fp.tellg();
-  std::streamoff bytesRemaining = (currentPos - m_fileOffset) % kRobotFrameSize;
+  // Calculer le décalage depuis le début du fichier (pas depuis m_fileOffset)
+  std::streamoff bytesRemaining = currentPos % kRobotFrameSize;
   if (bytesRemaining != 0) {
     std::streamoff padding = kRobotFrameSize - bytesRemaining;
     m_fp.seekg(padding, std::ios::cur);
