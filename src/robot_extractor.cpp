@@ -162,9 +162,9 @@ void RobotExtractor::readHeader() {
 void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_bigEndian = bigEndian;
   
-  // ScummVM suppose toujours que l'en-tête commence à l'offset 0
-  const std::streampos headerStart = 0;
+  // ScummVM suppose TOUJOURS que l'en-tête commence à l'offset 0
   m_fileOffset = 0;
+  const std::streampos headerStart = 0;
   
   m_fp.seekg(headerStart);
   if (!m_fp) {
@@ -231,24 +231,17 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_xRes = read_scalar<int16_t>(m_fp, m_bigEndian);
   m_yRes = read_scalar<int16_t>(m_fp, m_bigEndian);
   
-  // Correction 1: Gérer xRes/yRes == 0 avec valeurs par défaut
-  if (m_xRes == 0 || m_yRes == 0) {
-    log_warn(m_srcPath, 
-             "Résolution nulle détectée, utilisation de valeurs par défaut (640x480)", 
-             m_options);
-    if (m_xRes == 0) m_xRes = 640;
-    if (m_yRes == 0) m_yRes = 480;
-  }
-  
+  // ORDRE CRITIQUE: lire hasPalette PUIS hasAudio
   m_hasPalette = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
   m_hasAudio = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
+  
   if (m_hasAudio && m_audioBlkSize < kRobotAudioHeaderSize) {
     throw std::runtime_error("Taille de bloc audio trop petite dans l'en-tête: " +
                              std::to_string(m_audioBlkSize) +
                              " (minimum " +
                              std::to_string(kRobotAudioHeaderSize) + ")");
   }
-  m_fp.seekg(2, std::ios::cur);
+  m_fp.seekg(2, std::ios::cur);  // unused
   m_frameRate = read_scalar<int16_t>(m_fp, m_bigEndian);
   
   // Correction 2: Assouplir la validation frameRate (accepter > 120)
@@ -268,18 +261,20 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_isHiRes = read_scalar<int16_t>(m_fp, m_bigEndian) != 0;
   m_maxSkippablePackets = read_scalar<int16_t>(m_fp, m_bigEndian);
   m_maxCelsPerFrame = read_scalar<int16_t>(m_fp, m_bigEndian);
+  
+  // Seulement logger, pas de correction
   if (m_maxCelsPerFrame < 1) {
     log_warn(m_srcPath,
              "Nombre de cels par frame non positif: " +
-                 std::to_string(m_maxCelsPerFrame) + ", utilisation de 1",
+                 std::to_string(m_maxCelsPerFrame),
              m_options);
-    m_maxCelsPerFrame = 1;
   } else if (m_maxCelsPerFrame > 10) {
     log_warn(m_srcPath,
              "Nombre de cels par frame élevé: " +
                  std::to_string(m_maxCelsPerFrame),
              m_options);
   }
+  
   m_fixedCelSizes.fill(0);
   m_reservedHeaderSpace.fill(0);
   
@@ -1628,7 +1623,7 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
     cueValue = read_scalar<uint16_t>(m_fp, m_bigEndian);
   }
   
-  // PUIS faire l'alignement
+  // PUIS aligner sur 2048 octets
   constexpr std::streamoff kRobotFrameSize = 2048;
   std::streamoff currentPos = m_fp.tellg();
   std::streamoff bytesRemaining = (currentPos - m_fileOffset) % kRobotFrameSize;
