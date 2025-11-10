@@ -161,19 +161,12 @@ void RobotExtractor::readHeader() {
 
 void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_bigEndian = bigEndian;
-  const std::streampos headerStart = m_fp.tellg();
-  if (headerStart == std::streampos(-1)) {
-    throw std::runtime_error(
-        "Impossible de déterminer la position de l'en-tête Robot");
-  }
-
-  m_fileOffset = static_cast<std::streamoff>(headerStart);
   
-  constexpr std::streamoff versionOffset =
-      static_cast<std::streamoff>(sizeof(uint16_t) + 4);
-  const std::streampos versionPos = headerStart + versionOffset;
-
-  m_fp.seekg(versionPos);
+  // ScummVM suppose toujours que l'en-tête commence à l'offset 0
+  const std::streampos headerStart = 0;
+  m_fileOffset = 0;
+  
+  m_fp.seekg(headerStart);
   if (!m_fp) {
     throw std::runtime_error(
         "Impossible d'accéder au champ version de l'en-tête Robot");
