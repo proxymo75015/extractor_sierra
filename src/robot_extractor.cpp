@@ -590,37 +590,103 @@ void RobotExtractor::ensurePrimerProcessed() {
 
 void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
                                           bool isEven) {
-  ChannelAudio &channel = isEven ? m_evenChannelAudio : m_oddChannelAudio;
   if (primer.empty()) {
-    if (isEven) {
-      m_evenPrimerSize = 0;
-    } else {
-      m_oddPrimerSize = 0;
-    }
-    channel.predictor = 0;
-    channel.predictorInitialized = false;
     return;
   }
-  if (primer.size() < kRobotRunwayBytes) {
-    const char *channelLabel = isEven ? "pair" : "impair";
+
+  StreamExceptionGuard guard(m_fp);
+
+  const size_t headerSize = 10;
+  if (primer.size() < headerSize) {
+    throw std::runtime_error("Données de canal primer trop courtes");
+  }
+
+  const uint8_t zeroCompress = read_u8(primer, 0);
+  const uint16_t compSize = read_u16(primer, 2);
+  const uint16_t uncompSize = read_u16(primer, 4);
+
+  // Correction critique: Vérification alignée sur ScummVM
+  // ScummVM vérifie: compressedSize > dataSize - kRobotAudioHeaderSize
+  const size_t availableData = primer.size() - headerSize;
+  if (compSize > availableData) {
     log_warn(m_srcPath,
-             std::string("Primer audio ") + channelLabel +
-                 " trop court (" +
-                  std::to_string(static_cast<unsigned long long>(primer.size())) +
-                 " octets), décompressé malgré tout",
+             "Taille compressée du canal primer (" + std::to_string(compSize) +
+                 ") dépasse les données disponibles (" +
+                 std::to_string(availableData) + ")",
              m_options);
   }
-  int16_t predictor = 0;
-  auto pcm = dpcm16_decompress(std::span(primer), predictor);
-  trim_runway_samples(pcm);
-  channel.predictor = predictor;
-  channel.predictorInitialized = true;  
-  if (!m_extractAudio) {
-    return;
+
+  std::vector<std::byte> uncompressed;
+  std::span<const std::byte> audioData;
+
+  if (zeroCompress != 0) {
+    // Décompression zero-compressed comme dans ScummVM
+    uncompressed.resize(uncompSize);
+    
+    size_t writePos = 0;
+    size_t readPos = headerSize;
+    
+    while (writePos < uncompSize && readPos < primer.size()) {
+      const uint8_t marker = read_u8(primer, readPos++);
+      
+      if (marker == 0) {
+        // Marqueur de zéros - lire le compte
+        if (readPos >= primer.size()) {
+          break;
+        }
+        const uint8_t zeroCount = read_u8(primer, readPos++);
+        
+        // Écrire zeroCount zéros
+        const size_t zerosToWrite = std::min(
+            static_cast<size_t>(zeroCount), 
+            uncompSize - writePos
+        );
+        std::fill_n(uncompressed.begin() + writePos, zerosToWrite, std::byte{0});
+        writePos += zerosToWrite;
+      } else {
+        // Données non compressées
+        if (writePos < uncompSize) {
+          uncompressed[writePos++] = std::byte{marker};
+        }
+      }
+    }
+    
+    if (writePos != uncompSize) {
+      log_warn(m_srcPath,
+               "Taille décompressée du primer (" + std::to_string(writePos) +
+                   ") ne correspond pas à la taille attendue (" +
+                   std::to_string(uncompSize) + ")",
+               m_options);
+    }
+    
+    audioData = uncompressed;
+  } else {
+    // Données non compressées
+    if (headerSize + compSize > primer.size()) {
+      throw std::runtime_error("Données primer non compressées trop courtes");
+    }
+    audioData = std::span<const std::byte>(primer).subspan(headerSize, compSize);
   }
-  if (!pcm.empty()) {
-    const int64_t primerHalfPos = isEven ? 0 : 1;
-    appendChannelSamples(isEven, primerHalfPos, pcm, 0, predictor);
+
+  // Décoder les échantillons audio
+  std::vector<int16_t> samples;
+  samples.reserve(audioData.size() / 2);
+
+  for (size_t i = 0; i + 1 < audioData.size(); i += 2) {
+    const int16_t sample = static_cast<int16_t>(
+        (std::to_integer<uint8_t>(audioData[i + 1]) << 8) |
+        std::to_integer<uint8_t>(audioData[i])
+    );
+    samples.push_back(sample);
+  }
+
+  if (!samples.empty()) {
+    const int64_t halfPos = 0;
+    const size_t zeroCompressedPrefixSamples = zeroCompress != 0 ? samples.size() : 0;
+    const std::optional<int16_t> finalPredictor = 
+        samples.empty() ? std::nullopt : std::optional<int16_t>(samples.back());
+    
+    appendChannelSamples(isEven, halfPos, samples, zeroCompressedPrefixSamples, finalPredictor);
   }
 }
 
