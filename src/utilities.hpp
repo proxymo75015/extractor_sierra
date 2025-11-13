@@ -1,16 +1,5 @@
-//
-// Utilitaires transverses pour l'extracteur Robot
-// - Lecture sécurisée de scalaires (endianness paramétrable) depuis flux et vues
-// - Lecture exacte et gestion robuste des erreurs de flux
-// - Helpers LE16/LE32 pour sérialisation
-// - Journalisation thread-safe avec option de silence
-// - Écriture PNG cross-plateforme (via stb_image_write)
-// - Décompression LZS et DPCM16 (compatibles ScummVM)
-//
-// Les fonctions sont conçues pour être robustes face aux entrées malformées
-// et émettre des messages explicites. Les tailles maximales sont bornées
-// pour éviter les allocations démesurées.
-
+// Utilitaires généraux pour la lecture/écriture, la journalisation
+// et les décodeurs (LZS, DPCM16) utilisés par le format Robot.
 #pragma once
 
 #include <array>
@@ -39,6 +28,7 @@ namespace robot {
 constexpr int kMaxXRes = 7680;
 constexpr int kMaxYRes = 4320;
 
+// Options de comportement de l'extracteur (tests/journalisation).
 struct ExtractorOptions {
     bool quiet = false;
     bool force_be = false;
@@ -48,6 +38,7 @@ struct ExtractorOptions {
     int max_y_res = kMaxYRes;
 };
 
+// Restreint certaines fonctions aux types entiers uniquement.
 template <typename T>
 concept Integral = std::is_integral_v<T>;
 
@@ -77,6 +68,7 @@ T read_scalar_impl(const uint8_t *bytes, bool bigEndian) {
 
 } // namespace detail
 
+// Lit un scalaire de type T depuis un flux (endian configurable).
 template <Integral T>
 T read_scalar(std::ifstream &f, bool bigEndian) {
     constexpr size_t size = sizeof(T);
@@ -88,6 +80,7 @@ T read_scalar(std::ifstream &f, bool bigEndian) {
     return detail::read_scalar_impl<T>(bytes.data(), bigEndian);
 }
 
+// Variante tampon: lit un scalaire T depuis un bloc mémoire.
 template <Integral T>
 inline T read_scalar(std::span<const std::byte> data, bool bigEndian) {
     constexpr size_t size = sizeof(T);
@@ -100,20 +93,21 @@ inline T read_scalar(std::span<const std::byte> data, bool bigEndian) {
         reinterpret_cast<const uint8_t *>(data.data()), bigEndian);
 }
 
+// Raccourci: lit un scalaire en little-endian depuis un flux.
 template <Integral T>
 T read_scalar_le(std::ifstream &f) {
     return read_scalar<T>(f, false);
 }
 
+// Raccourci: lit un scalaire en little-endian depuis un tampon.
 template <Integral T>
 inline T read_scalar_le(std::span<const std::byte> data) {
     return read_scalar<T>(data, false);
 }
 
+// Restaure le masque d'exceptions d'un std::ifstream à la destruction.
 class StreamExceptionGuard {
 public:
-    // Sauvegarde et restaure le masque d’exceptions d’un ifstream afin
-    // que les modifications locales n’affectent pas l’appelant.
     explicit StreamExceptionGuard(std::ifstream &stream)
         : m_stream(stream), m_oldMask(stream.exceptions()) {
         m_stream.exceptions(std::ios::failbit | std::ios::badbit);
@@ -134,7 +128,6 @@ private:
 std::streamsize checked_streamsize(size_t size);
 
 // Lit exactement `size` octets depuis `f` dans `data`.
-// Ne laisse pas d’état d’exception modifié sur le flux appelant.
 // Lève std::runtime_error si la lecture est incomplète.
 void read_exact(std::ifstream &f, void *data, size_t size);
 
@@ -143,18 +136,19 @@ void read_exact(std::ifstream &f, void *data, size_t size);
 // Le flux est repositionné à sa position initiale après lecture.
 bool detect_endianness(std::ifstream &f);
 
-// Ajoute un entier 16 bits en little-endian dans un vecteur de bytes
+// Ajoute un entier 16 bits en little-endian dans un vecteur de bytes.
 void append_le16(std::vector<std::byte> &out, uint16_t value);
 
-// Ajoute un entier 32 bits en little-endian dans un vecteur de bytes
+// Ajoute un entier 32 bits en little-endian dans un vecteur de bytes.
 void append_le32(std::vector<std::byte> &out, uint32_t value);
 
-// Écrit un entier 16 bits en little-endian dans un tampon fixé
+// Écrit un entier 16 bits en little-endian dans un tampon fixé.
 void write_le16(char *dst, uint16_t value);
 
-// Écrit un entier 32 bits en little-endian dans un tampon fixé
+// Écrit un entier 32 bits en little-endian dans un tampon fixé.
 void write_le32(char *dst, uint32_t value);
 
+// Journalisation (désactivée si ExtractorOptions::quiet est vrai).
 void log_info(const std::filesystem::path &path, const std::string &msg,
               const ExtractorOptions &opt);
 void log_warn(const std::filesystem::path &path, const std::string &msg,
@@ -166,14 +160,18 @@ void log_error(const std::filesystem::path &path, const std::string &msg,
 std::wstring make_long_path(const std::wstring &path);
 #endif
 
+// Renvoie un chemin compatible longs chemins (Windows) et sa version UTF-8.
 std::pair<std::filesystem::path, std::string>
 to_long_path(const std::filesystem::path &path);
 
+// Écrit une image PNG (via stb_image_write) avec prise en charge des chemins longs.
 void write_png_cross_platform(const std::filesystem::path &path, int w, int h,
                               int comp, const void *data, int stride);
 
 constexpr size_t kMaxLzsOutput = 10'000'000;
 
+// Décompresse un flux LZS dans un tampon de taille attendue.
+// 'history' fournit une fenêtre glissante initiale optionnelle.
 std::vector<std::byte> lzs_decompress(std::span<const std::byte> in,
                                       size_t expected_size,
                                       std::span<const std::byte> history = {});

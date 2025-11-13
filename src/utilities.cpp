@@ -1,8 +1,4 @@
-//
-// Implémentation des utilitaires communs décrits dans utilities.hpp
-// - Respecte les mêmes garanties d’exceptions et d’atomicité des logs
-// - Comporte des gardes sur tailles attendues lors des décompressions
-//
+// Implémentation des utilitaires (I/O, journalisation, PNG, LZS, DPCM16)
 #include "utilities.hpp"
 
 #include <iomanip>
@@ -26,7 +22,6 @@ std::streamsize checked_streamsize(size_t size) {
 }
 
 void read_exact(std::ifstream &f, void *data, size_t size) {
-    // N’altère pas le masque d’exceptions du flux appelant
     std::streamsize ss = checked_streamsize(size);
     auto old = f.exceptions();
     f.exceptions(std::ios::goodbit);

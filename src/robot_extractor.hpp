@@ -1,9 +1,5 @@
-//
-// RobotExtractor — Extraction des ressources Robot (Sierra SCI)
-// - Lit des fichiers Robot et exporte frames (PNG) et audio (WAV)
-// - Reproduit les comportements et garde-fous observés dans ScummVM
-// - Fournit des options d’extraction et des limites raisonnables
-//
+// API principale d'extraction du format Robot (SCI/ScummVM).
+// Fournit la classe RobotExtractor et helpers associés utilisés par les tests.
 #pragma once
 
 #include "utilities.hpp"
@@ -24,9 +20,6 @@
 
 namespace robot {
 
-//
-// Constantes liées au format Robot
-//
 inline constexpr size_t kRobotZeroCompressSize = 2048;
 inline constexpr size_t kRobotRunwayBytes = 8;
 constexpr size_t kRobotRunwaySamples = kRobotRunwayBytes / sizeof(int16_t);
@@ -37,8 +30,6 @@ inline bool rangesOverlap(const std::byte *aBegin, const std::byte *aEnd,
   return !(aEnd <= bBegin || bEnd <= aBegin);
 }
 
-// Agrandit une cel (image) verticale selon un facteur de pourcentage.
-// Correspond à l’algorithme ScummVM (types/signatures identiques).
 inline void expand_cel(std::span<std::byte> target,
                        std::span<const std::byte> source, 
                        uint16_t w, uint16_t h, uint8_t scale) {
@@ -90,14 +81,12 @@ inline void expand_cel(std::span<std::byte> target,
   }
 }
 
+// Effectue l'extraction d'un fichier Robot vers un répertoire de sortie.
 class RobotExtractor {
 public:
-  // Crée un extracteur sur un fichier source Robot et un dossier de sortie.
-  // Si extractAudio est vrai, exporte également l’audio WAV.
   RobotExtractor(const std::filesystem::path &srcPath,
                  const std::filesystem::path &dstDir, bool extractAudio,
                  ExtractorOptions options = {});
-  // Lance l’extraction des frames et de l’audio selon les options fournies.
   void extract();
 
   struct PaletteEntry {

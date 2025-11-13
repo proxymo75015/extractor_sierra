@@ -1,1 +1,24 @@
+# Dossiers de build CMake
 build/
+cmake-build-*/
+
+# Fichiers générés par CMake
+CMakeFiles/
+CMakeCache.txt
+install_manifest.txt
+Testing/
+CTestTestfile.cmake
+compile_commands.json
+
+# Environnements et IDE
+.vscode/
+.idea/
+*.code-workspace
+
+# Fichiers temporaires et système
+*.swp
+*.swo
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
