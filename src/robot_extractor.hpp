@@ -35,7 +35,13 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
 
-  const int16_t sourceHeight = std::max<int16_t>(1, (static_cast<int16_t>(h) * static_cast<int16_t>(scale)) / 100);
+  // Corresponds to ScummVM's expandCel calculation
+  const int sourceHeight = (static_cast<int>(h) * static_cast<int>(scale)) / 100;
+  
+  // In ScummVM, this is an assert(sourceHeight > 0)
+  if (sourceHeight <= 0) {
+    throw std::runtime_error("Facteur d'échelle vertical invalide (sourceHeight <= 0)");
+  }
   
   const size_t wSize = static_cast<size_t>(w);
   const size_t source_h = static_cast<size_t>(sourceHeight);
@@ -51,13 +57,13 @@ inline void expand_cel(std::span<std::byte> target,
   }
 
   const int16_t numerator = static_cast<int16_t>(h);
-  const int16_t denominator = sourceHeight;
+  const int16_t denominator = static_cast<int16_t>(sourceHeight);
   int16_t remainder = 0;
 
   const std::byte *sourcePtr = source.data();
   std::byte *targetPtr = target.data();
 
-  for (int16_t y = sourceHeight - 1; y >= 0; --y) {
+  for (int16_t y = static_cast<int16_t>(sourceHeight) - 1; y >= 0; --y) {
     remainder += numerator;
     int16_t linesToDraw = remainder / denominator;
     remainder %= denominator;

@@ -1611,8 +1611,12 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       throw std::runtime_error("Cel data exceeds frame buffer");
     }
 
-    const int sourceHeight =
-        detail::validate_cel_dimensions(w, h, verticalScale);
+    // Calculate sourceHeight as in ScummVM's expandCel
+    const int sourceHeight = (static_cast<int>(h) * static_cast<int>(verticalScale)) / 100;
+    if (sourceHeight <= 0) {
+      throw std::runtime_error("Facteur d'échelle vertical invalide (sourceHeight <= 0)");
+    }
+    
     if (static_cast<size_t>(h) > SIZE_MAX / static_cast<size_t>(w)) {
       throw std::runtime_error("Multiplication w*h dépasse SIZE_MAX");
     }
