@@ -67,32 +67,24 @@ bool detect_endianness(std::ifstream &f) {
     auto start = f.tellg();
     
     // La détection d'endianness s'effectue sur le champ de version situé à
-    // l'offset 6. Le moteur Robot original lit ce champ en big-endian et 
-    // considère que le flux est big-endian si la valeur obtenue est comprise
-    // entre 0x0001 et 0x00ff. Nous reproduisons ce comportement et vérifions
-    // ensuite l'interprétation little-endian comme garde-fou.
+    // l'offset 6. Le moteur Robot original (ScummVM) lit ce champ en big-endian
+    // et considère que le flux est big-endian si la valeur obtenue est strictement
+    // comprise entre 0 et 0x00ff (excluant 0). Cette approche correspond à la
+    // logique de ScummVM (robot.cpp ligne 390):
+    //     const bool bigEndian = (0 < version && version <= 0x00ff);
     f.seekg(start + static_cast<std::streamoff>(6));
     std::array<uint8_t, 2> verBytes{};
     f.read(reinterpret_cast<char *>(verBytes.data()), 2);
     
     uint16_t be = static_cast<uint16_t>(verBytes[0]) << 8 |
                   static_cast<uint16_t>(verBytes[1]);
-    uint16_t le = static_cast<uint16_t>(verBytes[0]) |
-                  (static_cast<uint16_t>(verBytes[1]) << 8);    
     f.seekg(start);
     
-    // Si l'interprétation big-endian correspond à la plage utilisée par le
-    // moteur historique, on considère le flux comme big-endian.
-    if (be >= 0x0001 && be <= 0x00ff) {
-        return true;
-    }
-    
-    // Sinon, on vérifie la plage des versions connues (4, 5, 6).
-    if (le >= 4 && le <= 6) {
-        return false;
-    }
-    
-    throw std::runtime_error("Version Robot invalide");
+    // Match exact de la logique ScummVM: (0 < version && version <= 0x00ff)
+    // Si cette condition est vraie, le fichier est big-endian.
+    // Sinon, il est considéré comme little-endian.
+    const bool bigEndian = (0 < be && be <= 0x00ff);
+    return bigEndian;
 }
 
 /// Ajoute un entier 16 bits en little-endian à un vecteur de bytes

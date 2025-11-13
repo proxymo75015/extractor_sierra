@@ -170,10 +170,11 @@ void read_exact(std::ifstream &f, void *data, size_t size);
 // Lit le champ de version à l'offset 6 et détermine si le fichier
 // est en big-endian ou little-endian selon l'algorithme de ScummVM.
 // Le flux est repositionné à sa position initiale après lecture.
+// Cette logique correspond exactement à ScummVM (robot.cpp ligne 390):
+//     const bool bigEndian = (0 < version && version <= 0x00ff);
 //
 // @param f  Flux d'entrée positionné au début du fichier
 // @return   true si le fichier est big-endian, false sinon
-// @throws runtime_error si la version est invalide
 bool detect_endianness(std::ifstream &f);
 
 // Ajoute un entier 16 bits en little-endian à la fin d'un vecteur.
