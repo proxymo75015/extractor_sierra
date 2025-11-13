@@ -343,10 +343,11 @@ int16_t apply_dpcm16_step(int16_t predictor, uint8_t control) {
     } else {
         value += delta;
     }
-    if (value < -32768) {
-        value = -32768;
-    } else if (value > 32767) {
-        value = 32767;
+    // Emulating x86 16-bit signed register overflow (same as ScummVM)
+    if (value > 32767) {
+        value -= 65536;
+    } else if (value < -32768) {
+        value += 65536;
     }
     return static_cast<int16_t>(value);
 }
