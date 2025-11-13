@@ -33,53 +33,47 @@ inline bool rangesOverlap(const std::byte *aBegin, const std::byte *aEnd,
 inline void expand_cel(std::span<std::byte> target,
                        std::span<const std::byte> source, 
                        uint16_t w, uint16_t h, uint8_t scale) {
+  // Seul zéro est invalide (conformément à ScummVM robot.cpp:1338)
   if (scale == 0) {
-    throw std::runtime_error("Invalid vertical scale factor (zero)");
+    throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
 
-  const int16_t sourceHeight = (static_cast<int16_t>(h) * static_cast<int16_t>(scale)) / 100;
+  const int16_t sourceHeight = std::max<int16_t>(1, (static_cast<int16_t>(h) * static_cast<int16_t>(scale)) / 100);
   
-  if (sourceHeight <= 0) {
-    throw std::runtime_error("Invalid calculated source height: " + 
-                             std::to_string(sourceHeight));
-  }
-
+  // Suppression de la vérification sourceHeight <= 0 car max(1, ...) garantit >= 1
+  
   const size_t wSize = static_cast<size_t>(w);
   const size_t source_h = static_cast<size_t>(sourceHeight);
   const size_t expected_source = wSize * source_h;
   const size_t expected_target = wSize * static_cast<size_t>(h);
 
   if (source.size() < expected_source) {
-    throw std::runtime_error("Insufficient source buffer size");
+    throw std::runtime_error("Taille du tampon source insuffisante");
   }
 
   if (target.size() < expected_target) {
-    throw std::runtime_error("Insufficient target buffer size");
+    throw std::runtime_error("Taille du tampon cible insuffisante");
   }
 
-  // Bottom-up traversal matching ScummVM (robot.cpp:1338-1353)
+  // Traversée ascendante depuis la dernière ligne source (bas de l'image)
   const int16_t numerator = static_cast<int16_t>(h);
   const int16_t denominator = sourceHeight;
   int16_t remainder = 0;
 
-  // Start from last source line (bottom)
   const std::byte *sourcePtr = source.data() + (source_h - 1) * wSize;
   std::byte *targetPtr = target.data();
 
-  // Traverse from bottom to top (y decreasing from sourceHeight-1 to 0)
   for (int16_t y = sourceHeight - 1; y >= 0; --y) {
     remainder += numerator;
     int16_t linesToDraw = remainder / denominator;
     remainder %= denominator;
 
-    // Replicate current source line linesToDraw times
     while (linesToDraw > 0) {
       std::memcpy(targetPtr, sourcePtr, wSize);
       targetPtr += wSize;
       --linesToDraw;
     }
 
-    // Move to previous source line (upward in image, backward in buffer)
     sourcePtr -= wSize;
   }
 }

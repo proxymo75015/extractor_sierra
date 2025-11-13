@@ -190,12 +190,15 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
                              std::to_string(kMaxAudioBlockSize) + ")");
   }
   m_primerZeroCompressFlag = read_scalar<int16_t>(m_fp, m_bigEndian);
+  // ScummVM ne valide pas cette valeur, accepte toutes les valeurs
+  // Suppression de la vérification stricte != 0 && != 1
   if (m_primerZeroCompressFlag != 0 && m_primerZeroCompressFlag != 1) {
     log_warn(m_srcPath,
-             "Valeur primerZeroCompress inattendue: " +
+             "Valeur primerZeroCompress non standard: " +
                  std::to_string(m_primerZeroCompressFlag) +
-                 " (attendu 0 ou 1, mais accepté pour compatibilité)",
+                 " (attendu 0 ou 1, mais accepté pour compatibilité ScummVM)",
              m_options);
+    // Continuer sans lever d'exception
   }
   m_fp.seekg(2, std::ios::cur);
   m_numFrames = read_scalar<uint16_t>(m_fp, m_bigEndian);
@@ -1439,7 +1442,6 @@ void RobotExtractor::readPalette() {
 void RobotExtractor::readSizesAndCues(bool allowShortFile) {
   StreamExceptionGuard guard(m_fp);
   
-  // Lire les tailles de frames
   m_frameSizes.resize(m_numFrames);
   m_packetSizes.resize(m_numFrames);
   
@@ -1456,21 +1458,17 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
   case 6:
     for (size_t i = 0; i < m_numFrames; ++i) {
       int32_t val = read_scalar<int32_t>(m_fp, m_bigEndian);
-      if (val < 0) {
-        throw std::runtime_error("Taille de frame négative");
-      }
+      // ScummVM utilise directement la valeur signée dans un tableau uint32
+      // Les valeurs négatives sont conservées telles quelles (comportement ScummVM)
       m_frameSizes[i] = static_cast<uint32_t>(val);
     }
     for (size_t i = 0; i < m_numFrames; ++i) {
       int32_t val = read_scalar<int32_t>(m_fp, m_bigEndian);
-      if (val < 0) {
-        throw std::runtime_error("Taille de paquet négative");
-      }
       m_packetSizes[i] = static_cast<uint32_t>(val);
     }
     break;
   default:
-    throw std::runtime_error("Version non supportée pour les tables d'index");
+    throw std::runtime_error("Version non supportée: " + std::to_string(m_version));
   }
   
   // Lire les cue times (256 x 4 octets)
@@ -1753,24 +1751,24 @@ void RobotExtractor::exportCel(std::span<const std::byte> celData,
   
   const uint8_t verticalScaleFactor = read_u8(celData, 1);
   
-  // Only zero is invalid (matching ScummVM robot.cpp:1338)
+  // Seul zéro est invalide (conformément à ScummVM robot.cpp:1338)
   if (verticalScaleFactor == 0) {
     throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
   
-  // ScummVM accepts all values 1-255 without upper limit check
+  // ScummVM accepte toutes les valeurs 1-255 sans vérification de limite supérieure
+  // Suppression de la vérification : if (verticalScaleFactor > 100)
   
   const uint16_t celWidth = read_u16(celData, 2, m_bigEndian);
   const uint16_t celHeight = read_u16(celData, 4, m_bigEndian);
   
-  // Calculate source height using same formula as ScummVM
-  const uint16_t sourceHeight = 
-      std::max<uint16_t>(1, (celHeight * verticalScaleFactor) / 100);
+  // Calcul de la hauteur source avec la même formule que ScummVM
+  const int16_t sourceHeight = 
+      std::max<int16_t>(1, (static_cast<int16_t>(celHeight) * static_cast<int16_t>(verticalScaleFactor)) / 100);
   
   // ...existing code for decompression...
   
-  // Apply vertical scaling if needed
-  if (verticalScaleFactor != 100) {
+  // Apply vertical scaling if (verticalScaleFactor != 100) {
     expand_cel(std::span(m_rgbaBuffer.data(), celWidth * celHeight * 4),
                std::span(decompressedData.data(), celWidth * sourceHeight * 4),
                celWidth, celHeight, verticalScaleFactor);
