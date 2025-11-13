@@ -183,14 +183,12 @@ void RobotExtractor::readHeader() {
   m_postHeaderPos = m_fp.tellg();
   
   if (m_version < 4 || m_version > 6) {
-    throw std::runtime_error("Version Robot non supportée: " +
-                             std::to_string(m_version));
+    throw std::runtime_error("Unsupported Robot version: " + std::to_string(m_version));
   }
 
   if (m_xRes < 0 || m_yRes < 0 || m_xRes > m_options.max_x_res ||
       m_yRes > m_options.max_y_res) {
-    throw std::runtime_error("Résolution invalide: " + std::to_string(m_xRes) +
-                             "x" + std::to_string(m_yRes));
+    throw std::runtime_error("Invalid resolution: " + std::to_string(m_xRes) + "x" + std::to_string(m_yRes));
   }
 }
 
@@ -204,24 +202,19 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   // Vérification de la signature Robot (doit être 0x16)
   uint16_t signature = read_scalar<uint16_t>(m_fp, false);
   if (signature != 0x16) {
-    throw std::runtime_error("Signature Robot invalide: 0x" + 
-                             std::to_string(signature));
+    throw std::runtime_error("Invalid robot file signature: expected 0x16, got 0x" + std::to_string(signature));
   }
   
   m_fp.seekg(4, std::ios::cur); // Sauter 'SOL\0'
   
   m_version = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (m_version < 4 || m_version > 6) {
-    throw std::runtime_error("Version Robot non supportée: " +
-                             std::to_string(m_version));
+    throw std::runtime_error("Unsupported Robot version: " + std::to_string(m_version));
   }
 
   m_audioBlkSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (m_audioBlkSize > kMaxAudioBlockSize) {
-    throw std::runtime_error("Taille de bloc audio invalide dans l'en-tête: " +
-                             std::to_string(m_audioBlkSize) +
-                             " (maximum " +
-                             std::to_string(kMaxAudioBlockSize) + ")");
+    throw std::runtime_error("Audio block size too large in header: " + std::to_string(m_audioBlkSize) + " (maximum " + std::to_string(kMaxAudioBlockSize) + ")");
   }
   m_primerZeroCompressFlag = read_scalar<int16_t>(m_fp, m_bigEndian);
   if (m_primerZeroCompressFlag != 0 && m_primerZeroCompressFlag != 1) {
@@ -251,10 +244,7 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_hasAudio = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
   
   if (m_hasAudio && m_audioBlkSize < kRobotAudioHeaderSize) {
-    throw std::runtime_error("Taille de bloc audio trop petite dans l'en-tête: " +
-                             std::to_string(m_audioBlkSize) +
-                             " (minimum " +
-                             std::to_string(kRobotAudioHeaderSize) + ")");
+    throw std::runtime_error("Audio block size too small in header: " + std::to_string(m_audioBlkSize) + " (minimum " + std::to_string(kRobotAudioHeaderSize) + ")");
   }
   m_fp.seekg(2, std::ios::cur);
   m_frameRate = read_scalar<int16_t>(m_fp, m_bigEndian);
