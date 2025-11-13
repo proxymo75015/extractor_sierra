@@ -1685,21 +1685,38 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                 m_options);
     }
 
+    // Apply vertical expansion if needed (like ScummVM's expandCel)
+    std::vector<std::byte> expandedCelBuffer;
+    std::span<const std::byte> pixelData;
+    
+    if (verticalScale != 100) {
+      // Need to expand from sourceHeight to h
+      const size_t expandedSize = static_cast<size_t>(w) * h;
+      expandedCelBuffer.resize(expandedSize);
+      expand_cel(std::span(expandedCelBuffer), 
+                 std::span(m_celBuffer), 
+                 w, h, verticalScale);
+      pixelData = expandedCelBuffer;
+    } else {
+      // Direct use of decompressed data
+      pixelData = m_celBuffer;
+    }
+
     if (parsedPalette.valid && parsedPalette.colorCount > 0) {
       size_t pixelIndex = 0;
-      for (size_t j = 0; j < m_celBuffer.size(); j += 2) {
-        const uint8_t hiNibble = std::to_integer<uint8_t>(m_celBuffer[j]);
-        const uint8_t loNibble = std::to_integer<uint8_t>(m_celBuffer[j + 1]);
-        const uint8_t index = (hiNibble << 4) | loNibble;
+      for (size_t j = 0; j < pixelData.size(); ++j) {
+        const uint8_t index = std::to_integer<uint8_t>(pixelData[j]);
         if (index < parsedPalette.entries.size() && parsedPalette.entries[index].present) {
           const auto &color = parsedPalette.entries[index];
-          m_rgbaBuffer[pixelIndex++] = 0xFF000000 | color.r << 16 | color.g << 8 | color.b;
+          m_rgbaBuffer[pixelIndex++] = 0xFF000000 | (static_cast<uint32_t>(color.r) << 16) | (static_cast<uint32_t>(color.g) << 8) | color.b;
         } else {
           m_rgbaBuffer[pixelIndex++] = 0xFF000000;
         }
       }
       m_celBuffer.clear();
       m_celBuffer.shrink_to_fit();
+      expandedCelBuffer.clear();
+      expandedCelBuffer.shrink_to_fit();
       m_rgbaBuffer.resize(pixelIndex);
     } else {
       std::fill(m_rgbaBuffer.begin(), m_rgbaBuffer.end(), 0xFF000000);

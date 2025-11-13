@@ -62,10 +62,9 @@ inline void expand_cel(std::span<std::byte> target,
     int16_t linesToDraw = remainder / denominator;
     remainder %= denominator;
 
-    while (linesToDraw > 0) {
+    while (linesToDraw--) {
       std::memcpy(targetPtr, sourcePtr, wSize);
       targetPtr += wSize;
-      --linesToDraw;
     }
 
     sourcePtr += wSize;
