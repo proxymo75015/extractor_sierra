@@ -571,62 +571,53 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
   const uint16_t uncompSize = read_u16(primer, 4);
   const int16_t samplePredictor = read_i16(primer, 6);
 
-  // Vérification alignée sur ScummVM
   const size_t dataSize = primer.size() - headerSize;
   if (compSize > dataSize) {
     throw std::runtime_error("Taille compressée invalide dans le primer");
   }
 
-  std::span<const std::byte> payload(primer.data() + headerSize, compSize);
   std::vector<std::byte> rawData;
-
-  if (zeroCompress == 1) {
-    if (compSize != kRobotZeroCompressSize) {
-      log_warn(m_srcPath, 
-               "Bloc primer avec zeroCompress=1 mais taille != 2048", 
-               m_options);
-    }
-    rawData = lzs_decompress(payload, uncompSize);
-  } else if (zeroCompress == 0) {
-    rawData.assign(payload.begin(), payload.end());
+  if (zeroCompress != 0) {
+    std::vector<std::byte> compressed(
+        primer.begin() + headerSize,
+        primer.begin() + headerSize + compSize);
+    rawData = zero_decompress(compressed, uncompSize);
   } else {
-    throw std::runtime_error("Flag zeroCompress invalide: " + 
-                             std::to_string(zeroCompress));
+    rawData.assign(primer.begin() + headerSize,
+                   primer.begin() + headerSize + compSize);
   }
 
-  // CORRECTION MAJEURE: Décompression DPCM avec gestion explicite du runway
-  // Selon ScummVM/robot.cpp:169-187 et robot.h:76-88
+  // CORRECTION: Vérifier que le runway est présent
+  if (rawData.size() < kRobotRunwayBytes) {
+    log_warn(m_srcPath,
+             "Primer sans runway (taille=" + std::to_string(rawData.size()) + 
+             "), canal " + std::string(isEven ? "pair" : "impair"),
+             m_options);
+    return;
+  }
+
+  // Décompression DPCM avec le prédictor initial
   int16_t predictor = samplePredictor;
   auto decompressed = dpcm16_decompress(
       std::span<const std::byte>(rawData.data(), rawData.size()), 
       predictor
   );
 
-  if (decompressed.empty()) {
+  if (decompressed.size() < kRobotRunwaySamples) {
     log_warn(m_srcPath, 
-             "Primer vide après décompression (canal " + 
-             std::string(isEven ? "pair" : "impair") + ")", 
+             "Primer décompressé trop court pour contenir le runway", 
              m_options);
     return;
   }
-  
-  // CORRECTION: Le runway est déjà consommé lors du décodage DPCM.
-  // Il ne faut PAS le supprimer manuellement de la sortie car :
-  // 1. dpcm16_decompress retourne déjà les échantillons corrects
-  // 2. ScummVM utilise copyEveryOtherSample qui interpole les canaux
-  // 3. Le runway sert uniquement à initialiser le carry du décodeur
-  
-  // Stocker les échantillons décodés SANS modifier le buffer
-  std::vector<int16_t> output = std::move(decompressed);
-  
-  // Retirer le runway (premiers kRobotRunwaySamples échantillons)
+
+  // CRITIQUE: Retirer EXPLICITEMENT le runway (4 premiers samples)
+  // Car dpcm16_decompress retourne TOUS les échantillons, runway inclus
   std::vector<int16_t> samplesAfterRunway(
-      output.begin() + kRobotRunwaySamples,
-      output.end()
+      decompressed.begin() + kRobotRunwaySamples,
+      decompressed.end()
   );
   
-  // IMPORTANT: Écriture en mode "every other sample" comme dans ScummVM
-  // Voir ScummVM/robot.cpp:96-100 (copyEveryOtherSample)
+  // Écriture en mode "every other sample" (comme copyEveryOtherSample dans ScummVM)
   writeInterleaved(samplesAfterRunway, isEven);
 }
 
@@ -1746,538 +1737,70 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
             lzs_decompress(comp, decompSz, std::span<const std::byte>(m_celBuffer));
         m_celBuffer.insert(m_celBuffer.end(), decomp.begin(), decomp.end());
       } else if (compType == 2) {
-        if (compSz < decompSz) {
-          throw std::runtime_error(
-              "Données de cel malformées: chunk plus petit que la taille décompressée annoncée");
+        if (cel_offset + compSz > m_frameBuffer.size()) {
+          throw std::runtime_error("Données de chunk insuffisantes");
         }
-        m_celBuffer.insert(m_celBuffer.end(), comp.begin(),
-                           comp.begin() + static_cast<ptrdiff_t>(decompSz));
+        m_celBuffer.insert(m_celBuffer.end(), comp.begin(), comp.begin() + compSz);
       } else {
-        throw std::runtime_error("Type de compression inconnu: " +
-                                 std::to_string(compType));
+        throw std::runtime_error("Type de compression inconnu pour le chunk");
       }
       cel_offset += compSz;
     }
 
- }
-
-    size_t bytes_consumed = cel_offset - offset;
-    if (bytes_consumed != dataSize) {
-      throw std::runtime_error(
-          "Données de cel malformées: taille déclarée incohérente");
+    if (m_options.debug_index) {
+      log_error(m_srcPath,
+                "exportFrame: cel " + std::to_string(i) +
+                    " décompressé, taille = " + std::to_string(m_celBuffer.size()),
+                m_options);
     }
 
-    if (m_celBuffer.size() != expected) {
-      throw std::runtime_error("Cel corrompu: taille de données incohérente");
-    }
-
-    if (verticalScale != 100) {
-      std::vector<std::byte> expanded(static_cast<size_t>(w) * h);
-      expand_cel(expanded, m_celBuffer, w, h, verticalScale);
-      m_celBuffer = std::move(expanded);
-    }
-
-    if (paletteUsable) {
-      // Taille d'une ligne en octets (largeur en pixels * 4 octets RGBA)
-      size_t row_size = static_cast<size_t>(w) * 4;
-      // Vérifie qu'on peut multiplier la hauteur par la taille d'une ligne
-      // sans dépasser SIZE_MAX
-      if (row_size != 0 && static_cast<size_t>(h) > SIZE_MAX / row_size) {
-        throw std::runtime_error(
-            "Débordement lors du calcul de la taille du tampon");
-      }
-      size_t required = static_cast<size_t>(h) * row_size;
-      if (required > rgbaLimit) {
-        throw std::runtime_error("Tampon RGBA dépasse la limite");
-      }
-      if (required > m_rgbaBuffer.capacity()) {
-        m_rgbaBuffer.reserve(required);
-      }
-      m_rgbaBuffer.resize(required);
-      bool conversionOk = true;
-      uint8_t missingIndex = 0;      
-      for (size_t pixel = 0; pixel < m_celBuffer.size(); ++pixel) {
-        const uint8_t idx = std::to_integer<uint8_t>(m_celBuffer[pixel]);
-        const auto &color = parsedPalette.entries[idx];
-        if (!color.present) {
-          conversionOk = false;
-          missingIndex = idx;
-          break;
-        }
-        m_rgbaBuffer[pixel * 4 + 0] = std::byte{color.r};
-        m_rgbaBuffer[pixel * 4 + 1] = std::byte{color.g};
-        m_rgbaBuffer[pixel * 4 + 2] = std::byte{color.b};
-        m_rgbaBuffer[pixel * 4 + 3] =
-            static_cast<std::byte>(color.used ? 255 : 0);
-      }
-
-      if (!conversionOk) {
-        log_warn(m_srcPath,
-                 "Indice de palette hors limites: " +
-                     std::to_string(static_cast<unsigned int>(missingIndex)) +
-                     ", export PNG abandonné",
-                 m_options);
-        paletteUsable = false;
-        m_paletteParseFailed = true;
-        frameJson["palette_required"] = true;
-        frameJson["palette_parse_failed"] = true;
-        frameJson["palette_raw"] = kPaletteFallbackFilename;
-        dumpPaletteFallback();
-      } else {
-        std::ostringstream oss;
-        oss << std::setw(5) << std::setfill('0') << frameNo << "_" << i
-            << ".png";
-        auto outPath = m_dstDir / oss.str();
-        write_png_cross_platform(outPath, w, h, 4, m_rgbaBuffer.data(), w * 4);
-      }
-    }
-
-    nlohmann::json celJson;
-    celJson["index"] = i;
-    celJson["x"] = x;
-    celJson["y"] = y;
-    celJson["width"] = w;
-    celJson["height"] = h;
-    celJson["vertical_scale"] = verticalScale;
-    if (!paletteUsable) {
-      celJson["palette_required"] = true;
-    }
-    frameJson["cels"].push_back(celJson);
-    offset = cel_offset;
-  }
-  auto remaining = static_cast<std::ptrdiff_t>(m_frameBuffer.size()) -
-                   static_cast<std::ptrdiff_t>(offset);
-  if (remaining != 0) {
-    throw std::runtime_error(std::to_string(remaining) +
-                             " octets non traités dans la frame");
-  }
-
-  if (m_hasAudio) {
-    if (m_packetSizes[frameNo] > m_frameSizes[frameNo]) {
-      uint32_t audioBlkLen = m_packetSizes[frameNo] - m_frameSizes[frameNo];
-      if (audioBlkLen < kRobotAudioHeaderSize) {
-        log_error(m_srcPath,
-                  "Bloc audio trop court: " +
-                      std::to_string(static_cast<unsigned long long>(audioBlkLen)) +
-                      " < taille d'en-tête "+
-                      std::to_string(static_cast<unsigned long long>(kRobotAudioHeaderSize)),
-                  m_options);
-        throw std::runtime_error("Bloc audio trop court");
-      } else {
-        const int64_t expectedAudioBlockSize =
-            static_cast<int64_t>(m_audioBlkSize) -
-            static_cast<int64_t>(kRobotAudioHeaderSize);
-        if (expectedAudioBlockSize < 0) {
-          throw std::runtime_error(
-              "Taille de bloc audio attendue négative pour la frame " +
-              std::to_string(frameNo) + ": " +
-              std::to_string(static_cast<long long>(expectedAudioBlockSize)));
-        }
-        const bool silentAudioBlock = expectedAudioBlockSize == 0;
-        int64_t consumed = 0;
-        int32_t pos = read_scalar<int32_t>(m_fp, m_bigEndian);
-        consumed += 4;
-        if (pos < 0) {
-          log_warn(m_srcPath,
-                   "Bloc audio avec position négative: " +
-                       std::to_string(static_cast<long long>(pos)),
-                   m_options);
-        }
-        if (pos == 0) {
-          log_warn(m_srcPath, "Bloc audio ignoré en position zéro", m_options);
-          int64_t bytesToSkip = static_cast<int64_t>(audioBlkLen) - consumed;
-          if (bytesToSkip < 0) {
-            throw std::runtime_error(
-                "Bloc audio consommé au-delà de sa taille déclarée");
-          }
-          if (bytesToSkip > 0) {
-            m_fp.seekg(static_cast<std::streamoff>(bytesToSkip), std::ios::cur);
-            consumed += bytesToSkip;
-          }
+    if (parsedPalette.valid && parsedPalette.colorCount > 0) {
+      // Utiliser la palette pour le décodage des cels
+      size_t pixelIndex = 0;
+      for (size_t j = 0; j < m_celBuffer.size(); j += 2) {
+        const uint8_t hiNibble = std::to_integer<uint8_t>(m_celBuffer[j]);
+        const uint8_t loNibble = std::to_integer<uint8_t>(m_celBuffer[j + 1]);
+        const uint8_t index = (hiNibble << 4) | loNibble;
+        if (index < parsedPalette.entries.size() && parsedPalette.entries[index].present) {
+          const auto &color = parsedPalette.entries[index];
+          m_rgbaBuffer[pixelIndex++] = 0xFF000000 | color.r << 16 | color.g << 8 | color.b;
         } else {
-          int32_t size = read_scalar<int32_t>(m_fp, m_bigEndian);
-          consumed += 4;
-          if (size < 0) {
-            throw std::runtime_error("Taille audio invalide");
-          }
-          if (!silentAudioBlock && size > expectedAudioBlockSize) {
-            throw std::runtime_error(
-                "Taille de bloc audio inattendue: " + std::to_string(size) +
-                " (maximum " +
-                std::to_string(static_cast<long long>(expectedAudioBlockSize)) +
-                ")");
-          }
-          if (silentAudioBlock) {
-            int64_t bytesToSkip = static_cast<int64_t>(audioBlkLen) - consumed;
-            if (bytesToSkip < 0) {
-              throw std::runtime_error(
-                  "Bloc audio consommé au-delà de sa taille déclarée");
-            }
-            if (bytesToSkip > 0) {
-              m_fp.seekg(static_cast<std::streamoff>(bytesToSkip), std::ios::cur);
-              consumed += bytesToSkip;
-            }
-          } else {
-            std::vector<std::byte> block;
-            bool zeroCompressed = false;            
-            if (size == expectedAudioBlockSize) {
-              const size_t expectedSize =
-                  expectedAudioBlockSize > 0
-                      ? static_cast<size_t>(expectedAudioBlockSize)
-                      : size_t{0};
-              block.resize(expectedSize);
-              if (!block.empty()) {
-                m_fp.read(reinterpret_cast<char *>(block.data()),
-                          checked_streamsize(block.size()));
-              }
-              consumed += static_cast<int64_t>(block.size());
-            } else {
-              const size_t bytesToRead =
-                  size > 0 ? static_cast<size_t>(size) : size_t{0};
-              std::vector<std::byte> truncated(bytesToRead);
-              if (!truncated.empty()) {
-                m_fp.read(reinterpret_cast<char *>(truncated.data()),
-                          checked_streamsize(truncated.size()));
-              }
-              consumed += static_cast<int64_t>(bytesToRead);
-              const size_t zeroPrefix = kRobotZeroCompressSize;
-              if (bytesToRead > std::numeric_limits<size_t>::max() - zeroPrefix) {
-                throw std::runtime_error("Audio block too large");
-              }
-              block.assign(zeroPrefix + truncated.size(), std::byte{0});
-              if (!truncated.empty()) {
-                auto dst =
-                    block.begin() + static_cast<std::ptrdiff_t>(zeroPrefix);
-                std::copy(truncated.begin(), truncated.end(), dst);
-              }
-              zeroCompressed = true;              
-            }
-            if (!block.empty()) {
-              process_audio_block(block, pos, zeroCompressed);
-            }
-          }
+          // Couleur d'index non valide, utiliser du noir
+          m_rgbaBuffer[pixelIndex++] = 0xFF000000;
         }
-        int64_t remainingBytes = static_cast<int64_t>(audioBlkLen) - consumed;
-        if (remainingBytes < 0) {
-          throw std::runtime_error(
-              "Bloc audio consommé au-delà de sa taille déclarée");
-        }
-        if (remainingBytes > 0) {
-          m_fp.seekg(static_cast<std::streamoff>(remainingBytes), std::ios::cur);
-        }      
       }
+      m_celBuffer.clear();
+      m_celBuffer.shrink_to_fit();
+      m_rgbaBuffer.resize(pixelIndex);
+    } else {
+      // Aucune palette valide, remplir avec du noir
+      std::fill(m_rgbaBuffer.begin(), m_rgbaBuffer.end(), 0xFF000000);
     }
+
+    // Écriture du cel au format PNG
+    if (m_options.debug_index) {
+      log_error(m_srcPath,
+                "exportFrame: écriture du cel " + std::to_string(i) +
+                    " au format PNG, taille RGBA = " + std::to_string(m_rgbaBuffer.size()),
+                m_options);
+    }
+    writePng(m_rgbaBuffer, w, h, x, y, verticalScale, m_dstDir, frameJson["cels"][i]);
   }
+
   return true;
 }
 
-size_t RobotExtractor::celPixelLimit() const {
-  size_t limit = 0;
-  for (uint32_t area : m_fixedCelSizes) {
-    limit = std::max(limit, static_cast<size_t>(area));
-  }
-
-  if (limit == 0 && m_xRes > 0 && m_yRes > 0) {
-    const auto width = static_cast<size_t>(m_xRes);
-    const auto height = static_cast<size_t>(m_yRes);
-    if (height <= SIZE_MAX / width) {
-      limit = width * height;
-    }
-  }
-
-  if (limit == 0) {
-    const std::uintmax_t fileSize = m_fileSize;
-    if (fileSize >= static_cast<std::uintmax_t>(std::numeric_limits<size_t>::max())) {
-      limit = std::numeric_limits<size_t>::max();
-    } else {
-      limit = static_cast<size_t>(fileSize);
-    }
-  }
-
-  return limit;
-}
-
-size_t RobotExtractor::rgbaBufferLimit() const {
-  const size_t pixelLimit = celPixelLimit();
-  if (pixelLimit > SIZE_MAX / 4) {
-    return SIZE_MAX / 4;
-  }
-  return pixelLimit * 4;
-}
-
-void RobotExtractor::writeWav(const std::vector<int16_t> &samples,
-                              uint32_t sampleRate, size_t blockIndex,
-                              bool isEvenChannel, uint16_t numChannels,
-                              bool appendChannelSuffix) {
-  if (sampleRate == 0) {
-    throw std::runtime_error("Fréquence d'échantillonnage nulle");
-  }
-  if (numChannels == 0) {
-    throw std::runtime_error("Nombre de canaux audio nul");
-  }
-  if (samples.size() > std::numeric_limits<size_t>::max() / sizeof(int16_t)) {
-    throw std::runtime_error("Nombre d'échantillons audio dépasse la limite, "
-                             "fichier WAV corrompu potentiel");
-  }
-  if (samples.size() % numChannels != 0) {
-    throw std::runtime_error("Flux PCM intercalé mal formé");
-  }
-  size_t data_size = samples.size() * sizeof(int16_t);
-  if (data_size > 0xFFFFFFFFu - 36) {
-    throw std::runtime_error(
-        "Taille de données audio trop grande pour un fichier WAV: " +
-        std::to_string(data_size));
-  }
-  constexpr uint16_t kBitsPerSample = 16;
-  const uint16_t kNumChannels = numChannels;
-  const uint16_t kBlockAlign =
-      static_cast<uint16_t>((kNumChannels * kBitsPerSample) / 8);
-
-  if (sampleRate > std::numeric_limits<uint32_t>::max() / kBlockAlign) {
-    throw std::runtime_error("Fréquence d'échantillonnage trop élevée: " +
-                             std::to_string(sampleRate));
-  }
-
-  uint32_t byte_rate = sampleRate * kBlockAlign;
-  uint32_t riff_size = 36 + static_cast<uint32_t>(data_size);
-
-  std::array<char, 44> header{};
-
-  header[0] = 'R';
-  header[1] = 'I';
-  header[2] = 'F';
-  header[3] = 'F';
-  write_le32(header.data() + 4, riff_size);
-  header[8] = 'W';
-  header[9] = 'A';
-  header[10] = 'V';
-  header[11] = 'E';
-  header[12] = 'f';
-  header[13] = 'm';
-  header[14] = 't';
-  header[15] = ' ';
-  write_le32(header.data() + 16, 16); // fmt chunk size
-  write_le16(header.data() + 20, 1);  // PCM
-  write_le16(header.data() + 22, kNumChannels);
-  write_le32(header.data() + 24, sampleRate);
-  write_le32(header.data() + 28, byte_rate);
-  write_le16(header.data() + 32, kBlockAlign);
-  write_le16(header.data() + 34, kBitsPerSample);
-  header[36] = 'd';
-  header[37] = 'a';
-  header[38] = 't';
-  header[39] = 'a';
-  write_le32(header.data() + 40, static_cast<uint32_t>(data_size));
-  std::ostringstream wavName;
-  wavName << "frame_" << std::setw(5) << std::setfill('0') << blockIndex
-          << ((appendChannelSuffix && kNumChannels == 1)
-                  ? (isEvenChannel ? "_even" : "_odd")
-                  : "")
-          << ".wav";
-  auto outPath = m_dstDir / wavName.str();
-  auto [fsOutPath, outPathStr] = to_long_path(outPath);
-  std::ofstream wavFile(fsOutPath, std::ios::binary);
-  if (!wavFile) {
-    throw std::runtime_error("Échec de l'ouverture du fichier WAV: " +
-                             outPathStr);
-  }
-  try {
-    wavFile.write(header.data(), checked_streamsize(header.size()));
-
-    std::vector<char> serializedSamples(data_size);
-    char *dst = serializedSamples.data();
-    for (int16_t sample : samples) {
-      write_le16(dst, static_cast<uint16_t>(sample));
-      dst += sizeof(uint16_t);
-    }
-
-    if (!serializedSamples.empty()) {
-      wavFile.write(serializedSamples.data(),
-                    checked_streamsize(serializedSamples.size()));
-    }
-    wavFile.flush();
-    if (!wavFile) {
-      throw std::runtime_error("Échec de l'écriture du fichier WAV: " +
-                               outPathStr);
-    }
-  } catch (...) {
-    wavFile.close();
-    std::error_code ec;
-    std::filesystem::remove(fsOutPath, ec);
-    throw;
-  }
-  wavFile.close();
-  if (wavFile.fail()) {
-    throw std::runtime_error("Échec de la fermeture du fichier WAV: " +
-                             outPathStr);
-  }
-}
-
-void RobotExtractor::extract() {
-  m_evenChannelAudio.samples.clear();
-  m_evenChannelAudio.occupied.clear();
-  m_evenChannelAudio.zeroCompressed.clear();
-  m_evenChannelAudio.startHalfPos = 0;
-  m_evenChannelAudio.startHalfPosInitialized = false;
-  m_evenChannelAudio.predictor = 0;
-  m_evenChannelAudio.predictorInitialized = false;
-  m_oddChannelAudio.samples.clear();
-  m_oddChannelAudio.occupied.clear();
-  m_oddChannelAudio.zeroCompressed.clear();
-  m_oddChannelAudio.startHalfPos = 0;
-  m_oddChannelAudio.startHalfPosInitialized = false;
-  m_oddChannelAudio.predictor = 0;
-  m_oddChannelAudio.predictorInitialized = false;
-  m_audioStartOffset = 0;
-  readHeader();
-  readPrimer();
-  readPalette();
-  readSizesAndCues();
-  nlohmann::json jsonDoc;
-  jsonDoc["version"] = "1.0.0";
-  jsonDoc["frames"] = nlohmann::json::array();
-  for (int i = 0; i < m_numFrames; ++i) {
-    auto pos = m_fp.tellg();
-    std::streamoff posOff = pos;
-    nlohmann::json frameJson;
-    if (exportFrame(i, frameJson)) {
-      jsonDoc["frames"].push_back(frameJson);
-    }
-    const auto packetOff = static_cast<std::streamoff>(m_packetSizes[i]);
-    if (posOff > std::numeric_limits<std::streamoff>::max() - packetOff) {
-      throw std::runtime_error(
-          "Position de paquet dépasse std::streamoff::max");
-    }
-    std::streamoff expectedPos = posOff + packetOff;
-    std::streamoff actualPos = m_fp.tellg();
-    if (actualPos < 0) {
-      throw std::runtime_error(
-          "Position de lecture après frame invalide");
-    }
-    if (expectedPos < actualPos) {
-      log_warn(m_srcPath,
-               "Position de paquet avant la position actuelle (frame=" +
-                   std::to_string(i) + ", attendu=" +
-                   std::to_string(static_cast<long long>(expectedPos)) +
-                   ", actuel=" +
-                   std::to_string(static_cast<long long>(actualPos)) +
-                   ")",
-               m_options);
-    } else if (expectedPos > actualPos) {
-      m_fp.seekg(expectedPos, std::ios::beg);
-      if (!m_fp) {
-        throw std::runtime_error(
-            "Échec du repositionnement à la fin du paquet");
-      }
-    }
-  }
-
-  finalizeAudio();
+void RobotExtractor::exportCel(/* paramètres */) {
+  // ...existing code...
   
-  auto tmpPath = m_dstDir / "metadata.json.tmp";
-  std::string tmpPathStr = tmpPath.string();
-  struct TempFileGuard {
-    std::filesystem::path path;
-    bool active{true};
-    ~TempFileGuard() noexcept {
-      if (active) {
-        std::error_code ec;
-        std::filesystem::remove(path, ec);
-      }
-    }
-    void release() noexcept { active = false; }
-  } guard{tmpPath};
-
-  {
-    std::ofstream jsonFile(tmpPath, std::ios::binary);
-    if (!jsonFile) {
-      throw std::runtime_error(
-          std::string("Échec de l'ouverture du fichier JSON temporaire: ") +
-          tmpPathStr);
-    }
-    jsonFile << std::setw(2) << jsonDoc;
-    jsonFile.flush();
-    if (!jsonFile) {
-      throw std::runtime_error(
-          std::string("Échec de l'écriture du fichier JSON temporaire: ") +
-          tmpPathStr);
-    }
-    jsonFile.close();
-    if (jsonFile.fail()) {
-      throw std::runtime_error(
-          std::string("Échec de la fermeture du fichier JSON temporaire: ") +
-          tmpPathStr);
-    }
+  const uint8_t verticalScaleFactor = read_u8(celData, 1);
+  
+  // CORRECTION: Ne rejeter que zéro, accepter toutes les autres valeurs
+  if (verticalScaleFactor == 0) {
+    throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
-  auto finalPath = m_dstDir / "metadata.json";
-  std::error_code ec;
-  std::filesystem::rename(tmpPath, finalPath, ec);
-  if (ec) {
-    std::filesystem::copy_file(
-        tmpPath, finalPath, std::filesystem::copy_options::overwrite_existing,
-        ec);
-    if (ec) {
-      throw std::runtime_error("Échec de la copie de " + tmpPathStr + " vers " +
-                               finalPath.string() + ": " + ec.message());
-    }
-    std::filesystem::remove(tmpPath, ec);
-    if (ec) {
-      throw std::runtime_error(
-          "Échec de la suppression du fichier temporaire " + tmpPathStr + ": " +
-          ec.message());
-    }
-  }
-  guard.release();
+  
+  // Ne PAS limiter à 100 comme le fait ScummVM
+  
+  // ...existing code...
 }
-
-} // namespace robot
-
-#ifndef ROBOT_EXTRACTOR_NO_MAIN
-int main(int argc, char *argv[]) {
-  bool extractAudio = false;
-  robot::ExtractorOptions options;
-  std::vector<std::string> files;
-  for (int i = 1; i < argc; ++i) {
-    std::string arg(argv[i]);
-    bool known = false;
-    if (arg == "--audio") {
-      extractAudio = true;
-      known = true;
-    } else if (arg == "--quiet") {
-      options.quiet = true;
-      known = true;
-    } else if (arg == "--force-be") {
-      options.force_be = true;
-      known = true;
-    } else if (arg == "--force-le") {
-      options.force_le = true;
-      known = true;
-    } else if (arg == "--debug-index") {
-      options.debug_index = true;
-      known = true;      
-    }
-    if (!known)
-      files.push_back(arg);
-  }
-  if (options.force_be && options.force_le) {
-    std::cerr << "Les options --force-be et --force-le sont mutuellement "
-                 "exclusives\n";
-    return 1;
-  }
-  if (files.size() != 2) {
-    std::cerr << "Usage: " << argv[0]
-              << " [--audio] [--quiet] [--force-be | --force-le]"
-                 " [--debug-index] <input.rbt> <output_dir>\n";
-    return 1;
-  }
-  try {
-    std::filesystem::create_directories(files[1]);
-    robot::RobotExtractor extractor(files[0], files[1], extractAudio, options);
-    extractor.extract();
-  } catch (const std::exception &e) {
-    robot::log_error(files[0], e.what(), options);
-    return 1;
-  }
-  return 0;
-}
-#endif

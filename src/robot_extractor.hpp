@@ -81,9 +81,9 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
   
-  // CORRECTION: Alignement strict avec ScummVM/robot.cpp:1340
-  // ScummVM utilise int16_t pour les calculs intermédiaires
-  const int16_t sourceHeight = (static_cast<int16_t>(h) * static_cast<int16_t>(scale)) / 100;
+  // CORRECTION: Alignement strict avec ScummVM/robot.cpp:1334-1353
+  const int16_t numerator = static_cast<int16_t>(h);
+  const int16_t sourceHeight = (numerator * static_cast<int16_t>(scale)) / 100;
   
   if (sourceHeight <= 0) {
     throw std::runtime_error("Hauteur source calculée invalide: " + 
@@ -102,22 +102,28 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Taille cible insuffisante");
   }
 
-  // CORRECTION: Alignement strict avec ScummVM/robot.cpp:1342-1353
-  // Le parcours démarre à la DERNIÈRE ligne de la source (bottom-up)
+  // CRITIQUE: Parcours bottom-up comme dans ScummVM
+  const int16_t denominator = sourceHeight;
+  int16_t remainder = 0;
+  
+  // Pointeur de lecture commence à la DERNIÈRE ligne source
   const std::byte *sourcePtr = source.data() + (static_cast<size_t>(source_h - 1) * w);
   std::byte *targetPtr = target.data();
 
+  // Parcours de bas en haut (y décroissant)
   for (int16_t y = source_h - 1; y >= 0; --y) {
     remainder += numerator;
     int16_t linesToDraw = remainder / denominator;
     remainder %= denominator;
 
-    while (linesToDraw-- > 0) {
+    // Copier la ligne source autant de fois que nécessaire
+    while (linesToDraw > 0) {
       std::memcpy(targetPtr, sourcePtr, w);
       targetPtr += w;
+      --linesToDraw;
     }
 
-    // CORRECTION: Remonter vers le haut de la source
+    // Reculer vers la ligne précédente (vers le haut)
     sourcePtr -= w;
   }
 }
