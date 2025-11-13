@@ -130,6 +130,10 @@ void write_span_le32(std::vector<std::byte> &data, size_t offset, uint32_t value
 
 namespace robot {
 namespace {
+/// Supprime les échantillons de la "runway" (piste d'approche) audio.
+/// La runway contient les 4 premiers échantillons (8 octets) nécessaires
+/// à l'initialisation du décodeur DPCM, mais qui ne font pas partie
+/// de l'audio final à exporter.
 void trim_runway_samples(std::vector<int16_t> &samples) {
   if (samples.size() <= kRobotRunwaySamples) {
     samples.clear();
@@ -194,7 +198,10 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_bigEndian = bigEndian;
   m_fileOffset = 0;
   
+  // Positionnement au début du fichier pour lecture de l'en-tête
   m_fp.seekg(0);
+  
+  // Vérification de la signature Robot (doit être 0x16)
   uint16_t signature = read_scalar<uint16_t>(m_fp, false);
   if (signature != 0x16) {
     throw std::runtime_error("Signature Robot invalide: 0x" + 

@@ -35,16 +35,25 @@ std::streamsize checked_streamsize(size_t size) {
 }
 
 void read_exact(std::ifstream &f, void *data, size_t size) {
+    // Convertit la taille en streamsize de manière sécurisée
     std::streamsize ss = checked_streamsize(size);
+    
+    // Sauvegarde le masque d'exceptions actuel et le désactive temporairement
     auto old = f.exceptions();
     f.exceptions(std::ios::goodbit);
+    
+    // Mémorise la position de départ pour pouvoir revenir en arrière si nécessaire
     auto start = f.tellg();
     f.read(static_cast<char *>(data), ss);
     std::streamsize got = f.gcount();
+    
+    // Efface l'état d'erreur pour permettre le repositionnement
     f.clear();
     if (got != ss) {
-        f.seekg(start);
+        f.seekg(start);  // Revient à la position initiale en cas de lecture incomplète
     }
+    
+    // Restaure le masque d'exceptions original
     f.exceptions(old);
     if (got != ss) {
         throw std::runtime_error("Lecture incomplète (" +
@@ -282,6 +291,7 @@ size_t getCompressedLength(BitReaderMSB &reader) {
 std::vector<std::byte> lzs_decompress(std::span<const std::byte> in,
                                       size_t expected_size,
                                       std::span<const std::byte> history) {
+    // Vérifie que la taille de sortie ne dépasse pas la limite de sécurité
     if (expected_size > kMaxLzsOutput) {
         throw std::runtime_error("Taille décompressée trop grande: " +
                                  std::to_string(expected_size) +
@@ -291,11 +301,13 @@ std::vector<std::byte> lzs_decompress(std::span<const std::byte> in,
 
     BitReaderMSB reader(in);
 
+    // Limite l'historique à la fenêtre glissante maximale (2047 octets)
     size_t history_to_copy = history.size();
     if (history_to_copy > kMaxOffset) {
         history_to_copy = kMaxOffset;
     }
 
+    // Initialise le dictionnaire avec l'historique (fenêtre glissante)
     std::vector<std::byte> dictionary;
     dictionary.reserve(history_to_copy + expected_size);
     if (history_to_copy > 0) {
@@ -384,13 +396,19 @@ constexpr std::array<uint16_t, 128> kDpcm16StepTable = {
 
 int16_t apply_dpcm16_step(int16_t predictor, uint8_t control) {
     int32_t value = predictor;
+    
+    // Extrait le delta depuis la table de pas (7 bits inférieurs)
     const int32_t delta = static_cast<int32_t>(kDpcm16StepTable[control & 0x7F]);
+    
+    // Le bit le plus significatif détermine la direction (positif/négatif)
     if ((control & 0x80) != 0) {
-        value -= delta;
+        value -= delta;  // Direction négative
     } else {
-        value += delta;
+        value += delta;  // Direction positive
     }
-    // Emulating x86 16-bit signed register overflow (same as ScummVM)
+    
+    // Émule le débordement de registre 16 bits signé x86 (comportement ScummVM)
+    // Cette approche garantit la compatibilité binaire avec ScummVM
     if (value > 32767) {
         value -= 65536;
     } else if (value < -32768) {

@@ -1,5 +1,5 @@
 Robot Extractor v1.0.0
-Extracts animations and audio from Atari Robot (.rbt) files, compatible with ScummVM's Robot file format (versions 5 and 6).
+Extracts animations and audio from Sierra Robot (.rbt) files, compatible with ScummVM's Robot file format (versions 4, 5 and 6).
 The palette data in the input file must contain a multiple of 3 bytes (RGB triples).
 Prerequisites
 
