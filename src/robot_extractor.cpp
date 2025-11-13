@@ -190,15 +190,12 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
                              std::to_string(kMaxAudioBlockSize) + ")");
   }
   m_primerZeroCompressFlag = read_scalar<int16_t>(m_fp, m_bigEndian);
-  // ScummVM ne valide pas cette valeur, accepte toutes les valeurs
-  // Suppression de la vérification stricte != 0 && != 1
   if (m_primerZeroCompressFlag != 0 && m_primerZeroCompressFlag != 1) {
     log_warn(m_srcPath,
              "Valeur primerZeroCompress non standard: " +
                  std::to_string(m_primerZeroCompressFlag) +
                  " (attendu 0 ou 1, mais accepté pour compatibilité ScummVM)",
              m_options);
-    // Continuer sans lever d'exception
   }
   m_fp.seekg(2, std::ios::cur);
   m_numFrames = read_scalar<uint16_t>(m_fp, m_bigEndian);
@@ -627,13 +624,9 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
 
   const uint8_t blockFlags = read_u8(blockBytes, 0);
   const uint8_t blockUnk = read_u8(blockBytes, 1);
-  // CORRECTION: selon ScummVM/robot.cpp:174-176
-  // const int32 audioPosition = audioRecordBuffer[2] | (audioRecordBuffer[3] << 8);
-  // Pas de division par 2 ici
   const uint16_t audioPosition = read_u16(blockBytes, 2);
   const uint16_t audioLen = read_u16(blockBytes, 4);
   
-  // La position est déjà en demi-échantillons selon le format Robot
   const bool isEvenChannel = (audioPosition % 2) == 0;
   const size_t targetIndex = audioPosition / 2;
   
@@ -645,7 +638,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
   }
 
   if (targetIndex < static_cast<size_t>(sourceChannel.startHalfPos)) {
-    // Cas où le paquet audio commence avant le début connu
     log_warn(m_srcPath,
              "Bloc audio avant le début connu à la position " +
                  std::to_string(static_cast<long long>(targetIndex)),
@@ -655,7 +647,6 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
 
   if (targetIndex > static_cast<size_t>(sourceChannel.startHalfPos) &&
       !sourceChannel.seenNonPrimerBlock) {
-    // Ignorer les blocs audio avant le premier bloc non-primer
     log_warn(m_srcPath,
              "Bloc audio ignoré avant le premier bloc non-primer à la position " +
                  std::to_string(static_cast<long long>(targetIndex)),
@@ -791,7 +782,6 @@ RobotExtractor::AppendPlanStatus RobotExtractor::planChannelAppend(
       ++plan.leadingOverlap;
       continue;
     }
-    // Existing data derived from a zero-compressed block is replaceable.
     if (channel.samples[index] !=
         samples[plan.inputOffset + plan.skipSamples + plan.leadingOverlap]) {
       break;
@@ -1097,10 +1087,6 @@ void RobotExtractor::finalizeAudio() {
   for (size_t i = 0; i < maxSamples; ++i) {
     const int16_t evenSample = i < evenStream.size() ? evenStream[i] : 0;
     const int16_t oddSample = i < oddStream.size() ? oddStream[i] : 0;
-    // CORRECTION: selon ScummVM/robot.h:238-240, l'ordre doit être:
-    // "copy every sample from the decompressed source outside of the DPCM
-    // runway into every *other* sample of the final audio buffer (1 -> 2, 2 -> 4, 3 -> 6)"
-    // Cela signifie: even sur index pairs, odd sur index impairs
     mono.push_back(evenSample);
     mono.push_back(oddSample);
   }
@@ -1458,8 +1444,6 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
   case 6:
     for (size_t i = 0; i < m_numFrames; ++i) {
       int32_t val = read_scalar<int32_t>(m_fp, m_bigEndian);
-      // ScummVM utilise directement la valeur signée dans un tableau uint32
-      // Les valeurs négatives sont conservées telles quelles (comportement ScummVM)
       m_frameSizes[i] = static_cast<uint32_t>(val);
     }
     for (size_t i = 0; i < m_numFrames; ++i) {
@@ -1471,19 +1455,16 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
     throw std::runtime_error("Version non supportée: " + std::to_string(m_version));
   }
   
-  // Lire les cue times (256 x 4 octets)
   m_cueTimes.resize(256);
   for (auto &cueTime : m_cueTimes) {
     cueTime = read_scalar<int32_t>(m_fp, m_bigEndian);
   }
   
-  // Lire les cue values (256 x 2 octets)
   m_cueValues.resize(256);
   for (auto &cueValue : m_cueValues) {
     cueValue = read_scalar<uint16_t>(m_fp, m_bigEndian);
   }
   
-  // CORRECTION: Alignement relatif au début du fichier Robot
   constexpr std::streamoff kRobotFrameSize = 2048;
   std::streamoff currentPos = m_fp.tellg();
   std::streamoff bytesRemaining = (currentPos - m_fileOffset) % kRobotFrameSize;
@@ -1492,15 +1473,12 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
     m_fp.seekg(padding, std::ios::cur);
   }
   
-  // Enregistrer la position des données de frames
   m_recordPositions.clear();
   m_recordPositions.push_back(m_fp.tellg());
   
-  // Calculer les positions suivantes
   for (size_t i = 0; i < m_numFrames - 1; ++i) {
     std::streamoff nextPos = m_recordPositions[i] + 
                              static_cast<std::streamoff>(m_packetSizes[i]);
-    // Aligner chaque record sur 2048 octets
     std::streamoff remainder = (nextPos - m_fileOffset) % kRobotFrameSize;
     if (remainder != 0) {
       nextPos += kRobotFrameSize - remainder;
@@ -1708,7 +1686,6 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
     }
 
     if (parsedPalette.valid && parsedPalette.colorCount > 0) {
-      // Utiliser la palette pour le décodage des cels
       size_t pixelIndex = 0;
       for (size_t j = 0; j < m_celBuffer.size(); j += 2) {
         const uint8_t hiNibble = std::to_integer<uint8_t>(m_celBuffer[j]);
@@ -1718,7 +1695,6 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
           const auto &color = parsedPalette.entries[index];
           m_rgbaBuffer[pixelIndex++] = 0xFF000000 | color.r << 16 | color.g << 8 | color.b;
         } else {
-          // Couleur d'index non valide, utiliser du noir
           m_rgbaBuffer[pixelIndex++] = 0xFF000000;
         }
       }
@@ -1726,11 +1702,9 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       m_celBuffer.shrink_to_fit();
       m_rgbaBuffer.resize(pixelIndex);
     } else {
-      // Aucune palette valide, remplir avec du noir
       std::fill(m_rgbaBuffer.begin(), m_rgbaBuffer.end(), 0xFF000000);
     }
 
-    // Écriture du cel au format PNG
     if (m_options.debug_index) {
       log_error(m_srcPath,
                 "exportFrame: écriture du cel " + std::to_string(i) +
@@ -1747,36 +1721,24 @@ void RobotExtractor::exportCel(std::span<const std::byte> celData,
                                const std::filesystem::path &outputPath,
                                const ParsedPalette &pal, size_t celIndex,
                                int frameNo) {
-  // ...existing code...
-  
   const uint8_t verticalScaleFactor = read_u8(celData, 1);
   
-  // Seul zéro est invalide (conformément à ScummVM robot.cpp:1338)
   if (verticalScaleFactor == 0) {
     throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
   
-  // ScummVM accepte toutes les valeurs 1-255 sans vérification de limite supérieure
-  // Suppression de la vérification : if (verticalScaleFactor > 100)
-  
   const uint16_t celWidth = read_u16(celData, 2, m_bigEndian);
   const uint16_t celHeight = read_u16(celData, 4, m_bigEndian);
   
-  // Calcul de la hauteur source avec la même formule que ScummVM
   const int16_t sourceHeight = 
       std::max<int16_t>(1, (static_cast<int16_t>(celHeight) * static_cast<int16_t>(verticalScaleFactor)) / 100);
   
-  // ...existing code for decompression...
-  
-  // Apply vertical scaling if (verticalScaleFactor != 100) {
+  if (verticalScaleFactor != 100) {
     expand_cel(std::span(m_rgbaBuffer.data(), celWidth * celHeight * 4),
                std::span(decompressedData.data(), celWidth * sourceHeight * 4),
                celWidth, celHeight, verticalScaleFactor);
   } else {
-    // Direct copy when no scaling
     std::memcpy(m_rgbaBuffer.data(), decompressedData.data(), 
                 celWidth * celHeight * 4);
   }
-  
-  // ...existing code...
 }
