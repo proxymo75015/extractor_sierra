@@ -47,6 +47,10 @@ uint16_t read_u16(std::span<const std::byte> data, size_t offset) {
   return static_cast<uint16_t>((hi << 8) | lo);
 }
 
+int16_t read_i16(std::span<const std::byte> data, size_t offset) {
+  return static_cast<int16_t>(read_u16(data, offset));
+}
+
 uint16_t read_u16_be(std::span<const std::byte> data, size_t offset) {
   if (offset + 1 >= data.size()) {
     throw std::runtime_error("Palette SCI HunkPalette tronquée");
@@ -163,25 +167,21 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_bigEndian = bigEndian;
   m_fileOffset = 0;
   
-  // Lire signature (déjà lue pour l'endianness)
   m_fp.seekg(0);
-  uint16_t signature = read_scalar<uint16_t>(m_fp, false); // toujours LE
+  uint16_t signature = read_scalar<uint16_t>(m_fp, false);
   if (signature != 0x16) {
     throw std::runtime_error("Signature Robot invalide: 0x" + 
                              std::to_string(signature));
   }
   
-  // Sauter 'SOL\0' (4 octets)
-  m_fp.seekg(4, std::ios::cur);
+  m_fp.seekg(4, std::ios::cur); // Sauter 'SOL\0'
   
-  // Lire version avec l'endianness détectée
   m_version = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (m_version < 4 || m_version > 6) {
     throw std::runtime_error("Version Robot non supportée: " +
                              std::to_string(m_version));
   }
 
-  // Continuer la lecture selon ScummVM/robot.cpp:532+
   m_audioBlkSize = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (m_audioBlkSize > kMaxAudioBlockSize) {
     throw std::runtime_error("Taille de bloc audio invalide dans l'en-tête: " +
@@ -200,8 +200,7 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_fp.seekg(2, std::ios::cur);
   m_numFrames = read_scalar<uint16_t>(m_fp, m_bigEndian);
   if (m_numFrames == 0) {
-    log_warn(m_srcPath,
-             "Nombre de frames nul indiqué dans l'en-tête", m_options);
+    log_warn(m_srcPath, "Nombre de frames nul indiqué dans l'en-tête", m_options);
   } else if (m_numFrames > kMaxFrames) {
     log_warn(m_srcPath,
              "Nombre de frames élevé dans l'en-tête: " +
@@ -214,7 +213,6 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_xRes = read_scalar<int16_t>(m_fp, m_bigEndian);
   m_yRes = read_scalar<int16_t>(m_fp, m_bigEndian);
   
-  // ORDRE CRITIQUE: lire hasPalette PUIS hasAudio
   m_hasPalette = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
   m_hasAudio = read_scalar<uint8_t>(m_fp, m_bigEndian) != 0;
   
@@ -224,7 +222,7 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
                              " (minimum " +
                              std::to_string(kRobotAudioHeaderSize) + ")");
   }
-  m_fp.seekg(2, std::ios::cur);  // unused
+  m_fp.seekg(2, std::ios::cur);
   m_frameRate = read_scalar<int16_t>(m_fp, m_bigEndian);
   
   if (m_frameRate <= 0) {
@@ -234,12 +232,10 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
              m_options);
     m_frameRate = 1;
   }
-  // Note: ScummVM n'impose pas de limite supérieure sur frameRate
   m_isHiRes = read_scalar<int16_t>(m_fp, m_bigEndian) != 0;
   m_maxSkippablePackets = read_scalar<int16_t>(m_fp, m_bigEndian);
   m_maxCelsPerFrame = read_scalar<int16_t>(m_fp, m_bigEndian);
   
-  // Seulement logger, pas de correction
   if (m_maxCelsPerFrame < 1) {
     log_warn(m_srcPath,
              "Nombre de cels par frame non positif: " +
@@ -255,7 +251,6 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_fixedCelSizes.fill(0);
   m_reservedHeaderSpace.fill(0);
   
-  // Correction 3: Lire maxCelArea comme int32_t signé (version >= 6)
   if (m_version >= 6) {
     for (int i = 0; i < 4; ++i) {
       int32_t val = read_scalar<int32_t>(m_fp, m_bigEndian);
@@ -280,6 +275,7 @@ void RobotExtractor::readPrimer() {
   m_primerInvalid = false;
   m_primerProcessed = false;  
   const std::uintmax_t fileSize = m_fileSize;
+  
   if (!m_hasAudio) {
     std::streamoff curPos = m_fp.tellg();
     if (curPos < 0 ||
@@ -289,28 +285,23 @@ void RobotExtractor::readPrimer() {
     m_fp.seekg(m_primerReservedSize, std::ios::cur);
     m_postPrimerPos = m_fp.tellg();
     m_primerProcessed = true;
-    if (m_options.debug_index) {
-      log_error(m_srcPath,
-                "readPrimer: position après seekg = " +
-                    std::to_string(m_fp.tellg()),
-                m_options);
-    }    
     return;
   }
+  
   StreamExceptionGuard guard(m_fp);
+  
   if (m_primerReservedSize != 0) {
-    // Memorize the start of the primer header before reading its fields    
     std::streamoff primerHeaderPos = m_fp.tellg();
     if (primerHeaderPos < 0 ||
         static_cast<std::uintmax_t>(primerHeaderPos) + m_primerReservedSize >
             fileSize) {
       throw std::runtime_error("Primer hors limites");
     }
+    
     m_totalPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
     int16_t compType = read_scalar<int16_t>(m_fp, m_bigEndian);
     m_evenPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
     m_oddPrimerSize = read_scalar<int32_t>(m_fp, m_bigEndian);
-    // Record the start of the primer data, just after the header
     m_primerPosition = m_fp.tellg();
 
     constexpr std::int64_t primerHeaderSize =
@@ -346,21 +337,16 @@ void RobotExtractor::readPrimer() {
         static_cast<std::uint64_t>(primerHeaderSize);
     const std::uint64_t reservedSize =
         static_cast<std::uint64_t>(m_primerReservedSize);
-    const std::uint64_t reservedSpan = reservedSize;
     const std::uintmax_t primerHeaderPosMax =
         static_cast<std::uintmax_t>(primerHeaderPos);
     if (primerHeaderPosMax > fileSize ||
-        reservedSpan > fileSize - primerHeaderPosMax) {
+        reservedSize > fileSize - primerHeaderPosMax) {
       throw std::runtime_error("Primer hors limites");
     }
+    
     const std::streamoff afterPrimerHeaderPos = m_fp.tellg();
 
     if (m_totalPrimerSize == 0) {
-      if (m_options.debug_index) {
-        log_error(m_srcPath,
-                  "readPrimer: totalPrimerSize nul, aucune donnée primer lue",
-                  m_options);
-      }
       m_evenPrimerSize = 0;
       m_oddPrimerSize = 0;
       m_evenPrimer.clear();
@@ -370,10 +356,8 @@ void RobotExtractor::readPrimer() {
           primerHeaderPos + static_cast<std::streamoff>(m_primerReservedSize);
       if (reservedEnd > afterPrimerHeaderPos) {
         m_fp.seekg(reservedEnd, std::ios::beg);
-        m_postPrimerPos = m_fp.tellg();
-      } else {
-        m_postPrimerPos = afterPrimerHeaderPos;
       }
+      m_postPrimerPos = m_fp.tellg();
     } else {
       const std::uint64_t primerSizesSum =
           static_cast<std::uint64_t>(m_evenPrimerSize) +
@@ -388,20 +372,11 @@ void RobotExtractor::readPrimer() {
         log_warn(m_srcPath,
                  "Somme des tailles primer incohérente avec l'espace réservé",
                  m_options);
-        if (m_options.debug_index) {
-          log_error(m_srcPath,
-                    "readPrimer: primer relu malgré un mismatch", m_options);
-        }
       }
       
       if (primerSizesSum > reservedDataSize) {
         log_warn(m_srcPath,
                  "Tailles de primer dépassent l'espace réservé", m_options);
-      }
-      if (primerSizesSum < reservedDataSize && m_options.debug_index) {
-        log_error(m_srcPath,
-                  "readPrimer: primer plus petit que primerReservedSize",
-                  m_options);
       }
 
       const std::int64_t reservedDataAvailable =
@@ -461,17 +436,10 @@ void RobotExtractor::readPrimer() {
           afterPrimerHeaderPos + static_cast<std::streamoff>(reservedDataConsumed);
       if (reservedEnd > afterPrimerDataPos) {
         m_fp.seekg(reservedEnd, std::ios::beg);
-        m_postPrimerPos = m_fp.tellg();
       } else {
         m_fp.seekg(afterPrimerDataPos, std::ios::beg);
-        m_postPrimerPos = m_fp.tellg();
       }
-    }
-    if (m_options.debug_index) {
-      log_error(m_srcPath,
-                "readPrimer: position après seekg = " +
-                    std::to_string(m_fp.tellg()),
-                m_options);
+      m_postPrimerPos = m_fp.tellg();
     }
   } else if (m_primerZeroCompressFlag) {
     m_evenPrimerSize = 19922;
@@ -499,13 +467,6 @@ void RobotExtractor::readPrimer() {
   if (!m_extractAudio) {
     ensurePrimerProcessed();
   }
-  
-  if (m_options.debug_index) {
-    log_error(m_srcPath,
-              "readPrimer: position après seekg = " +
-                  std::to_string(m_fp.tellg()),
-              m_options);
-  }
 }
 
 void RobotExtractor::ensurePrimerProcessed() {
@@ -530,7 +491,6 @@ void RobotExtractor::ensurePrimerProcessed() {
     throw std::runtime_error("ReadPrimerData - Flags corrupt");
   }
 
-  // Décompresser les buffers primer pour initialiser les prédicteurs audio.
   if (m_evenPrimerSize > 0) {
     try {
       processPrimerChannel(m_evenPrimer, true);
@@ -587,7 +547,6 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
                    primer.begin() + headerSize + compSize);
   }
 
-  // CORRECTION: Vérifier que le runway est présent
   if (rawData.size() < kRobotRunwayBytes) {
     log_warn(m_srcPath,
              "Primer sans runway (taille=" + std::to_string(rawData.size()) + 
@@ -596,7 +555,6 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     return;
   }
 
-  // Décompression DPCM avec le prédictor initial
   int16_t predictor = samplePredictor;
   auto decompressed = dpcm16_decompress(
       std::span<const std::byte>(rawData.data(), rawData.size()), 
@@ -610,14 +568,11 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     return;
   }
 
-  // CRITIQUE: Retirer EXPLICITEMENT le runway (4 premiers samples)
-  // Car dpcm16_decompress retourne TOUS les échantillons, runway inclus
   std::vector<int16_t> samplesAfterRunway(
       decompressed.begin() + kRobotRunwaySamples,
       decompressed.end()
   );
   
-  // Écriture en mode "every other sample" (comme copyEveryOtherSample dans ScummVM)
   writeInterleaved(samplesAfterRunway, isEven);
 }
 
@@ -1795,12 +1750,23 @@ void RobotExtractor::exportCel(/* paramètres */) {
   
   const uint8_t verticalScaleFactor = read_u8(celData, 1);
   
-  // CORRECTION: Ne rejeter que zéro, accepter toutes les autres valeurs
+  // CORRECTION: ScummVM accepte toutes les valeurs sauf zéro
   if (verticalScaleFactor == 0) {
     throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
   
-  // Ne PAS limiter à 100 comme le fait ScummVM
+  // NE PAS ajouter de limite supérieure (contrairement à ce qui était fait avant)
+  // ScummVM accepte des valeurs > 100
+  
+  // ...existing code pour celWidth, celHeight...
+  
+  // Lors de l'appel à expand_cel, passer verticalScaleFactor directement
+  if (verticalScaleFactor != 100) {
+    expand_cel(targetBuffer, sourceBuffer, celWidth, celHeight, verticalScaleFactor);
+  } else {
+    // Copie directe si pas de scaling
+    std::memcpy(targetBuffer.data(), sourceBuffer.data(), sourceBuffer.size());
+  }
   
   // ...existing code...
 }

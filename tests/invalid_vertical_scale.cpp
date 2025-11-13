@@ -63,6 +63,16 @@ TEST_CASE("Vertical scale of zero throws") {
   expect_invalid_vertical_scale(0, "invalid_vertical_scale_zero");
 }
 
+// CORRECTION: ScummVM accepte les valeurs > 100
+TEST_CASE("Vertical scale above 100 succeeds") {
+  expect_valid_vertical_scale(101, "invalid_vertical_scale_above_limit");
+}
+
+TEST_CASE("Vertical scale far above limit succeeds") {
+  expect_valid_vertical_scale(200, "invalid_vertical_scale_high");
+}
+
+// Les fonctions expect_valid_vertical_scale doivent vérifier le succès, pas l'échec
 static void expect_valid_vertical_scale(uint8_t verticalScale,
                                         const std::string &caseName) {
   std::vector<uint8_t> data;
@@ -109,23 +119,13 @@ static void expect_valid_vertical_scale(uint8_t verticalScale,
   out.close();
 
   robot::RobotExtractor extractor(input, outDir, false);
-  RobotExtractorTester::hasPalette(extractor) = true;
-  RobotExtractorTester::bigEndian(extractor) = false;
-  RobotExtractorTester::maxCelsPerFrame(extractor) = 1;
-  RobotExtractorTester::frameSizes(extractor) = {static_cast<uint32_t>(data.size())};
-  RobotExtractorTester::packetSizes(extractor) = {static_cast<uint32_t>(data.size())};
-  RobotExtractorTester::palette(extractor) =
-      test_palette::build_flat_palette(0, 0, 0);
-  RobotExtractorTester::file(extractor).seekg(0, std::ios::beg);
 
-  nlohmann::json frameJson;
-  REQUIRE_NOTHROW(RobotExtractorTester::exportFrame(extractor, 0, frameJson));
-}
+  // CORRECTION: S'attendre à un succès
+  REQUIRE_NOTHROW(extractor.extract());
 
-TEST_CASE("Vertical scale above 100 succeeds") {
-  expect_valid_vertical_scale(101, "invalid_vertical_scale_above_limit");
-}
+  // Vérifier que les fichiers sont créés
+  REQUIRE(fs::exists(outDir / "metadata.json"));
 
-TEST_CASE("Vertical scale far above limit succeeds") {
-  expect_valid_vertical_scale(200, "invalid_vertical_scale_high");
+  fs::remove(input);
+  fs::remove_all(outDir);
 }
