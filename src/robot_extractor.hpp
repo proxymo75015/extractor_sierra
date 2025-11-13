@@ -37,7 +37,6 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Invalid vertical scale factor (zero)");
   }
 
-  // Calculate source height from target height and compression factor
   const int16_t sourceHeight = (static_cast<int16_t>(h) * static_cast<int16_t>(scale)) / 100;
   
   if (sourceHeight <= 0) {
@@ -80,9 +79,8 @@ inline void expand_cel(std::span<std::byte> target,
       --linesToDraw;
     }
 
-    // Move to previous line (upward)
-    sourcePtr -= wSize;
-  }
+    // Move to next line in source (advancing in buffer)
+    sourcePtr += wSize;  // CORRECTION: Changé de -= à +=
 }
 
 class RobotExtractor {
