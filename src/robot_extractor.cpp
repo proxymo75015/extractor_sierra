@@ -1,3 +1,11 @@
+//
+// RobotExtractor — Implémentation
+// Rôle: lire un fichier Robot (Sierra SCI), extraire les frames (PNG) et
+//       l’audio (WAV), avec une logique alignée sur ScummVM.
+// Notes:
+// - Les validations bornent strictement les tailles et index.
+// - Les messages d’erreur sont orientés diagnostic utilisateur.
+//
 #include "robot_extractor.hpp"
 
 #include <algorithm>

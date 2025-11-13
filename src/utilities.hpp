@@ -1,3 +1,16 @@
+//
+// Utilitaires transverses pour l'extracteur Robot
+// - Lecture sécurisée de scalaires (endianness paramétrable) depuis flux et vues
+// - Lecture exacte et gestion robuste des erreurs de flux
+// - Helpers LE16/LE32 pour sérialisation
+// - Journalisation thread-safe avec option de silence
+// - Écriture PNG cross-plateforme (via stb_image_write)
+// - Décompression LZS et DPCM16 (compatibles ScummVM)
+//
+// Les fonctions sont conçues pour être robustes face aux entrées malformées
+// et émettre des messages explicites. Les tailles maximales sont bornées
+// pour éviter les allocations démesurées.
+
 #pragma once
 
 #include <array>
@@ -99,6 +112,8 @@ inline T read_scalar_le(std::span<const std::byte> data) {
 
 class StreamExceptionGuard {
 public:
+    // Sauvegarde et restaure le masque d’exceptions d’un ifstream afin
+    // que les modifications locales n’affectent pas l’appelant.
     explicit StreamExceptionGuard(std::ifstream &stream)
         : m_stream(stream), m_oldMask(stream.exceptions()) {
         m_stream.exceptions(std::ios::failbit | std::ios::badbit);
@@ -119,6 +134,7 @@ private:
 std::streamsize checked_streamsize(size_t size);
 
 // Lit exactement `size` octets depuis `f` dans `data`.
+// Ne laisse pas d’état d’exception modifié sur le flux appelant.
 // Lève std::runtime_error si la lecture est incomplète.
 void read_exact(std::ifstream &f, void *data, size_t size);
 
