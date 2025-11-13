@@ -81,13 +81,16 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
   
-  // Calcul de la hauteur source selon ScummVM
-  // ScummVM: const int sourceHeight = (celHeight * _verticalScaleFactor) / 100;
-  const uint16_t source_h = (static_cast<uint32_t>(h) * scale) / 100;
+  // CORRECTION: Alignement strict avec ScummVM/robot.cpp:1340
+  // ScummVM utilise int16_t pour les calculs intermédiaires
+  const int16_t sourceHeight = (static_cast<int16_t>(h) * static_cast<int16_t>(scale)) / 100;
   
-  if (source_h == 0) {
-    throw std::runtime_error("Hauteur source calculée invalide (zéro)");
+  if (sourceHeight <= 0) {
+    throw std::runtime_error("Hauteur source calculée invalide: " + 
+                             std::to_string(sourceHeight));
   }
+  
+  const uint16_t source_h = static_cast<uint16_t>(sourceHeight);
 
   const std::size_t expected_source = static_cast<std::size_t>(w) * source_h;
   if (source.size() < expected_source) {
@@ -99,30 +102,23 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Taille cible insuffisante");
   }
 
-  // CORRECTION: Alignement strict avec ScummVM/robot.cpp:1334-1351
-  const int16_t numerator = static_cast<int16_t>(h);
-  const int16_t denominator = static_cast<int16_t>(source_h);
-  int remainder = 0;
-
-  // Pointeurs de départ selon ScummVM
-  const std::byte *sourcePtr = source.data();
+  // CORRECTION: Alignement strict avec ScummVM/robot.cpp:1342-1353
+  // Le parcours démarre à la DERNIÈRE ligne de la source (bottom-up)
+  const std::byte *sourcePtr = source.data() + (static_cast<size_t>(source_h - 1) * w);
   std::byte *targetPtr = target.data();
 
-  // Parcours de haut en bas (y décroissant de source_h-1 à 0)
   for (int16_t y = source_h - 1; y >= 0; --y) {
     remainder += numerator;
     int16_t linesToDraw = remainder / denominator;
     remainder %= denominator;
 
-    // Copier la ligne source plusieurs fois dans la cible
-    while (linesToDraw > 0) {
+    while (linesToDraw-- > 0) {
       std::memcpy(targetPtr, sourcePtr, w);
       targetPtr += w;
-      linesToDraw--;
     }
 
-    // Avancer dans la source
-    sourcePtr += w;
+    // CORRECTION: Remonter vers le haut de la source
+    sourcePtr -= w;
   }
 }
 

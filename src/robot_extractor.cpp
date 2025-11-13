@@ -227,20 +227,14 @@ void RobotExtractor::parseHeaderFields(bool bigEndian) {
   m_fp.seekg(2, std::ios::cur);  // unused
   m_frameRate = read_scalar<int16_t>(m_fp, m_bigEndian);
   
-  // Correction 2: Assouplir la validation frameRate (accepter > 120)
   if (m_frameRate <= 0) {
     log_warn(m_srcPath,
              "Fréquence d'image invalide (" + std::to_string(m_frameRate) +
                  "), utilisation de 1 fps par défaut",
              m_options);
     m_frameRate = 1;
-  } else if (m_frameRate > 120) {
-    log_warn(m_srcPath,
-             "Fréquence d'image élevée détectée: " + std::to_string(m_frameRate) +
-                 " fps (inhabituel mais accepté)",
-             m_options);
   }
-  
+  // Note: ScummVM n'impose pas de limite supérieure sur frameRate
   m_isHiRes = read_scalar<int16_t>(m_fp, m_bigEndian) != 0;
   m_maxSkippablePackets = read_scalar<int16_t>(m_fp, m_bigEndian);
   m_maxCelsPerFrame = read_scalar<int16_t>(m_fp, m_bigEndian);
@@ -608,23 +602,27 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
       predictor
   );
 
-  if (decompressed.size() <= kRobotRunwaySamples) {
+  if (decompressed.empty()) {
     log_warn(m_srcPath, 
-             "Primer entièrement consommé par le runway (canal " + 
+             "Primer vide après décompression (canal " + 
              std::string(isEven ? "pair" : "impair") + ")", 
              m_options);
     return;
   }
   
-  // CORRECTION: Selon ScummVM, on doit :
-  // 1. Utiliser le runway pour initialiser le prédicteur (déjà fait ci-dessus)
-  // 2. Écrire les échantillons APRÈS le runway en mode entrelacé (every other sample)
-  // 3. Les échantillons sont écrits à des positions paires/impaires selon le canal
+  // CORRECTION: Le runway est déjà consommé lors du décodage DPCM.
+  // Il ne faut PAS le supprimer manuellement de la sortie car :
+  // 1. dpcm16_decompress retourne déjà les échantillons corrects
+  // 2. ScummVM utilise copyEveryOtherSample qui interpole les canaux
+  // 3. Le runway sert uniquement à initialiser le carry du décodeur
+  
+  // Stocker les échantillons décodés SANS modifier le buffer
+  std::vector<int16_t> output = std::move(decompressed);
   
   // Retirer le runway (premiers kRobotRunwaySamples échantillons)
   std::vector<int16_t> samplesAfterRunway(
-      decompressed.begin() + kRobotRunwaySamples,
-      decompressed.end()
+      output.begin() + kRobotRunwaySamples,
+      output.end()
   );
   
   // IMPORTANT: Écriture en mode "every other sample" comme dans ScummVM
@@ -1477,7 +1475,7 @@ void RobotExtractor::readPalette() {
     if (curPos < 0 ||
         static_cast<std::uintmax_t>(curPos) + m_paletteSize > fileSize) {
       throw std::runtime_error(std::string("Palette hors limites pour ") +
-                               m_srcPath.string());
+                               srcPath.string());
     }
     m_fp.seekg(m_paletteSize, std::ios::cur);
     return;
@@ -1488,7 +1486,7 @@ void RobotExtractor::readPalette() {
     read_exact(m_fp, m_palette.data(), static_cast<size_t>(m_paletteSize));
   } catch (const std::runtime_error &) {
     throw std::runtime_error(std::string("Palette tronquée pour ") +
-                             m_srcPath.string());
+                             srcPath.string());
   }
 }
 
@@ -1760,6 +1758,8 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
       }
       cel_offset += compSz;
     }
+
+ }
 
     size_t bytes_consumed = cel_offset - offset;
     if (bytes_consumed != dataSize) {
