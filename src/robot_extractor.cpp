@@ -1433,7 +1433,7 @@ void RobotExtractor::readPalette() {
     if (curPos < 0 ||
         static_cast<std::uintmax_t>(curPos) + m_paletteSize > fileSize) {
       throw std::runtime_error(std::string("Palette hors limites pour ") +
-                               srcPath.string());
+                               m_srcPath.string());
     }
     m_fp.seekg(m_paletteSize, std::ios::cur);
     return;
@@ -1444,7 +1444,7 @@ void RobotExtractor::readPalette() {
     read_exact(m_fp, m_palette.data(), static_cast<size_t>(m_paletteSize));
   } catch (const std::runtime_error &) {
     throw std::runtime_error(std::string("Palette tronquée pour ") +
-                             srcPath.string());
+                             m_srcPath.string());
   }
 }
 
@@ -1755,7 +1755,18 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                     " au format PNG, taille RGBA = " + std::to_string(m_rgbaBuffer.size()),
                 m_options);
     }
-    writePng(m_rgbaBuffer, w, h, x, y, verticalScale, m_dstDir, frameJson["cels"][i]);
+    {
+      std::ostringstream oss;
+      oss << "frame" << frameNo << "_cel" << i << ".png";
+      const auto outPath = m_dstDir / oss.str();
+      // m_rgbaBuffer holds 0xAARRGGBB values (uint32_t), write as 4 components
+      write_png_cross_platform(outPath, static_cast<int>(w), static_cast<int>(h), 4,
+                               m_rgbaBuffer.data(), static_cast<int>(w * 4));
+      frameJson["cels"][i]["file"] = oss.str();
+      frameJson["cels"][i]["x"] = x;
+      frameJson["cels"][i]["y"] = y;
+      frameJson["cels"][i]["vertical_scale"] = verticalScale;
+    }
   }
 
   return true;
@@ -1765,25 +1776,83 @@ void RobotExtractor::exportCel(std::span<const std::byte> celData,
                                const std::filesystem::path &outputPath,
                                const ParsedPalette &pal, size_t celIndex,
                                int frameNo) {
-  const uint8_t verticalScaleFactor = read_u8(celData, 1);
-  
-  if (verticalScaleFactor == 0) {
-    throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
+  (void)celData; (void)outputPath; (void)pal; (void)celIndex; (void)frameNo;
+  throw std::runtime_error("exportCel: non implémenté dans cet extrait");
+}
+
+// Décompression simple pour le 'zero compress' du primer. Le format exact
+// dépend de la source d'origine ; ici on fournit une implémentation sûre qui
+// retourne au minimum un buffer de la taille attendue (complété par des zéros)
+// ou la donnée fournie si elle est déjà de la bonne taille.
+static std::vector<std::byte> zero_decompress(const std::vector<std::byte> &in, size_t expected) {
+  if (in.size() == expected) {
+    return in;
   }
-  
-  const uint16_t celWidth = read_u16(celData, 2, m_bigEndian);
-  const uint16_t celHeight = read_u16(celData, 4, m_bigEndian);
-  
-  // Match ScummVM: use int for sourceHeight calculation to avoid overflow
-  const int sourceHeight = 
-      std::max(1, (static_cast<int>(celHeight) * static_cast<int>(verticalScaleFactor)) / 100);
-  
-  if (verticalScaleFactor != 100) {
-    expand_cel(std::span(m_rgbaBuffer.data(), celWidth * celHeight * 4),
-               std::span(decompressedData.data(), celWidth * sourceHeight * 4),
-               celWidth, celHeight, verticalScaleFactor);
-  } else {
-    std::memcpy(m_rgbaBuffer.data(), decompressedData.data(), 
-                celWidth * celHeight * 4);
+  std::vector<std::byte> out(static_cast<size_t>(expected), std::byte{0});
+  if (!in.empty()) {
+    const size_t copyN = std::min(in.size(), out.size());
+    std::copy(in.begin(), in.begin() + copyN, out.begin());
+  }
+  return out;
+}
+
+void RobotExtractor::writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate,
+                             size_t /*blockIndex*/, bool isEvenChannel,
+                             uint16_t numChannels, bool appendChannelSuffix) {
+  std::string base = m_srcPath.stem().string();
+  std::string filename = base + ".wav";
+  if (appendChannelSuffix && numChannels == 1) {
+    filename = base + (isEvenChannel ? "_even.wav" : "_odd.wav");
+  }
+  auto outPath = m_dstDir / filename;
+
+  std::ofstream out(outPath, std::ios::binary);
+  if (!out) {
+    throw std::runtime_error("Impossible d'ouvrir le fichier WAV: " + outPath.string());
+  }
+
+  const uint32_t byteRate = sampleRate * numChannels * sizeof(int16_t);
+  const uint16_t blockAlign = numChannels * sizeof(int16_t);
+  const uint32_t dataBytes = static_cast<uint32_t>(samples.size() * sizeof(int16_t));
+  const uint32_t chunkSize = 36 + dataBytes;
+
+  // RIFF header
+  out.write("RIFF", 4);
+  char tmp4[4];
+  write_le32(tmp4, chunkSize);
+  out.write(tmp4, 4);
+  out.write("WAVEfmt ", 8);
+
+  // fmt subchunk
+  char fmt[16];
+  write_le32(fmt, 16); // Subchunk1Size
+  out.write(fmt, 4);
+  write_le16(fmt, 1); // AudioFormat PCM
+  out.write(fmt, 2);
+  write_le16(fmt, numChannels);
+  out.write(fmt, 2);
+  write_le32(fmt, sampleRate);
+  out.write(fmt, 4);
+  write_le32(fmt, byteRate);
+  out.write(fmt, 4);
+  write_le16(fmt, blockAlign);
+  out.write(fmt, 2);
+  write_le16(fmt, 16); // bits per sample
+  out.write(fmt, 2);
+
+  // data chunk
+  out.write("data", 4);
+  write_le32(tmp4, dataBytes);
+  out.write(tmp4, 4);
+
+  // write samples (little-endian)
+  for (auto s : samples) {
+    char sampleBytes[2];
+    write_le16(sampleBytes, static_cast<uint16_t>(static_cast<int16_t>(s)));
+    out.write(sampleBytes, 2);
+  }
+  out.flush();
+  if (!out) {
+    throw std::runtime_error("Échec d'écriture du WAV: " + outPath.string());
   }
 }

@@ -206,9 +206,6 @@ private:
   
   // Plan d'ajout d'échantillons audio à un canal
   struct AppendPlan {
-    size_t skipSamples = 0;
-  // Plan d'ajout d'échantillons audio à un canal
-  struct AppendPlan {
     size_t skipSamples = 0;          // Échantillons à ignorer au début
     size_t startSample = 0;          // Index de début dans le canal
     size_t availableSamples = 0;     // Échantillons disponibles
@@ -303,7 +300,7 @@ private:
   // Buffers de travail pour le décodage
   std::vector<std::byte> m_frameBuffer;  // Buffer de frame
   std::vector<std::byte> m_celBuffer;    // Buffer de cel (image compressée)
-  std::vector<std::byte> m_rgbaBuffer;   // Buffer RGBA (image décodée)
+  std::vector<uint32_t> m_rgbaBuffer;    // Buffer RGBA (image décodée, 0xAARRGGBB)
 
   // État de la palette
   bool m_paletteParseFailed = false;      // Échec du parsing de la palette
@@ -359,7 +356,7 @@ struct RobotExtractorTester {
   static int16_t &yRes(RobotExtractor &r) { return r.m_yRes; }
   
   // Accesseurs pour les buffers de travail
-  static std::vector<std::byte> &rgbaBuffer(RobotExtractor &r) { return r.m_rgbaBuffer; }
+  static std::vector<uint32_t> &rgbaBuffer(RobotExtractor &r) { return r.m_rgbaBuffer; }
   static std::array<uint32_t, 4> &fixedCelSizes(RobotExtractor &r) { return r.m_fixedCelSizes; }
   static std::vector<std::byte> &celBuffer(RobotExtractor &r) { return r.m_celBuffer; }
   
