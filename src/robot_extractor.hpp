@@ -81,14 +81,8 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
   
-  // CORRECTION: Alignement strict avec ScummVM/robot.cpp:1334-1351
-  // Le paramètre 'scale' est le _verticalScaleFactor de ScummVM, exprimé en pourcentage.
-  // 'h' est la hauteur cible finale (celHeight dans ScummVM).
-  // La hauteur source (sourceHeight dans ScummVM) représente combien de lignes
-  // étaient présentes AVANT expansion.
-  //
+  // Calcul de la hauteur source selon ScummVM
   // ScummVM: const int sourceHeight = (celHeight * _verticalScaleFactor) / 100;
-  // Donc: source_h = h * scale / 100
   const uint16_t source_h = (static_cast<uint32_t>(h) * scale) / 100;
   
   if (source_h == 0) {
@@ -105,28 +99,30 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Taille cible insuffisante");
   }
 
-  // Algorithme de ScummVM (voir ScummVM/robot.cpp:1334-1351)
-  // CORRECTION: Utiliser les mêmes types et logique que ScummVM
+  // CORRECTION: Alignement strict avec ScummVM/robot.cpp:1334-1351
   const int16_t numerator = static_cast<int16_t>(h);
   const int16_t denominator = static_cast<int16_t>(source_h);
   int remainder = 0;
 
-  // Parcours de bas en haut (comme ScummVM)
-  auto *sourcePtr = source.data() + (source_h - 1) * w;
-  auto *targetPtr = target.data() + (h - 1) * w;
+  // Pointeurs de départ selon ScummVM
+  const std::byte *sourcePtr = source.data();
+  std::byte *targetPtr = target.data();
 
+  // Parcours de haut en bas (y décroissant de source_h-1 à 0)
   for (int16_t y = source_h - 1; y >= 0; --y) {
     remainder += numerator;
     int16_t linesToDraw = remainder / denominator;
     remainder %= denominator;
 
+    // Copier la ligne source plusieurs fois dans la cible
     while (linesToDraw > 0) {
       std::memcpy(targetPtr, sourcePtr, w);
-      targetPtr -= w;
-      --linesToDraw;
+      targetPtr += w;
+      linesToDraw--;
     }
 
-    sourcePtr -= w;
+    // Avancer dans la source
+    sourcePtr += w;
   }
 }
 
