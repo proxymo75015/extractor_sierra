@@ -54,7 +54,7 @@ inline void expand_cel(std::span<std::byte> target,
   const int16_t denominator = sourceHeight;
   int16_t remainder = 0;
 
-  const std::byte *sourcePtr = source.data() + (source_h - 1) * wSize;
+  const std::byte *sourcePtr = source.data();
   std::byte *targetPtr = target.data();
 
   for (int16_t y = sourceHeight - 1; y >= 0; --y) {
@@ -68,7 +68,7 @@ inline void expand_cel(std::span<std::byte> target,
       --linesToDraw;
     }
 
-    sourcePtr -= wSize;
+    sourcePtr += wSize;
   }
 }
 
