@@ -573,75 +573,42 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
   }
 
   const uint8_t zeroCompress = read_u8(primer, 0);
-//  m_fp.seekg(2, std::ios::cur); // BUG: ne pas déplacer le flux ici
   const uint16_t compSize = read_u16(primer, 2);
   const uint16_t uncompSize = read_u16(primer, 4);
   const int16_t samplePredictor = read_i16(primer, 6);
-  // skip 2 bytes unused (offset 8-9)
 
-  // Vérification alignée sur ScummVM (voir ScummVM/robot.cpp:1001+)
-  const size_t kRobotAudioHeaderSize = 10;
-  const size_t availableData = primer.size() - kRobotAudioHeaderSize;
-  
-  // ScummVM vérifie: compressedSize > dataSize - kRobotAudioHeaderSize
-  if (compSize > availableData) {
-    throw std::runtime_error(
-        "Taille compressée du canal primer (" + std::to_string(compSize) +
-        ") dépasse les données disponibles (" +
-        std::to_string(availableData) + ")");
+  // Vérification alignée sur ScummVM
+  const size_t dataSize = primer.size() - headerSize;
+  if (compSize > dataSize) {
+    throw std::runtime_error("Taille compressée invalide dans le primer");
   }
 
-  std::vector<std::byte> uncompressed;
-  std::span<const std::byte> audioData;
+  std::span<const std::byte> payload(primer.data() + headerSize, compSize);
+  std::vector<std::byte> rawData;
 
-  if (zeroCompress != 0) {
-    // Décompression zero-compressed
-    uncompressed.resize(uncompSize);
-    
-    size_t writePos = 0;
-    size_t readPos = headerSize;
-    
-    while (writePos < uncompSize && readPos < primer.size()) {
-      const uint8_t marker = read_u8(primer, readPos++);
-      
-      if (marker == 0) {
-        if (readPos >= primer.size()) {
-          break;
-        }
-        const uint8_t count = read_u8(primer, readPos++);
-        const size_t zeroCount = (count == 0) ? 256 : count;
-        
-        for (size_t i = 0; i < zeroCount && writePos < uncompSize; ++i) {
-          uncompressed[writePos++] = std::byte{0};
-        }
-      } else {
-        uncompressed[writePos++] = static_cast<std::byte>(marker);
-      }
+  if (zeroCompress == 1) {
+    if (compSize != kRobotZeroCompressSize) {
+      log_warn(m_srcPath, 
+               "Bloc primer avec zeroCompress=1 mais taille != 2048", 
+               m_options);
     }
-    
-    audioData = std::span(uncompressed);
+    rawData = lzs_decompress(payload, uncompSize);
+  } else if (zeroCompress == 0) {
+    rawData.assign(payload.begin(), payload.end());
   } else {
-    // Données non compressées
-    audioData = std::span(primer).subspan(headerSize, compSize);
+    throw std::runtime_error("Flag zeroCompress invalide: " + 
+                             std::to_string(zeroCompress));
   }
 
-  // Décompression DPCM
+  // CORRECTION MAJEURE: Décompression DPCM avec gestion explicite du runway
+  // Selon ScummVM/robot.cpp:169-187 et robot.h:76-88
   int16_t predictor = samplePredictor;
-  
-  // Option 1: Utiliser dpcm16_decompress_last pour le runway (plus efficace)
-  if (decompData.size() > kRobotRunwayBytes) {
-    dpcm16_decompress_last(
-        decompData.subspan(0, kRobotRunwayBytes), 
-        predictor
-    );
-    auto decompressed = dpcm16_decompress(
-        decompData.subspan(kRobotRunwayBytes), 
-        predictor
-    );
-    // ...stocker decompressed...
-  } else {
-    // Tout est runway
-    dpcm16_decompress_last(decompData, predictor);
+  auto decompressed = dpcm16_decompress(
+      std::span<const std::byte>(rawData.data(), rawData.size()), 
+      predictor
+  );
+
+  if (decompressed.size() <= kRobotRunwaySamples) {
     log_warn(m_srcPath, 
              "Primer entièrement consommé par le runway (canal " + 
              std::string(isEven ? "pair" : "impair") + ")", 
@@ -649,21 +616,20 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
     return;
   }
   
-  // CORRECTION: selon ScummVM/robot.h:238-247
-  // Le runway (premiers kRobotRunwaySamples échantillons) ne doit PAS être écrit
-  if (decompressed.size() > kRobotRunwaySamples) {
-    decompressed.erase(
-        decompressed.begin(), 
-        decompressed.begin() + static_cast<std::ptrdiff_t>(kRobotRunwaySamples)
-    );
-  } else {
-    log_warn(m_srcPath, 
-             "Bloc audio trop court pour contenir un runway complet", 
-             m_options);
-    decompressed.clear();
-  }
+  // CORRECTION: Selon ScummVM, on doit :
+  // 1. Utiliser le runway pour initialiser le prédicteur (déjà fait ci-dessus)
+  // 2. Écrire les échantillons APRÈS le runway en mode entrelacé (every other sample)
+  // 3. Les échantillons sont écrits à des positions paires/impaires selon le canal
   
-  writeInterleaved(decompressed, isEven);
+  // Retirer le runway (premiers kRobotRunwaySamples échantillons)
+  std::vector<int16_t> samplesAfterRunway(
+      decompressed.begin() + kRobotRunwaySamples,
+      decompressed.end()
+  );
+  
+  // IMPORTANT: Écriture en mode "every other sample" comme dans ScummVM
+  // Voir ScummVM/robot.cpp:96-100 (copyEveryOtherSample)
+  writeInterleaved(samplesAfterRunway, isEven);
 }
 
 void RobotExtractor::process_audio_block(std::span<const std::byte> block,
