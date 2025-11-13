@@ -602,10 +602,9 @@ void RobotExtractor::process_audio_block(std::span<const std::byte> block,
 
   auto decodeChannelSamples = [&](const ChannelAudio &source) {
     DecodedChannelSamples decoded;
+    // Match ScummVM: always start with carry = 0 for each audio block
+    // as stated in robot.h line 238-239: "using an initial sample value of 0"
     int16_t localPredictor = 0;
-    if (source.predictorInitialized) {
-      localPredictor = source.predictor;
-    }
     decoded.samples = dpcm16_decompress(blockBytes, localPredictor);
     trim_runway_samples(decoded.samples);
     decoded.finalPredictor = localPredictor;
@@ -1751,8 +1750,9 @@ void RobotExtractor::exportCel(std::span<const std::byte> celData,
   const uint16_t celWidth = read_u16(celData, 2, m_bigEndian);
   const uint16_t celHeight = read_u16(celData, 4, m_bigEndian);
   
-  const int16_t sourceHeight = 
-      std::max<int16_t>(1, (static_cast<int16_t>(celHeight) * static_cast<int16_t>(verticalScaleFactor)) / 100);
+  // Match ScummVM: use int for sourceHeight calculation to avoid overflow
+  const int sourceHeight = 
+      std::max(1, (static_cast<int>(celHeight) * static_cast<int>(verticalScaleFactor)) / 100);
   
   if (verticalScaleFactor != 100) {
     expand_cel(std::span(m_rgbaBuffer.data(), celWidth * celHeight * 4),

@@ -56,6 +56,7 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Taille du tampon cible insuffisante");
   }
 
+  // Match ScummVM types exactly: int16 for numerator/denominator
   const int16_t numerator = static_cast<int16_t>(h);
   const int16_t denominator = static_cast<int16_t>(sourceHeight);
   int remainder = 0;
@@ -63,7 +64,8 @@ inline void expand_cel(std::span<std::byte> target,
   const std::byte *sourcePtr = source.data();
   std::byte *targetPtr = target.data();
 
-  for (int16_t y = static_cast<int16_t>(sourceHeight) - 1; y >= 0; --y) {
+  // Use int16_t (matching ScummVM's int16) but loop from sourceHeight - 1
+  for (int16_t y = sourceHeight - 1; y >= 0; --y) {
     remainder += numerator;
     int16_t linesToDraw = remainder / denominator;
     remainder %= denominator;
