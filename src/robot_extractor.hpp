@@ -57,30 +57,31 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Insufficient target buffer size");
   }
 
-  // Bottom-up traversal matching ScummVM
+  // Bottom-up traversal matching ScummVM (robot.cpp:1338-1353)
   const int16_t numerator = static_cast<int16_t>(h);
   const int16_t denominator = sourceHeight;
   int16_t remainder = 0;
 
-  // Start from last source line (bottom) - CORRECTION ICI
+  // Start from last source line (bottom)
   const std::byte *sourcePtr = source.data() + (source_h - 1) * wSize;
   std::byte *targetPtr = target.data();
 
-  // Traverse from bottom to top (decreasing y)
+  // Traverse from bottom to top (y decreasing from sourceHeight-1 to 0)
   for (int16_t y = sourceHeight - 1; y >= 0; --y) {
     remainder += numerator;
     int16_t linesToDraw = remainder / denominator;
     remainder %= denominator;
 
-    // Replicate source line as many times as needed
+    // Replicate current source line linesToDraw times
     while (linesToDraw > 0) {
       std::memcpy(targetPtr, sourcePtr, wSize);
       targetPtr += wSize;
       --linesToDraw;
     }
 
-    // Move to previous line in source (moving backwards in buffer)
-    sourcePtr -= wSize;  // CORRECTION: Changé de += à -=
+    // Move to previous source line (upward in image, backward in buffer)
+    sourcePtr -= wSize;
+  }
 }
 
 class RobotExtractor {

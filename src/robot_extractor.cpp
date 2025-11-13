@@ -1745,27 +1745,39 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
   return true;
 }
 
-void RobotExtractor::exportCel(/* paramètres */) {
+void RobotExtractor::exportCel(std::span<const std::byte> celData,
+                               const std::filesystem::path &outputPath,
+                               const ParsedPalette &pal, size_t celIndex,
+                               int frameNo) {
   // ...existing code...
   
   const uint8_t verticalScaleFactor = read_u8(celData, 1);
   
-  // Seule la valeur zéro est invalide (comme dans ScummVM)
+  // Only zero is invalid (matching ScummVM robot.cpp:1338)
   if (verticalScaleFactor == 0) {
     throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
   
-  // ScummVM accepte toutes les valeurs 1-255
-  // PAS de vérification de limite supérieure
+  // ScummVM accepts all values 1-255 without upper limit check
   
-  // ...existing code pour celWidth, celHeight...
+  const uint16_t celWidth = read_u16(celData, 2, m_bigEndian);
+  const uint16_t celHeight = read_u16(celData, 4, m_bigEndian);
   
-  // Lors de l'appel à expand_cel, passer verticalScaleFactor directement
+  // Calculate source height using same formula as ScummVM
+  const uint16_t sourceHeight = 
+      std::max<uint16_t>(1, (celHeight * verticalScaleFactor) / 100);
+  
+  // ...existing code for decompression...
+  
+  // Apply vertical scaling if needed
   if (verticalScaleFactor != 100) {
-    expand_cel(targetBuffer, sourceBuffer, celWidth, celHeight, verticalScaleFactor);
+    expand_cel(std::span(m_rgbaBuffer.data(), celWidth * celHeight * 4),
+               std::span(decompressedData.data(), celWidth * sourceHeight * 4),
+               celWidth, celHeight, verticalScaleFactor);
   } else {
-    // Copie directe si pas de scaling
-    std::memcpy(targetBuffer.data(), sourceBuffer.data(), sourceBuffer.size());
+    // Direct copy when no scaling
+    std::memcpy(m_rgbaBuffer.data(), decompressedData.data(), 
+                celWidth * celHeight * 4);
   }
   
   // ...existing code...
