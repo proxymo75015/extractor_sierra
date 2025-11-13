@@ -58,7 +58,7 @@ inline void expand_cel(std::span<std::byte> target,
 
   const int16_t numerator = static_cast<int16_t>(h);
   const int16_t denominator = static_cast<int16_t>(sourceHeight);
-  int16_t remainder = 0;
+  int remainder = 0;
 
   const std::byte *sourcePtr = source.data();
   std::byte *targetPtr = target.data();
