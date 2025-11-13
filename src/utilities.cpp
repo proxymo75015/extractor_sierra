@@ -1,4 +1,12 @@
-// Implémentation des utilitaires (I/O, journalisation, PNG, LZS, DPCM16)
+// Implémentation des utilitaires pour le format Robot.
+//
+// Ce fichier implémente :
+// - Les fonctions d'I/O sécurisées (read_exact, checked_streamsize)
+// - La détection d'endianness
+// - Les fonctions de journalisation thread-safe
+// - Les utilitaires PNG multi-plateforme (via stb_image_write)
+// - Le décodeur LZS (Lempel-Ziv Stac)
+// - Le décodeur DPCM-16 (audio différentiel)
 #include "utilities.hpp"
 
 #include <iomanip>
@@ -10,6 +18,11 @@
 #include <limits>
 #include <system_error>
 
+// Implémentation de stb_image_write (doit être définie une seule fois)
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#ifdef _WIN32
+#define STBIW_WINDOWS_UTF8  // Support des chemins Unicode sous Windows
+#endif
 #include "stb_image_write.h"
 
 namespace robot {
@@ -43,27 +56,33 @@ void read_exact(std::ifstream &f, void *data, size_t size) {
 bool detect_endianness(std::ifstream &f) {
     StreamExceptionGuard guard(f);
     auto start = f.tellg();
-    // La détection d'endianess s'effectue sur le champ de version situé à
-    // l'offset 6. Le moteur original lit ce champ en big-endian et considère
-    // que le flux est big-endian si la valeur obtenue est comprise entre
-    // 0x0001 et 0x00ff. Nous reproduisons ce comportement et vérifions ensuite
-    // l'interprétation little-endian comme garde-fou.
+    
+    // La détection d'endianness s'effectue sur le champ de version situé à
+    // l'offset 6. Le moteur Robot original lit ce champ en big-endian et 
+    // considère que le flux est big-endian si la valeur obtenue est comprise
+    // entre 0x0001 et 0x00ff. Nous reproduisons ce comportement et vérifions
+    // ensuite l'interprétation little-endian comme garde-fou.
     f.seekg(start + static_cast<std::streamoff>(6));
     std::array<uint8_t, 2> verBytes{};
     f.read(reinterpret_cast<char *>(verBytes.data()), 2);
+    
     uint16_t be = static_cast<uint16_t>(verBytes[0]) << 8 |
                   static_cast<uint16_t>(verBytes[1]);
     uint16_t le = static_cast<uint16_t>(verBytes[0]) |
                   (static_cast<uint16_t>(verBytes[1]) << 8);    
     f.seekg(start);
+    
     // Si l'interprétation big-endian correspond à la plage utilisée par le
     // moteur historique, on considère le flux comme big-endian.
     if (be >= 0x0001 && be <= 0x00ff) {
         return true;
     }
+    
+    // Sinon, on vérifie la plage des versions connues (4, 5, 6).
     if (le >= 4 && le <= 6) {
         return false;
     }
+    
     throw std::runtime_error("Version Robot invalide");
 }
 
@@ -93,8 +112,10 @@ void write_le32(char *dst, uint32_t value) {
 
 namespace {
 
+// Mutex pour la journalisation thread-safe.
 std::mutex g_logMutex;
 
+// Fonction interne de journalisation avec préfixe.
 void log(const std::filesystem::path &path, const std::string &msg,
          const char *prefix, const ExtractorOptions &opt) {
     if (opt.quiet) return;
@@ -120,15 +141,19 @@ void log_error(const std::filesystem::path &path, const std::string &msg,
 }
 
 #ifdef _WIN32
+// Convertit un chemin en format long Windows (\\?\...).
+// Nécessaire pour dépasser la limite de 260 caractères.
 std::wstring make_long_path(const std::wstring &path) {
     namespace fs = std::filesystem;
     fs::path absPath = fs::absolute(path);
     std::wstring abs = absPath.native();
 
+    // Déjà au format long.
     if (abs.rfind(L"\\\\?\\", 0) == 0) {
         return abs;
     }
 
+    // Les chemins UNC sont gérés différemment.
     bool isUnc = abs.rfind(L"\\\\", 0) == 0;
     if (!isUnc && abs.length() >= MAX_PATH) {
         return L"\\\\?\\" + abs;
@@ -164,10 +189,13 @@ void write_png_cross_platform(const std::filesystem::path &path, int w, int h,
 
 namespace {
 
+// Lecteur de bits MSB (Most Significant Bit first) pour le décodeur LZS.
+// Lit les bits depuis un flux d'octets en mode big-endian.
 class BitReaderMSB {
 public:
     explicit BitReaderMSB(std::span<const std::byte> data) : m_data(data) {}
 
+    // Lit un nombre spécifié de bits (1 à 32).
     uint32_t getBits(int count) {
         if (count <= 0 || count > 32) {
             throw std::runtime_error("Lecture de bits LZS invalide");
