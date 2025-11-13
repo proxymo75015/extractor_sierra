@@ -81,19 +81,18 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
   
-  // CORRECTION: source_h représente la hauteur COMPRESSÉE
-  // ScummVM: sourceHeight = (celHeight * _verticalScaleFactor) / 100
-  // Si scale=50, source_h = h/2 (50% des lignes conservées)
-  // Si scale=100, source_h = h (pas de compression)
+  // CORRECTION: Alignement strict avec ScummVM/robot.cpp:1334-1351
+  // Le paramètre 'scale' est le _verticalScaleFactor de ScummVM, exprimé en pourcentage.
+  // 'h' est la hauteur cible finale (celHeight dans ScummVM).
+  // La hauteur source (sourceHeight dans ScummVM) représente combien de lignes
+  // étaient présentes AVANT expansion.
+  //
+  // ScummVM: const int sourceHeight = (celHeight * _verticalScaleFactor) / 100;
+  // Donc: source_h = h * scale / 100
   const uint16_t source_h = (static_cast<uint32_t>(h) * scale) / 100;
   
   if (source_h == 0) {
-    throw std::runtime_error("Hauteur source invalide après échelle");
-  }
-  
-  // Vérification cohérente: source compressée <= hauteur finale
-  if (scale <= 100 && source_h > h) {
-    throw std::runtime_error("Incohérence source_h > h pour scale <= 100");
+    throw std::runtime_error("Hauteur source calculée invalide (zéro)");
   }
 
   const std::size_t expected_source = static_cast<std::size_t>(w) * source_h;
@@ -107,22 +106,26 @@ inline void expand_cel(std::span<std::byte> target,
   }
 
   // Algorithme de ScummVM (voir ScummVM/robot.cpp:1334-1351)
+  // CORRECTION: Utiliser les mêmes types et logique que ScummVM
   const int16_t numerator = static_cast<int16_t>(h);
   const int16_t denominator = static_cast<int16_t>(source_h);
   int remainder = 0;
-  
-  const std::byte* sourcePtr = source.data() + (source_h - 1) * w;
-  std::byte* targetPtr = target.data() + (h - 1) * w;
-  
+
+  // Parcours de bas en haut (comme ScummVM)
+  auto *sourcePtr = source.data() + (source_h - 1) * w;
+  auto *targetPtr = target.data() + (h - 1) * w;
+
   for (int16_t y = source_h - 1; y >= 0; --y) {
     remainder += numerator;
     int16_t linesToDraw = remainder / denominator;
     remainder %= denominator;
-    
-    while (linesToDraw-- > 0) {
-      std::copy(sourcePtr, sourcePtr + w, targetPtr);
+
+    while (linesToDraw > 0) {
+      std::memcpy(targetPtr, sourcePtr, w);
       targetPtr -= w;
+      --linesToDraw;
     }
+
     sourcePtr -= w;
   }
 }
