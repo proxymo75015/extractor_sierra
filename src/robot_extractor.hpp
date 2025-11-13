@@ -81,15 +81,9 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
   
-  // ScummVM: sourceHeight = (celHeight * _verticalScaleFactor) / 100
-  // où celHeight est la hauteur FINALE et sourceHeight la hauteur COMPRESSÉE
-  const uint16_t source_h = (h * scale) / 100;
-  
-  // Le calcul correct selon ScummVM/robot.cpp:1334 est:
-  // const int sourceHeight = (celHeight * _verticalScaleFactor) / 100;
-  // Donc si scale=50, source_h devrait être h/2, pas h*50/100
-  // CORRECTION:
-  const uint16_t source_h = (static_cast<uint32_t>(h) * 100) / scale;
+  // CORRECTION: ScummVM/robot.cpp:1334
+  // sourceHeight = (celHeight * _verticalScaleFactor) / 100
+  const uint16_t source_h = (static_cast<uint32_t>(h) * scale) / 100;
   
   if (source_h == 0) {
     throw std::runtime_error("Hauteur source invalide après échelle");

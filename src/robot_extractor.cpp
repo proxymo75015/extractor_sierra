@@ -627,8 +627,27 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
 
   // Décompression DPCM
   int16_t predictor = samplePredictor;
-  std::vector<int16_t> decompressed = 
-      dpcm16_decompress(std::span(decompData), predictor);
+  
+  // Option 1: Utiliser dpcm16_decompress_last pour le runway (plus efficace)
+  if (decompData.size() > kRobotRunwayBytes) {
+    dpcm16_decompress_last(
+        decompData.subspan(0, kRobotRunwayBytes), 
+        predictor
+    );
+    auto decompressed = dpcm16_decompress(
+        decompData.subspan(kRobotRunwayBytes), 
+        predictor
+    );
+    // ...stocker decompressed...
+  } else {
+    // Tout est runway
+    dpcm16_decompress_last(decompData, predictor);
+    log_warn(m_srcPath, 
+             "Primer entièrement consommé par le runway (canal " + 
+             std::string(isEven ? "pair" : "impair") + ")", 
+             m_options);
+    return;
+  }
   
   // CORRECTION: selon ScummVM/robot.h:238-247
   // Le runway (premiers kRobotRunwaySamples échantillons) ne doit PAS être écrit
@@ -1564,12 +1583,10 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
     cueValue = read_scalar<uint16_t>(m_fp, m_bigEndian);
   }
   
-  // CORRECTION: selon ScummVM/robot.cpp:501-505
-  // L'alignement doit se faire APRÈS les cues
+  // CORRECTION: Alignement relatif au début du fichier Robot
   constexpr std::streamoff kRobotFrameSize = 2048;
   std::streamoff currentPos = m_fp.tellg();
-  // Calculer le décalage depuis le début du fichier (pas depuis m_fileOffset)
-  std::streamoff bytesRemaining = currentPos % kRobotFrameSize;
+  std::streamoff bytesRemaining = (currentPos - m_fileOffset) % kRobotFrameSize;
   if (bytesRemaining != 0) {
     std::streamoff padding = kRobotFrameSize - bytesRemaining;
     m_fp.seekg(padding, std::ios::cur);
