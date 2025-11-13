@@ -28,19 +28,14 @@ inline bool rangesOverlap(const std::byte *aBegin, const std::byte *aEnd,
   return !(aEnd <= bBegin || bEnd <= aBegin);
 }
 
-// Expand vertical scale of a cel (ScummVM robot.cpp:1338-1353)
-// scale represents compression percentage: 50 = source at 50% of target height
 inline void expand_cel(std::span<std::byte> target,
                        std::span<const std::byte> source, 
                        uint16_t w, uint16_t h, uint8_t scale) {
-  // Seul zéro est invalide (conformément à ScummVM robot.cpp:1338)
   if (scale == 0) {
     throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
 
   const int16_t sourceHeight = std::max<int16_t>(1, (static_cast<int16_t>(h) * static_cast<int16_t>(scale)) / 100);
-  
-  // Suppression de la vérification sourceHeight <= 0 car max(1, ...) garantit >= 1
   
   const size_t wSize = static_cast<size_t>(w);
   const size_t source_h = static_cast<size_t>(sourceHeight);
@@ -55,7 +50,6 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Taille du tampon cible insuffisante");
   }
 
-  // Traversée ascendante depuis la dernière ligne source (bas de l'image)
   const int16_t numerator = static_cast<int16_t>(h);
   const int16_t denominator = sourceHeight;
   int16_t remainder = 0;
