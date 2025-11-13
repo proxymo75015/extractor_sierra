@@ -81,12 +81,19 @@ inline void expand_cel(std::span<std::byte> target,
     throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
   
-  // CORRECTION: ScummVM/robot.cpp:1334
-  // sourceHeight = (celHeight * _verticalScaleFactor) / 100
+  // CORRECTION: source_h représente la hauteur COMPRESSÉE
+  // ScummVM: sourceHeight = (celHeight * _verticalScaleFactor) / 100
+  // Si scale=50, source_h = h/2 (50% des lignes conservées)
+  // Si scale=100, source_h = h (pas de compression)
   const uint16_t source_h = (static_cast<uint32_t>(h) * scale) / 100;
   
   if (source_h == 0) {
     throw std::runtime_error("Hauteur source invalide après échelle");
+  }
+  
+  // Vérification cohérente: source compressée <= hauteur finale
+  if (scale <= 100 && source_h > h) {
+    throw std::runtime_error("Incohérence source_h > h pour scale <= 100");
   }
 
   const std::size_t expected_source = static_cast<std::size_t>(w) * source_h;
@@ -113,10 +120,9 @@ inline void expand_cel(std::span<std::byte> target,
     remainder %= denominator;
     
     while (linesToDraw-- > 0) {
-      std::copy_n(sourcePtr, w, targetPtr);
+      std::copy(sourcePtr, sourcePtr + w, targetPtr);
       targetPtr -= w;
     }
-    
     sourcePtr -= w;
   }
 }

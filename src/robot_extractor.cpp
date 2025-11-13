@@ -573,7 +573,7 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
   }
 
   const uint8_t zeroCompress = read_u8(primer, 0);
-  m_fp.seekg(2, std::ios::cur); // skip unused byte
+//  m_fp.seekg(2, std::ios::cur); // BUG: ne pas déplacer le flux ici
   const uint16_t compSize = read_u16(primer, 2);
   const uint16_t uncompSize = read_u16(primer, 4);
   const int16_t samplePredictor = read_i16(primer, 6);
@@ -657,22 +657,13 @@ void RobotExtractor::processPrimerChannel(std::vector<std::byte> &primer,
         decompressed.begin() + static_cast<std::ptrdiff_t>(kRobotRunwaySamples)
     );
   } else {
-    // Si le primer est plus court que le runway, il est entièrement consommé
     log_warn(m_srcPath, 
-             "Primer " + std::string(isEven ? "pair" : "impair") + 
-             " plus court que le runway (" + 
-             std::to_string(decompressed.size()) + " échantillons)", 
+             "Bloc audio trop court pour contenir un runway complet", 
              m_options);
     decompressed.clear();
   }
   
-  if (isEven) {
-    m_evenStream = std::move(decompressed);
-    m_evenPredictor = predictor;
-  } else {
-    m_oddStream = std::move(decompressed);
-    m_oddPredictor = predictor;
-  }
+  writeInterleaved(decompressed, isEven);
 }
 
 void RobotExtractor::process_audio_block(std::span<const std::byte> block,
@@ -1542,7 +1533,8 @@ void RobotExtractor::readSizesAndCues(bool allowShortFile) {
   m_frameSizes.resize(m_numFrames);
   m_packetSizes.resize(m_numFrames);
   
-  switch(m_version) {
+  switch (m_version) {
+  case 4:
   case 5:
     for (size_t i = 0; i < m_numFrames; ++i) {
       m_frameSizes[i] = read_scalar<uint16_t>(m_fp, m_bigEndian);
@@ -1773,7 +1765,7 @@ bool RobotExtractor::exportFrame(int frameNo, nlohmann::json &frameJson) {
                   "Taille de chunk décompressé excède l'espace "
                   "restant pour le cel " +
                       std::to_string(i) + " dans la frame " +
-                      std::to_string(frameNo),
+                                           std::to_string(frameNo),
                   m_options);
         if (cel_offset + compSz > m_frameBuffer.size()) {
           throw std::runtime_error("Données de chunk insuffisantes");
