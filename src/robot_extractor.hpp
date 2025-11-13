@@ -62,7 +62,7 @@ inline void expand_cel(std::span<std::byte> target,
   const int16_t denominator = sourceHeight;
   int16_t remainder = 0;
 
-  // Start from last source line (bottom)
+  // Start from last source line (bottom) - CORRECTION ICI
   const std::byte *sourcePtr = source.data() + (source_h - 1) * wSize;
   std::byte *targetPtr = target.data();
 
@@ -79,8 +79,8 @@ inline void expand_cel(std::span<std::byte> target,
       --linesToDraw;
     }
 
-    // Move to next line in source (advancing in buffer)
-    sourcePtr += wSize;  // CORRECTION: Changé de -= à +=
+    // Move to previous line in source (moving backwards in buffer)
+    sourcePtr -= wSize;  // CORRECTION: Changé de += à -=
 }
 
 class RobotExtractor {

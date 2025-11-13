@@ -1750,13 +1750,13 @@ void RobotExtractor::exportCel(/* paramètres */) {
   
   const uint8_t verticalScaleFactor = read_u8(celData, 1);
   
-  // CORRECTION: ScummVM accepte toutes les valeurs sauf zéro
+  // Seule la valeur zéro est invalide (comme dans ScummVM)
   if (verticalScaleFactor == 0) {
     throw std::runtime_error("Facteur d'échelle vertical invalide (zéro)");
   }
   
-  // NE PAS ajouter de limite supérieure (contrairement à ce qui était fait avant)
-  // ScummVM accepte des valeurs > 100
+  // ScummVM accepte toutes les valeurs 1-255
+  // PAS de vérification de limite supérieure
   
   // ...existing code pour celWidth, celHeight...
   
