@@ -1,4 +1,17 @@
-// Logique d'extraction et d'export des frames/sons du format Robot.
+// ═══════════════════════════════════════════════════════════════════════════
+// Implémentation de l'extracteur Robot
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Ce fichier implémente la logique d'extraction et d'export des frames (images)
+// et des pistes audio du format Robot utilisé par ScummVM (versions 4, 5, 6).
+//
+// Fonctionnalités principales :
+// - Lecture et validation des en-têtes Robot
+// - Décompression LZS des cels (cellules d'animation)
+// - Décodage DPCM-16 de l'audio
+// - Gestion des palettes SCI HunkPalette
+// - Export PNG et WAV
+// ═══════════════════════════════════════════════════════════════════════════
 #include "robot_extractor.hpp"
 
 #include <algorithm>
@@ -22,16 +35,28 @@
 #include "utilities.hpp"
 
 namespace {
-constexpr size_t kHunkPaletteHeaderSize = 13;
-constexpr size_t kNumPaletteEntriesOffset = 10;
-constexpr size_t kEntryHeaderSize = 22;
-constexpr size_t kEntryStartColorOffset = 10;
-constexpr size_t kEntryNumColorsOffset = 14;
-constexpr size_t kEntryUsedOffset = 16;
-constexpr size_t kEntrySharedUsedOffset = 17;
-constexpr size_t kEntryVersionOffset = 18;
-constexpr size_t kRawPaletteSize = 1200;
+// ─────────────────────────────────────────────────────────────────────────────
+// Constantes pour le format SCI HunkPalette
+// ─────────────────────────────────────────────────────────────────────────────
+// Le format HunkPalette est utilisé par les jeux SCI de Sierra pour stocker
+// les palettes de couleurs. Structure : en-tête (13 octets) + entrées palette.
+constexpr size_t kHunkPaletteHeaderSize = 13;        // Taille de l'en-tête HunkPalette
+constexpr size_t kNumPaletteEntriesOffset = 10;      // Offset du nombre d'entrées
+constexpr size_t kEntryHeaderSize = 22;              // Taille d'une entrée palette
+constexpr size_t kEntryStartColorOffset = 10;        // Offset de la couleur de départ
+constexpr size_t kEntryNumColorsOffset = 14;         // Offset du nombre de couleurs
+constexpr size_t kEntryUsedOffset = 16;              // Offset du flag "utilisé"
+constexpr size_t kEntrySharedUsedOffset = 17;        // Offset du flag "partagé"
+constexpr size_t kEntryVersionOffset = 18;           // Offset de la version
+constexpr size_t kRawPaletteSize = 1200;             // Taille palette brute (256 couleurs × RGB + alpha)
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Fonctions de lecture pour les données de palette SCI
+// ─────────────────────────────────────────────────────────────────────────────
+// Ces fonctions permettent de lire des entiers depuis un buffer de palette
+// avec vérification des limites pour éviter les accès hors-bornes.
+
+/// Lit un octet non signé (uint8_t) depuis un span à un offset donné
 uint8_t read_u8(std::span<const std::byte> data, size_t offset) {
   if (offset >= data.size()) {
     throw std::runtime_error("Palette SCI HunkPalette tronquée");
@@ -39,6 +64,7 @@ uint8_t read_u8(std::span<const std::byte> data, size_t offset) {
   return std::to_integer<uint8_t>(data[offset]);
 }
 
+/// Lit un entier 16 bits non signé (little-endian) depuis un span
 uint16_t read_u16(std::span<const std::byte> data, size_t offset) {
   if (offset + 1 >= data.size()) {
     throw std::runtime_error("Palette SCI HunkPalette tronquée");

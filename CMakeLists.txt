@@ -174,13 +174,6 @@ install(FILES
     CONFIGURATIONS Release
 )
 
-# Installe les presets CMake (pour référence)
-install(FILES
-    CMakePresets.json
-    DESTINATION share/${PROJECT_NAME}
-    CONFIGURATIONS Release
-)
-
 
 
 

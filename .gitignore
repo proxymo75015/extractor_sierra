@@ -1,24 +1,109 @@
+# ═══════════════════════════════════════════════════════════════════════
+# Fichiers de build et compilation
+# ═══════════════════════════════════════════════════════════════════════
+
 # Dossiers de build CMake
 build/
 cmake-build-*/
+out/
+bin/
+lib/
 
 # Fichiers générés par CMake
 CMakeFiles/
 CMakeCache.txt
+cmake_install.cmake
 install_manifest.txt
 Testing/
 CTestTestfile.cmake
 compile_commands.json
+*.cmake
 
+# Fichiers objets et bibliothèques
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+
+# ═══════════════════════════════════════════════════════════════════════
 # Environnements et IDE
+# ═══════════════════════════════════════════════════════════════════════
+
+# Visual Studio Code
 .vscode/
-.idea/
 *.code-workspace
 
+# JetBrains (CLion, etc.)
+.idea/
+cmake-build-*/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.sln
+*.vcxproj
+*.vcxproj.filters
+
+# Xcode
+*.xcodeproj/
+*.xcworkspace/
+
+# ═══════════════════════════════════════════════════════════════════════
 # Fichiers temporaires et système
+# ═══════════════════════════════════════════════════════════════════════
+
+# Éditeurs
 *.swp
 *.swo
-*.tmp
+*~
+.*.swp
+
+# Logs
 *.log
+
+# Système d'exploitation
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# Fichiers temporaires
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# ═══════════════════════════════════════════════════════════════════════
+# Dépendances et packages
+# ═══════════════════════════════════════════════════════════════════════
+
+# vcpkg
+vcpkg_installed/
+.vcpkg/
+
+# Conan
+conan.lock
+conanbuildinfo.*
+conaninfo.txt
+
+# ═══════════════════════════════════════════════════════════════════════
+# Fichiers de test et sortie
+# ═══════════════════════════════════════════════════════════════════════
+
+# Fichiers de sortie de l'extracteur
+output/
+extracted/
+*.png
+*.wav
+metadata.json
+
+# Coverage et profiling
+*.gcda
+*.gcno
+*.gcov
+coverage/
+*.profdata

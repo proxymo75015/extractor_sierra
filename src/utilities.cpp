@@ -53,6 +53,15 @@ void read_exact(std::ifstream &f, void *data, size_t size) {
     }
 }
 
+/// Détecte l'endianness d'un fichier Robot en analysant le champ de version.
+///
+/// Le moteur Robot original lit le champ de version (offset 6) en big-endian.
+/// Si la valeur obtenue est entre 0x0001 et 0x00ff, le flux est considéré big-endian.
+/// Sinon, on vérifie l'interprétation little-endian (versions connues : 4, 5, 6).
+///
+/// @param f Flux d'entrée positionné au début du fichier Robot
+/// @return true si big-endian, false si little-endian
+/// @throws runtime_error si la version est invalide
 bool detect_endianness(std::ifstream &f) {
     StreamExceptionGuard guard(f);
     auto start = f.tellg();
@@ -86,23 +95,27 @@ bool detect_endianness(std::ifstream &f) {
     throw std::runtime_error("Version Robot invalide");
 }
 
+/// Ajoute un entier 16 bits en little-endian à un vecteur de bytes
 void append_le16(std::vector<std::byte> &out, uint16_t value) {
     for (int i = 0; i < 2; ++i) {
         out.push_back(std::byte((value >> (i * 8)) & 0xFF));
     }
 }
 
+/// Ajoute un entier 32 bits en little-endian à un vecteur de bytes
 void append_le32(std::vector<std::byte> &out, uint32_t value) {
     for (int i = 0; i < 4; ++i) {
         out.push_back(std::byte((value >> (i * 8)) & 0xFF));
     }
 }
 
+/// Écrit un entier 16 bits en little-endian dans un buffer
 void write_le16(char *dst, uint16_t value) {
     dst[0] = static_cast<char>(value & 0xFF);
     dst[1] = static_cast<char>((value >> 8) & 0xFF);
 }
 
+/// Écrit un entier 32 bits en little-endian dans un buffer
 void write_le32(char *dst, uint32_t value) {
     dst[0] = static_cast<char>(value & 0xFF);
     dst[1] = static_cast<char>((value >> 8) & 0xFF);
@@ -112,10 +125,14 @@ void write_le32(char *dst, uint32_t value) {
 
 namespace {
 
-// Mutex pour la journalisation thread-safe.
+// Mutex pour garantir la journalisation thread-safe
 std::mutex g_logMutex;
 
-// Fonction interne de journalisation avec préfixe.
+/// Fonction interne de journalisation avec préfixe personnalisé
+/// @param path Chemin du fichier concerné
+/// @param msg Message à journaliser
+/// @param prefix Préfixe à afficher (ex: "ERREUR: ")
+/// @param opt Options de l'extracteur (gestion du mode quiet)
 void log(const std::filesystem::path &path, const std::string &msg,
          const char *prefix, const ExtractorOptions &opt) {
     if (opt.quiet) return;
@@ -125,24 +142,33 @@ void log(const std::filesystem::path &path, const std::string &msg,
 
 } // namespace
 
+/// Journalise un message d'information
 void log_info(const std::filesystem::path &path, const std::string &msg,
               const ExtractorOptions &opt) {
     log(path, msg, "", opt);
 }
 
+/// Journalise un avertissement
 void log_warn(const std::filesystem::path &path, const std::string &msg,
               const ExtractorOptions &opt) {
     log(path, msg, "AVERTISSEMENT: ", opt);
 }
 
+/// Journalise une erreur
 void log_error(const std::filesystem::path &path, const std::string &msg,
                const ExtractorOptions &opt) {
     log(path, msg, "ERREUR: ", opt);
 }
 
 #ifdef _WIN32
-// Convertit un chemin en format long Windows (\\?\...).
-// Nécessaire pour dépasser la limite de 260 caractères.
+/// Convertit un chemin Windows en format long (\\?\...) pour dépasser
+/// la limite de 260 caractères de l'API Windows classique.
+///
+/// Les chemins longs permettent de manipuler des chemins de plus de MAX_PATH.
+/// Les chemins UNC (\\\\server\\share) sont gérés différemment.
+///
+/// @param path Chemin Windows à convertir
+/// @return Chemin au format long si nécessaire
 std::wstring make_long_path(const std::wstring &path) {
     namespace fs = std::filesystem;
     fs::path absPath = fs::absolute(path);
