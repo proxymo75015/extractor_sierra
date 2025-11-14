@@ -1,71 +1,62 @@
-Robot Extractor v1.0.0
-Extracts animations and audio from Sierra Robot (.rbt) files, compatible with ScummVM's Robot file format (versions 4, 5 and 6).
-The palette data in the input file must contain a multiple of 3 bytes (RGB triples).
-Prerequisites
+Robot Extractor
+===============
 
-C++20 compiler (GCC 11+, Clang 14+, MSVC 19.30+)
-Libraries:
-nlohmann/json (version 3.10.0 or higher)
-stb_image_write (included via vcpkg or as stb_image_write.h with STB_IMAGE_WRITE_IMPLEMENTATION defined)
+Outil d'extraction pour les fichiers Sierra Robot (`.rbt`) compatible avec la logique de décodage de ScummVM (versions 4, 5 et 6). Exporte les cels en PNG, l'audio en WAV stéréo 16-bit 22.05 kHz (échantillons pairs → canal gauche, impairs → canal droit) et un fichier `metadata.json`.
 
+**Structure**
+- **`src/`** : code source principal (`robot_extractor.cpp`, `robot_extractor.hpp`).
+- **`include/`** : en-têtes tiers embarqués (ex. `stb_image_write.h`).
+- **`tests/`** : tests unitaires (Catch2). (anciennement `tests_new`)
+- **`ScummVM/`** : références et exemples `.rbt` (NE PAS modifier).
+- **`CMakeLists.txt`** : configuration de build.
+- **`readme.md`** : ce document.
 
-Optional: vcpkg for dependency management
+**Prérequis**
+- Compilateur C++ avec support C++20 (GCC 11+, Clang 14+, MSVC récent).
+- `cmake` (>= 3.20 recommandé).
+- La dépendance `nlohmann_json` est récupérée automatiquement par CMake si absente.
+- `stb_image_write.h` est fourni dans `include/`.
 
-Installation
+**Build (développement / exécution des tests)**
+1. Configurer et compiler (avec les tests) :
+```bash
+cmake -S . -B build -DBUILD_TESTS=ON
+cmake --build build -j$(nproc)
+```
+2. Lancer les tests :
+```bash
+./build/tests
+# ou via ctest
+ctest --test-dir build --output-on-failure
+```
 
-Install dependencies:
+**Build de l'exécutable `robot_extractor`**
+Par défaut la configuration ci‑dessus construit l'exécutable de tests qui inclut le code d'extraction. Pour générer l'exécutable autonome `robot_extractor`, configurez sans les tests :
+```bash
+cmake -S . -B build -DBUILD_TESTS=OFF
+cmake --build build -j$(nproc)
+# alors ./build/robot_extractor sera généré
+```
 
-If using vcpkg:vcpkg install nlohmann-json stb
+**Utilisation minimale**
+```bash
+./build/robot_extractor [--audio] [--quiet] [--force-be|--force-le] <input.rbt> <output_dir>
+```
 
+- `--audio` : exporte les pistes audio en WAV.
+- `--quiet` : réduit la sortie console.
+- `--force-be` / `--force-le` : forcer l'endianness (mutuellement exclusifs).
 
-If not using vcpkg, ensure nlohmann/json.hpp and stb_image_write.h are in your include path.
+Sorties produites dans `<output_dir>`
+- fichiers PNG pour chaque cel : `frame_XXXXX_N.png`
+- fichiers WAV (si `--audio`) : `frame_XXXXX.wav` (stéréo 16-bit, 22.05 kHz)
+- `metadata.json` : métadonnées des frames/cels
 
+**Remarques**
+- Le répertoire `ScummVM/` contient des exemples `.rbt` et n'a pas été modifié par les opérations de nettoyage : il doit rester intact.
+- Le fichier racine `robot_extractor.hpp` (doublon) a été supprimé ; l'en‑tête actif est `src/robot_extractor.hpp`.
 
-Compile the project:
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
+**Licence**
+BSD 3‑Clause License
 
-
-
-Usage
-./robot_extractor [--audio] [--quiet] [--force-be | --force-le] [--debug-index] <input.rbt> <output_dir>
-
-Options
-
---audio: Extract audio tracks as WAV files␊
---quiet: Suppress console output␊
---force-be: Force big-endian byte order. Cannot be used with --force-le
---force-le: Force little-endian byte order. Cannot be used with --force-be
---debug-index: Log index and size inconsistencies when reading packets
-
-Output
-
-PNG files for each cel (frame_XXXXX_N.png)
-WAV files for audio tracks (if --audio is specified):
-frame_XXXXX.wav: Interleaved even/odd channels (stereo, 16-bit, 22.05 kHz)
-
-Robot files that contain audio must also provide a valid audio primer.
-Either a primer block must be reserved in the header or the
-zero-compression primer flag must be set; otherwise the extractor aborts
-with an error to match ScummVM's behaviour.
-
-metadata.json containing frame and cel metadata
-
-Format Audio
-The exported WAV files are in stereo 16-bit 22.05 kHz format with even samples on the left channel and odd samples on the right channel.
-
-Compatibility
-This tool is designed to be compatible with ScummVM's Robot file format (versions 4, 5, and 6). It handles LZS decompression, DPCM-16 audio decoding, and palette-based RGBA conversion.History
-
-Earlier revisions of this project bundled a legacy standalone extractor at `src/old/robot_extractor.old` (version 1.2.8). The file has been removed for clarity, but it can still be accessed through the repository's Git history if needed.
-License
-
-BSD 3-Clause License
-
-
-
-
-
-
-
-
+*Fin*
