@@ -15,6 +15,10 @@ static void push16(std::vector<uint8_t> &v, uint16_t x) {
   v.push_back(static_cast<uint8_t>(x >> 8));
 }
 
+// Forward declaration so tests can call it before its definition later in file
+static void expect_valid_vertical_scale(uint8_t verticalScale,
+                                        const std::string &caseName);
+
 static void expect_invalid_vertical_scale(uint8_t verticalScale,
                                           const std::string &caseName) {
   std::vector<uint8_t> data;
@@ -71,6 +75,11 @@ TEST_CASE("Vertical scale above 100 succeeds") {
 TEST_CASE("Vertical scale far above limit succeeds") {
   expect_valid_vertical_scale(200, "invalid_vertical_scale_high");
 }
+
+// Les fonctions expect_valid_vertical_scale doivent vérifier le succès, pas l'échec
+// Forward declaration so tests above can call it before the full definition
+static void expect_valid_vertical_scale(uint8_t verticalScale,
+                                        const std::string &caseName);
 
 // Les fonctions expect_valid_vertical_scale doivent vérifier le succès, pas l'échec
 static void expect_valid_vertical_scale(uint8_t verticalScale,

@@ -207,7 +207,23 @@ to_long_path(const std::filesystem::path &path) {
 void write_png_cross_platform(const std::filesystem::path &path, int w, int h,
                               int comp, const void *data, int stride) {
     auto [fsPath, pathStr] = to_long_path(path);
-    if (!stbi_write_png(pathStr.c_str(), w, h, comp, data, stride)) {
+    // Copy incoming pixel data into a byte buffer to ensure contiguous
+    // byte-wise layout matching stb_image_write expectations. This avoids
+    // subtle issues with host-endian uint32_t buffers or non-byte buffers
+    // being misinterpreted by the PNG encoder.
+    int bytes_per_row = stride;
+    if (bytes_per_row == 0) bytes_per_row = w * comp;
+    // Guard against negative/zero dimensions
+    if (w <= 0 || h <= 0 || comp <= 0 || bytes_per_row < w * comp) {
+        throw std::runtime_error("Paramètres PNG invalides pour l'écriture: " + pathStr);
+    }
+    const size_t total_bytes = static_cast<size_t>(bytes_per_row) * static_cast<size_t>(h);
+    std::vector<unsigned char> tmp;
+    tmp.resize(total_bytes);
+    // Safely copy from the provided data pointer (interpreted as bytes)
+    std::memcpy(tmp.data(), data, total_bytes);
+
+    if (!stbi_write_png(pathStr.c_str(), w, h, comp, tmp.data(), bytes_per_row)) {
         std::error_code ec;
         std::filesystem::remove(fsPath, ec);
         throw std::runtime_error(std::string("Échec de l'écriture de ") + pathStr);

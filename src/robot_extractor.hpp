@@ -191,6 +191,10 @@ private:
   void setAudioStartOffset(int64_t offset);       // Définit l'offset de début audio
   void readSizesAndCues(bool allowShortFile = false);  // Lit les tailles de frames et points de repère
   bool exportFrame(int frameNo, nlohmann::json &frameJson);  // Exporte une frame en PNG
+  void exportCel(std::span<const std::byte> celData,
+                 const std::filesystem::path &outputPath,
+                 const ParsedPalette &pal, size_t celIndex,
+                 int frameNo);
   void writeWav(const std::vector<int16_t> &samples, uint32_t sampleRate,
                 size_t blockIndex, bool isEvenChannel,
                 uint16_t numChannels = 1,
@@ -290,6 +294,7 @@ private:
   std::streamsize m_oddPrimerSize = 0;   // Taille du primer canal impair
   int32_t m_totalPrimerSize = 0;         // Taille totale du primer
   std::streamoff m_primerPosition = 0;   // Position du primer
+  std::vector<std::streamoff> m_recordPositions; // Positions des enregistrements/packets
 
   // Données du primer audio (initialisation DPCM)
   std::vector<std::byte> m_evenPrimer;  // Primer du canal pair
@@ -376,7 +381,18 @@ struct RobotExtractorTester {
   }
   static void finalizeAudio(RobotExtractor &r) { r.finalizeAudio(); }
   static std::vector<int16_t> buildChannelStream(RobotExtractor &r, bool isEven) {
-    return r.buildChannelStream(isEven);
+    auto s = r.buildChannelStream(isEven);
+    // Debug: report what the tester will observe
+    std::ostringstream oss;
+    oss << "Tester view stream (" << (isEven ? "even" : "odd") << ") size=" << s.size() << " [";
+    for (size_t i = 0; i < s.size() && i < 8; ++i) {
+      if (i) oss << ", ";
+      oss << s[i];
+    }
+    if (s.size() > 8) oss << ", ...";
+    oss << "]";
+    robot::log_warn(std::filesystem::path("Tester"), oss.str(), robot::ExtractorOptions{});
+    return s;
   }
   static RobotExtractor::ParsedPalette parsePalette(const RobotExtractor &r) {
     return RobotExtractor::parseHunkPalette(r.m_palette);
