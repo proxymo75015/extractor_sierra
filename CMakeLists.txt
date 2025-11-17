@@ -24,6 +24,10 @@ if(NOT BUILD_TESTS)
   target_link_libraries(robot_extractor PRIVATE nlohmann_json::nlohmann_json)
 endif()
 
+# Utility to dump RBT compressed blocks for inspection
+add_executable(rbt_dumper src/rbt_dumper.cpp src/robot_extractor.cpp)
+target_include_directories(rbt_dumper PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src)
+
 if(BUILD_TESTS)
   enable_testing()
   FetchContent_Declare(Catch2 GIT_REPOSITORY https://github.com/catchorg/Catch2.git GIT_TAG v3.4.0)

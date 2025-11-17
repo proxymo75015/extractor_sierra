@@ -1,0 +1,296 @@
+primerHeaderPos=30 totalPrimerSize=196609 compressionType=1 even=76800 odd=0 primerPos=44 reserved=40960
+primer raw @30:
+01 00 03 00 01 00 00 2c 01 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 f2 9f 00 00 00 00 d2 4d 00 00 20 52 00 00 82 01 00 01 00 01 01 01 00 01 01 00 01 00 01 00 01 00 00 01 
+primer sizes mismatch: attempting to read reserved area as primer (40990)
+pos before videoSizes: 42190
+peek bytes: 70 70 70 70 70 70 70 70 70 70 70 70 70 70 70 70
+tableA[0..4]: 28784,28784,28784,28784,28784
+tableB[0..4]: 6994,6994,6994,6994,6994
+candidate offset=0 swap=0 plausible=1
+candidate offset=0 swap=1 plausible=1
+candidate offset=6 swap=0 plausible=0
+candidate offset=6 swap=1 plausible=0
+chosen fileOffset=0 tableSwap=0 plausible=1
+parseHeader: version=5 frames=90 audioBlockSize=2221 hasAudio=1 paletteSize=1200 primerReservedSize=40960
+videoSizes[0..4]: 28784,28784,28784,28784,28784
+packetSizes[0..4]: 6994,6994,6994,6994,6994
+first record position: 45056
+record[0]=45056 videoSize=28784 packetSize=6994
+record[1]=52050 videoSize=28784 packetSize=6994
+record[2]=59044 videoSize=28784 packetSize=6994
+record[3]=66038 videoSize=28784 packetSize=6994
+record[4]=73032 videoSize=28784 packetSize=6994
+record[5]=80026 videoSize=28784 packetSize=6994
+record[6]=87020 videoSize=28784 packetSize=6994
+record[7]=94014 videoSize=28784 packetSize=6994
+record[8]=101008 videoSize=28784 packetSize=6994
+record[9]=108002 videoSize=28784 packetSize=6994
+record[10]=114996 videoSize=28784 packetSize=6994
+record[11]=121990 videoSize=28784 packetSize=6994
+record[12]=128984 videoSize=28784 packetSize=6994
+record[13]=135978 videoSize=28784 packetSize=6994
+record[14]=142972 videoSize=28784 packetSize=6994
+record[15]=149966 videoSize=2612 packetSize=4833
+record[16]=154799 videoSize=2677 packetSize=4898
+record[17]=159697 videoSize=2890 packetSize=5111
+record[18]=164808 videoSize=3013 packetSize=5234
+record[19]=170042 videoSize=3060 packetSize=5281
+record[20]=175323 videoSize=3156 packetSize=5377
+record[21]=180700 videoSize=3261 packetSize=5482
+record[22]=186182 videoSize=3450 packetSize=5671
+record[23]=191853 videoSize=3729 packetSize=5950
+record[24]=197803 videoSize=4127 packetSize=6348
+record[25]=204151 videoSize=4630 packetSize=6851
+record[26]=211002 videoSize=5234 packetSize=7455
+record[27]=218457 videoSize=5913 packetSize=8134
+record[28]=226591 videoSize=6639 packetSize=8860
+record[29]=235451 videoSize=7322 packetSize=9543
+record[30]=244994 videoSize=7859 packetSize=10080
+record[31]=255074 videoSize=8313 packetSize=10534
+record[32]=265608 videoSize=8897 packetSize=11118
+record[33]=276726 videoSize=8755 packetSize=10976
+record[34]=287702 videoSize=9011 packetSize=11232
+record[35]=298934 videoSize=9696 packetSize=11917
+record[36]=310851 videoSize=9860 packetSize=12081
+record[37]=322932 videoSize=9963 packetSize=12184
+record[38]=335116 videoSize=11546 packetSize=13767
+record[39]=348883 videoSize=11587 packetSize=13808
+record[40]=362691 videoSize=11695 packetSize=13916
+record[41]=376607 videoSize=12358 packetSize=14579
+record[42]=391186 videoSize=12740 packetSize=14961
+record[43]=406147 videoSize=14586 packetSize=16807
+record[44]=422954 videoSize=16992 packetSize=19213
+record[45]=442167 videoSize=18958 packetSize=21179
+record[46]=463346 videoSize=20891 packetSize=23112
+record[47]=486458 videoSize=21427 packetSize=23648
+record[48]=510106 videoSize=21609 packetSize=23830
+record[49]=533936 videoSize=21003 packetSize=23224
+record[50]=557160 videoSize=20352 packetSize=22573
+record[51]=579733 videoSize=19442 packetSize=21663
+record[52]=601396 videoSize=18814 packetSize=21035
+record[53]=622431 videoSize=18284 packetSize=20505
+record[54]=642936 videoSize=17167 packetSize=19388
+record[55]=662324 videoSize=16680 packetSize=18901
+record[56]=681225 videoSize=16747 packetSize=18968
+record[57]=700193 videoSize=16643 packetSize=18864
+record[58]=719057 videoSize=16477 packetSize=18698
+record[59]=737755 videoSize=16146 packetSize=18367
+record[60]=756122 videoSize=15491 packetSize=17712
+record[61]=773834 videoSize=14046 packetSize=16267
+record[62]=790101 videoSize=6998 packetSize=9219
+record[63]=799320 videoSize=6963 packetSize=9184
+record[64]=808504 videoSize=6952 packetSize=9173
+record[65]=817677 videoSize=6954 packetSize=9175
+record[66]=826852 videoSize=6962 packetSize=9183
+record[67]=836035 videoSize=6975 packetSize=9196
+record[68]=845231 videoSize=6984 packetSize=9205
+record[69]=854436 videoSize=7023 packetSize=9244
+record[70]=863680 videoSize=7034 packetSize=9255
+record[71]=872935 videoSize=6987 packetSize=9208
+record[72]=882143 videoSize=6994 packetSize=9215
+record[73]=891358 videoSize=6994 packetSize=9215
+record[74]=900573 videoSize=6994 packetSize=9215
+record[75]=909788 videoSize=6994 packetSize=9215
+record[76]=919003 videoSize=6994 packetSize=9215
+record[77]=928218 videoSize=6994 packetSize=9215
+record[78]=937433 videoSize=6994 packetSize=9215
+record[79]=946648 videoSize=6994 packetSize=9215
+record[80]=955863 videoSize=6994 packetSize=9215
+record[81]=965078 videoSize=6994 packetSize=9215
+record[82]=974293 videoSize=6994 packetSize=9215
+record[83]=983508 videoSize=6994 packetSize=9215
+record[84]=992723 videoSize=6994 packetSize=9215
+record[85]=1001938 videoSize=6994 packetSize=9215
+record[86]=1011153 videoSize=6994 packetSize=9215
+record[87]=1020368 videoSize=6994 packetSize=9215
+record[88]=1029583 videoSize=6994 packetSize=9215
+record[89]=1038798 videoSize=6994 packetSize=9215
+  looksPlausibleAt: pos=45056 bytes=01 00 7f 64 40 01
+extractFrame: idx=0 pos=45056 videoSize=28784
+  first bytes: 01 00 7f 64 40 01
+  screenItemCount(raw LE)=1
+    cel 0: w=320 h=240 dataSize=2588 chunks=2
+      chunk 0: compSize=2052 decompSize=61440 compType=0 ptr=32
+      chunk 1: compSize=516 decompSize=15360 compType=0 ptr=2094
+  looksPlausibleAt: pos=52050 bytes=43 e0 7f ff ff ff
+extractFrame: idx=1 pos=52050 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=59044 bytes=90 90 91 92 92 93
+extractFrame: idx=2 pos=59044 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=66038 bytes=ff ff ff ff ff ff
+extractFrame: idx=3 pos=66038 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=73032 bytes=ff ff ff ff ff ff
+extractFrame: idx=4 pos=73032 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=80026 bytes=90 8f 90 8f 8f 8f
+extractFrame: idx=5 pos=80026 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=87020 bytes=ff ff ff ff ff ff
+extractFrame: idx=6 pos=87020 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=94014 bytes=28 22 27 6c a0 72
+extractFrame: idx=7 pos=94014 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=101008 bytes=ff ff ff ff ff ff
+extractFrame: idx=8 pos=101008 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=108002 bytes=c9 14 ed 90 f2 84
+extractFrame: idx=9 pos=108002 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=114996 bytes=4f 3c 93 f3 91 0f
+extractFrame: idx=10 pos=114996 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=121990 bytes=ff ff ff ff ff ff
+extractFrame: idx=11 pos=121990 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=128984 bytes=9a 99 9a 9a 9a 9a
+extractFrame: idx=12 pos=128984 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=135978 bytes=27 e6 ef 9b 4e 9a
+extractFrame: idx=13 pos=135978 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=142972 bytes=67 ac 32 ea 9d 1d
+extractFrame: idx=14 pos=142972 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=149966 bytes=ac ad ad ac ac ac
+extractFrame: idx=15 pos=149966 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=154799 bytes=03 ff ff ff ff ff
+extractFrame: idx=16 pos=154799 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=159697 bytes=a9 a9 a8 a7 a7 a6
+extractFrame: idx=17 pos=159697 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=164808 bytes=c0 ff ff ff ff ff
+extractFrame: idx=18 pos=164808 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=170042 bytes=86 85 84 83 81 01
+extractFrame: idx=19 pos=170042 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=175323 bytes=3a 9c 96 49 f2 bb
+extractFrame: idx=20 pos=175323 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=180700 bytes=0c 0c 0b 0a 09 09
+extractFrame: idx=21 pos=180700 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=186182 bytes=62 f3 bd 16 50 3f
+extractFrame: idx=22 pos=186182 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=191853 bytes=14 13 13 13 13 13
+extractFrame: idx=23 pos=191853 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=197803 bytes=25 13 af 1f ad a4
+extractFrame: idx=24 pos=197803 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=204151 bytes=13 13 12 12 12 12
+extractFrame: idx=25 pos=204151 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=211002 bytes=dc b6 e1 f6 d6 7e
+extractFrame: idx=26 pos=211002 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=218457 bytes=19 71 c1 f6 27 0a
+extractFrame: idx=27 pos=218457 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=226591 bytes=28 35 99 3a d0 ed
+extractFrame: idx=28 pos=226591 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=235451 bytes=30 38 1c 89 d2 71
+extractFrame: idx=29 pos=235451 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=244994 bytes=e0 4d e6 6f bc 0a
+extractFrame: idx=30 pos=244994 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=255074 bytes=26 e4 c9 3b 12 4a
+extractFrame: idx=31 pos=255074 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=265608 bytes=fb 10 2f 0c 09 50
+extractFrame: idx=32 pos=265608 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=276726 bytes=03 4f 61 c1 b8 17
+extractFrame: idx=33 pos=276726 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=287702 bytes=ec 9f fc a2 69 e1
+extractFrame: idx=34 pos=287702 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=298934 bytes=ff ff ff ff ff ff
+extractFrame: idx=35 pos=298934 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=310851 bytes=ff fe 27 d8 9f 98
+extractFrame: idx=36 pos=310851 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=322932 bytes=8c b9 85 fe a8 a0
+extractFrame: idx=37 pos=322932 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=335116 bytes=13 20 17 87 9d 98
+extractFrame: idx=38 pos=335116 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=348883 bytes=3b bf dc 0f ff ff
+extractFrame: idx=39 pos=348883 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=362691 bytes=ba 22 85 b2 88 67
+extractFrame: idx=40 pos=362691 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=376607 bytes=44 ff af 0f 92 07
+extractFrame: idx=41 pos=376607 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=391186 bytes=51 f4 a9 59 1d 87
+extractFrame: idx=42 pos=391186 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=406147 bytes=ce 51 d9 78 0a c8
+extractFrame: idx=43 pos=406147 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=422954 bytes=0f ac 96 7c 32 a9
+extractFrame: idx=44 pos=422954 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=442167 bytes=4c f8 cf 17 21 27
+extractFrame: idx=45 pos=442167 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=463346 bytes=ca e0 7c 6c 87 d1
+extractFrame: idx=46 pos=463346 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=486458 bytes=84 2e 0c a1 07 84
+extractFrame: idx=47 pos=486458 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=510106 bytes=a5 19 60 74 db 83
+extractFrame: idx=48 pos=510106 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=533936 bytes=c0 ff ff fe 55 6b
+extractFrame: idx=49 pos=533936 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=557160 bytes=10 9f 94 97 8c 82
+extractFrame: idx=50 pos=557160 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=579733 bytes=90 c8 f0 86 d7 86
+extractFrame: idx=51 pos=579733 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=601396 bytes=94 f1 3f 78 fc 30
+extractFrame: idx=52 pos=601396 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=622431 bytes=db c6 96 99 d2 f0
+extractFrame: idx=53 pos=622431 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=642936 bytes=18 c4 01 b2 1e 9d
+extractFrame: idx=54 pos=642936 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=662324 bytes=10 b6 23 d4 49 fc
+extractFrame: idx=55 pos=662324 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=681225 bytes=2b c1 d3 3e 45 00
+extractFrame: idx=56 pos=681225 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=700193 bytes=bb 05 16 02 dc f0
+extractFrame: idx=57 pos=700193 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=719057 bytes=ca f8 60 7f ff ff
+extractFrame: idx=58 pos=719057 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=737755 bytes=08 59 c2 d8 62 1d
+extractFrame: idx=59 pos=737755 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=756122 bytes=50 51 21 2c 06 20
+extractFrame: idx=60 pos=756122 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=773834 bytes=97 e6 07 0b dd 80
+extractFrame: idx=61 pos=773834 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=790101 bytes=c7 4c cf 86 07 ff
+extractFrame: idx=62 pos=790101 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=799320 bytes=07 ff ff ff ff ff
+extractFrame: idx=63 pos=799320 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=808504 bytes=8a 07 e4 df a4 11
+extractFrame: idx=64 pos=808504 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=817677 bytes=97 84 50 3f 6e fd
+extractFrame: idx=65 pos=817677 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=826852 bytes=ff fc 68 f3 ef 0f
+extractFrame: idx=66 pos=826852 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=836035 bytes=7c 3e 1d 0e 91 35
+extractFrame: idx=67 pos=836035 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=845231 bytes=87 e7 ff df 03 ff
+extractFrame: idx=68 pos=845231 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=854436 bytes=ce 78 60 7f e0 f9
+extractFrame: idx=69 pos=854436 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=863680 bytes=7c 3e 1d 0e 91 35
+extractFrame: idx=70 pos=863680 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=872935 bytes=df ff cc 9a fc 25
+extractFrame: idx=71 pos=872935 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=882143 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=72 pos=882143 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=891358 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=73 pos=891358 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=900573 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=74 pos=900573 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=909788 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=75 pos=909788 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=919003 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=76 pos=919003 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=928218 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=77 pos=928218 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=937433 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=78 pos=937433 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=946648 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=79 pos=946648 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=955863 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=80 pos=955863 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=965078 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=81 pos=965078 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=974293 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=82 pos=974293 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=983508 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=83 pos=983508 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=992723 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=84 pos=992723 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=1001938 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=85 pos=1001938 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=1011153 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=86 pos=1011153 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=1020368 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=87 pos=1020368 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=1029583 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=88 pos=1029583 not plausible at recorded position; skipping (no fallback)
+  looksPlausibleAt: pos=1038798 bytes=fc 68 f3 ef 0f 8f
+extractFrame: idx=89 pos=1038798 not plausible at recorded position; skipping (no fallback)
+audio: primer packets inserted=1
+audio: decoded sequence samples(total packets)=1228237 (incl primer)
+Wrote raw PCM to /workspaces/extractor_sierra/tmp/audio.raw.pcm (mono 22050Hz 16-bit) samples=2457498
+Done. Output in /workspaces/extractor_sierra/tmp
