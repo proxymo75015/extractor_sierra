@@ -14,229 +14,152 @@
 #include "decompressor_lzs.h"
 #include "sci_util.h"
 
-    std::fprintf(stderr, "audio: primer packets inserted=%zu\n", packets.size());
+// Local constants copied from ScummVM behaviour.
+static const size_t kRobotZeroCompressSize = 2048;
 
-    if (_recordPositions.empty() || _videoSizes.empty() || _packetSizes.empty()) {
-        std::fprintf(stderr, "audio: missing layout info, aborting\n");
-        return;
+// file access helpers used by the parser
+static uint16_t read_sci11_u16_file(FILE *f) {
+    uint8_t tmp[2];
+    if (fread(tmp,1,2,f) != 2) return 0;
+    return SciHelpers::READ_SCI11ENDIAN_UINT16(tmp);
+}
+static uint32_t read_sci11_u32_file(FILE *f) {
+    uint8_t tmp[4];
+    if (fread(tmp,1,4,f) != 4) return 0;
+    return SciHelpers::READ_SCI11ENDIAN_UINT32(tmp);
+}
+
+// Constructor
+RbtParser::RbtParser(FILE *f) : _f(f), _fileOffset(0) {}
+
+// Destructor
+RbtParser::~RbtParser() {}
+
+bool RbtParser::parseHeader() {
+    // Ensure `_fileOffset` has a sensible default for standalone .RBT files.
+    _fileOffset = 0;
+
+    // Sanity check signature and determine endianness.
+    // Read first 2 bytes as little-endian (id) — ScummVM uses 0x16.
+    if (!seekSet(0)) return false;
+    uint16_t id = readUint16LE();
+    if (id != 0x16) {
+        std::fprintf(stderr, "parseHeader: invalid signature id=0x%04x\n", id);
+        return false;
     }
 
-    // First pass: try to read per-frame audio headers (position/size) and
-    // decode packets for frames that provide them. Mark consumed frames.
-    std::vector<char> consumed(_packetSizes.size(), 0);
-    for (size_t i = 0; i < _recordPositions.size(); ++i) {
-        uint32_t rpos = _recordPositions[i];
-        uint32_t vsize = (i < _videoSizes.size()) ? _videoSizes[i] : 0;
-        if (!seekSet((size_t)rpos + vsize)) continue;
-        // attempt to read header
-        int32_t position = readSint32(_bigEndian);
-        int32_t size = readSint32(_bigEndian);
-        if (position == 0 || size <= 0 || size > 10 * 1024 * 1024) {
-            // header missing or invalid; skip - will be read from contiguous region
-            continue;
-        }
+    // Version decision: read 16-bit at offset 6 as BE to detect big-endian
+    if (!seekSet(6)) return false;
+    uint16_t v = readUint16BE();
+    _bigEndian = (0 < v && v <= 0x00ff);
+    SciHelpers::setPlatformMacintosh(_bigEndian);
 
-        size_t compSize = (size_t)size;
-        std::vector<uint8_t> compBuf;
-        if (_audioBlockSize != 0 && (uint32_t)size != _audioBlockSize) {
-            compBuf.resize(kRobotZeroCompressSize + compSize);
-            std::memset(compBuf.data(), 0, kRobotZeroCompressSize);
-            if (fread(compBuf.data() + kRobotZeroCompressSize, 1, compSize, _f) != compSize) break;
-            compSize += kRobotZeroCompressSize;
-        } else {
-            compBuf.resize(compSize);
-            if (fread(compBuf.data(), 1, compSize, _f) != compSize) break;
-        }
-
-        std::vector<int16_t> samples(compSize);
-        int16_t predictor = 0;
-        deDPCM16Mono(samples.data(), compBuf.data(), (uint32_t)compSize, predictor);
-
-        packets.push_back(Packet{ position, std::move(samples) });
-        consumed[i] = 1;
+    // Verify "SOL" signature at offset 2 (4 bytes: 'S' 'O' 'L' 0x00)
+    if (!seekSet(2)) return false;
+    uint32_t tag = readUint32(true); // read as big-endian
+    if (tag != 0x534f4c00) { // 'S' 'O' 'L' '\0'
+        std::fprintf(stderr, "parseHeader: invalid SOL tag=0x%08x\n", tag);
+        return false;
     }
 
-    // Determine audioStart (contiguous area) and read remaining frames from it
-    uint32_t audioStart = _recordPositions[0] + _videoSizes[0];
-    uint64_t accum = 0;
-    for (size_t i = 0; i < _packetSizes.size(); ++i) {
-        if (consumed[i]) { accum += _packetSizes[i]; continue; }
-        uint32_t compSize = _packetSizes[i];
-        if (compSize == 0) { continue; }
-        uint64_t off = (uint64_t)audioStart + accum;
-        if (!seekSet((size_t)off)) break;
-
-        std::vector<uint8_t> compBuf;
-        size_t finalCompSize = compSize;
-        if (_audioBlockSize != 0 && compSize != _audioBlockSize) {
-            compBuf.resize(kRobotZeroCompressSize + compSize);
-            std::memset(compBuf.data(), 0, kRobotZeroCompressSize);
-            if (fread(compBuf.data() + kRobotZeroCompressSize, 1, compSize, _f) != compSize) break;
-            finalCompSize += kRobotZeroCompressSize;
-        } else {
-            compBuf.resize(compSize);
-            if (fread(compBuf.data(), 1, compSize, _f) != compSize) break;
-        }
-
-        std::vector<int16_t> samples(finalCompSize);
-        int16_t predictor = 0;
-        deDPCM16Mono(samples.data(), compBuf.data(), (uint32_t)finalCompSize, predictor);
-
-        // Assign a position for fallback packets: use primer position if present,
-        // otherwise place sequentially after any existing packet positions.
-        int32_t assignedPos = 0;
-        if (_primerPosition > 0) assignedPos = (int32_t)_primerPosition + (int32_t)accum;
-        else if (!packets.empty()) {
-            // compute max position among existing packets and append
-            int32_t maxp = 0;
-            for (const auto &pp : packets) if (pp.position > maxp) maxp = pp.position;
-            assignedPos = maxp + (int32_t)(accum / 2 + 1);
-        } else {
-            assignedPos = (int32_t)accum;
-        }
-
-        packets.push_back(Packet{ assignedPos, std::move(samples) });
-        accum += compSize;
+    // After reading the tag (4 bytes), we're at offset 6.
+    // Now read the version field using detected endianness.
+    _version = _bigEndian ? readUint16BE() : readUint16LE();
+    if (_version < 5 || _version > 6) {
+        std::fprintf(stderr, "Unsupported robot version=%u\n", _version);
+        return false;
     }
 
-    std::fprintf(stderr, "audio: collected %zu packets (including primer)\n", packets.size());
+    _audioBlockSize = _bigEndian ? readUint16BE() : readUint16LE();
+    _primerZeroCompressFlag = (int16_t)( _bigEndian ? (int16_t)readUint16BE() : (int16_t)readUint16LE());
 
-    if (packets.empty()) return;
+    // skip 2 bytes
+    fseek(_f, 2, SEEK_CUR);
 
-    // Determine start offset (smallest positive packet position)
-    int32_t startOffset = INT32_MAX;
-    if (_primerPosition > 0) startOffset = (int32_t)_primerPosition;
-    for (const auto &p : packets) if (p.position > 0 && p.position < startOffset) startOffset = p.position;
-    if (startOffset == INT32_MAX) startOffset = 0;
+    _numFramesTotal = _bigEndian ? readUint16BE() : readUint16LE();
+    _paletteSize = _bigEndian ? readUint16BE() : readUint16LE();
+    _primerReservedSize = _bigEndian ? readUint16BE() : readUint16LE();
 
-    // Compute output buffer size based on packet positions (interleaved addressing)
-    size_t outNeeded = 0;
-    for (const auto &p : packets) {
-        uint32_t rel = (uint32_t)(p.position - startOffset);
-        size_t bufIdx = (p.position % 4) ? 1 : 0;
-        size_t destStart = (size_t)rel * 2 + bufIdx;
-        if (p.samples.size()) {
-            size_t last = destStart + (p.samples.size() - 1) * 2;
-            if (last + 1 > outNeeded) outNeeded = last + 1;
-        }
+    // reading x/y resolution
+    int16_t xRes = _bigEndian ? (int16_t)readUint16BE() : (int16_t)readUint16LE();
+    int16_t yRes = _bigEndian ? (int16_t)readUint16BE() : (int16_t)readUint16LE();
+
+    // hasPalette + hasAudio
+    uint8_t hasPalette = 0;
+    fread(&hasPalette, 1, 1, _f);
+    uint8_t hasAudio = 0;
+    fread(&hasAudio, 1, 1, _f);
+    _hasAudio = (hasAudio != 0);
+
+    // skip 2 bytes
+    fseek(_f, 2, SEEK_CUR);
+
+    _frameRate = _bigEndian ? (int16_t)readUint16BE() : (int16_t)readUint16LE();
+    _isHiRes = _bigEndian ? (int16_t)readUint16BE() : (int16_t)readUint16LE();
+    _maxSkippablePackets = _bigEndian ? (int16_t)readUint16BE() : (int16_t)readUint16LE();
+    _maxCelsPerFrame = _bigEndian ? (int16_t)readUint16BE() : (int16_t)readUint16LE();
+
+    // read four max cel areas
+    for (int ii = 0; ii < 4; ++ii) {
+        int32_t val = readSint32(_bigEndian);
+        (void)val;
     }
-    if (outNeeded == 0) return;
 
-    std::vector<int16_t> outBuf(outNeeded, 0);
-    std::vector<char> written(outNeeded, 0);
+    // skip 8 reserved bytes
+    fseek(_f, 8, SEEK_CUR);
 
-    // Write samples into interleaved buffer
-    for (const auto &p : packets) {
-        uint32_t rel = (uint32_t)(p.position - startOffset);
-        size_t bufIdx = (p.position % 4) ? 1 : 0;
-        size_t dest = (size_t)rel * 2 + bufIdx;
-        for (size_t si = 0; si < p.samples.size(); ++si) {
-            size_t idx = dest + si * 2;
-            if (idx < outBuf.size()) {
-                outBuf[idx] = p.samples[si];
-                written[idx] = 1;
+    // Primer / audio metadata
+    if (_hasAudio) {
+        if (_primerReservedSize != 0) {
+            long primerHeaderPosition = ftell(_f);
+            _totalPrimerSize = readSint32(_bigEndian);
+            _primerCompressionType = (int16_t)readSint32(_bigEndian);
+            _evenPrimerSize = readSint32(_bigEndian);
+            _oddPrimerSize = readSint32(_bigEndian);
+            _primerPosition = ftell(_f);
+
+            if (_primerCompressionType != 0) {
+                std::fprintf(stderr, "Unknown primer compression type=%d\n", _primerCompressionType);
             }
-        }
-    }
 
-    // Interpolate missing samples
-    for (size_t i = 0; i < outBuf.size(); ++i) {
-        if (written[i]) continue;
-        ssize_t l = (ssize_t)i - 1;
-        while (l >= 0 && !written[l]) --l;
-        ssize_t r = (ssize_t)i + 1;
-        while (r < (ssize_t)outBuf.size() && !written[r]) ++r;
-        if (l >= 0 && r < (ssize_t)outBuf.size()) {
-            int16_t lv = outBuf[l];
-            int16_t rv = outBuf[r];
-            double t = double(i - l) / double(r - l);
-            outBuf[i] = (int16_t)((1.0 - t) * lv + t * rv);
-            written[i] = 1;
-        } else if (l >= 0) {
-            outBuf[i] = outBuf[l];
-            written[i] = 1;
-        } else if (r < (ssize_t)outBuf.size()) {
-            outBuf[i] = outBuf[r];
-            written[i] = 1;
-        }
-    }
-
-    // Deliver via callback in chunks
-    const size_t CHUNK = 4096;
-    size_t off = 0;
-    while (off < outBuf.size()) {
-        size_t toSend = std::min(CHUNK, outBuf.size() - off);
-        cb(outBuf.data() + off, toSend);
-        off += toSend;
-    }
-            }
-            // move file pointer to after reserved block to continue parsing
-            fseek(_f, primerHeaderPosition + _primerReservedSize, SEEK_SET);
-        } else {
-            // Otherwise read the primer raw bytes now and keep them for audio priming.
-            std::fprintf(stderr, "primer sizes ok: reading primer data at primerPosition=%ld (even=%d odd=%d)\n", primerPosition, evenPrimerSize, oddPrimerSize);
-            if (seekSet((size_t)primerPosition)) {
-                if (evenPrimerSize > 0) {
-                    _primerEvenRaw.resize((size_t)evenPrimerSize);
+            if (_evenPrimerSize + _oddPrimerSize != _primerReservedSize) {
+                // move pointer to after reserved area
+                fseek(_f, primerHeaderPosition + _primerReservedSize, SEEK_SET);
+            } else {
+                // read primer data into raw buffers
+                if (_evenPrimerSize > 0) {
+                    _primerEvenRaw.resize((size_t)_evenPrimerSize);
                     if (fread(_primerEvenRaw.data(), 1, _primerEvenRaw.size(), _f) != _primerEvenRaw.size()) {
                         _primerEvenRaw.clear();
                     }
                 }
-                if (oddPrimerSize > 0) {
-                    _primerOddRaw.resize((size_t)oddPrimerSize);
+                if (_oddPrimerSize > 0) {
+                    _primerOddRaw.resize((size_t)_oddPrimerSize);
                     if (fread(_primerOddRaw.data(), 1, _primerOddRaw.size(), _f) != _primerOddRaw.size()) {
                         _primerOddRaw.clear();
                     }
                 }
-                // After reading primer buffers, seek to the end of reserved area to continue parsing
-                fseek(_f, primerHeaderPosition + _primerReservedSize, SEEK_SET);
-            } else {
-                // If we can't seek back, just move beyond the reserved header as fallback
                 fseek(_f, primerHeaderPosition + _primerReservedSize, SEEK_SET);
             }
+        } else if (_primerZeroCompressFlag) {
+            _evenPrimerSize = 19922;
+            _oddPrimerSize = 21024;
+            _totalPrimerSize = _evenPrimerSize + _oddPrimerSize;
+            _primerPosition = -1;
+            if (_evenPrimerSize > 0) _primerEvenRaw.assign((size_t)_evenPrimerSize, 0);
+            if (_oddPrimerSize > 0) _primerOddRaw.assign((size_t)_oddPrimerSize, 0);
         }
-        // stored above for later use
-    }
-    else if (_hasAudio && _primerReservedSize == 0 && _primerZeroCompressFlag) {
-        // zero-compress primer implicit sizes per spec
-        _evenPrimerSize = 19922;
-        _oddPrimerSize = 21024;
-        _totalPrimerSize = _evenPrimerSize + _oddPrimerSize;
-        _primerPosition = -1;
-        std::fprintf(stderr, "primer zero-compress: using implicit even=%d odd=%d total=%d\n", _evenPrimerSize, _oddPrimerSize, _totalPrimerSize);
-        // create zero-filled primer raw buffers
-        if (_evenPrimerSize > 0) _primerEvenRaw.assign((size_t)_evenPrimerSize, 0);
-        if (_oddPrimerSize > 0) _primerOddRaw.assign((size_t)_oddPrimerSize, 0);
     }
 
-    // Ensure `_fileOffset` has a sensible default for standalone .RBT files.
-    // ScummVM expects `_fileOffset` to be the offset of the resource within
-    // the containing file/archive; for a raw `.rbt` file the resource starts
-    // at the beginning of the file, so keep `_fileOffset` at 0.
-    _fileOffset = 0;
-
+    // Palette
     if (hasPalette) {
         _paletteData.resize(_paletteSize);
         fread(_paletteData.data(),1,_paletteSize,_f);
     } else {
-        // seek past palette size
         fseek(_f, _paletteSize, SEEK_CUR);
     }
 
-        // Debug: show position and a few bytes before reading videoSizes
-        long pos_before_video_index = ftell(_f);
-        std::fprintf(stderr, "pos before videoSizes: %ld\n", pos_before_video_index);
-        uint8_t peek[16] = {0};
-        if (fread(peek,1,16,_f) == 16) {
-            std::fprintf(stderr, "peek bytes: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
-                         peek[0],peek[1],peek[2],peek[3],peek[4],peek[5],peek[6],peek[7],peek[8],peek[9],peek[10],peek[11],peek[12],peek[13],peek[14],peek[15]);
-            // rewind to original position
-            fseek(_f, pos_before_video_index, SEEK_SET);
-        }
-
-        // Additional debug: after reading tables, dump the raw bytes for the
-        // first several table entries so we can compare exactly with offline
-        // diagnostics tools.
+    // Continue with existing code: read tables etc.
 
     // read the two tables that appear next in the file. Their intended meaning
     // should be: videoSizes then packetSizes, but some files appear to have the
@@ -271,7 +194,7 @@
     }
 
     // Helper to count plausible frames when interpreting 'video' and 'packet'
-    auto countPlausible = [&](const std::vector<uint32_t> &video, const std::vector<uint32_t> &packet) {
+    auto countPlausible = [this](const std::vector<uint32_t> &video, const std::vector<uint32_t> &packet) {
         const uint16_t kScreenItemListSize = 10;
         long base = ftell(_f);
         long origPos = base;
@@ -282,7 +205,7 @@
 
         int good = 0;
         long cur = aligned;
-        for (int i = 0; i < std::min((int)_numFramesTotal, 8); ++i) {
+        for (int i = 0; i < std::min((int)this->_numFramesTotal, 8); ++i) {
             // ensure we stay within file
             if (!seekSet((size_t)cur)) break;
             uint8_t tmp[32] = {0};
@@ -359,7 +282,7 @@
         _videoSizes = std::move(tableA);
         _packetSizes = std::move(tableB);
     }
-    std::fprintf(stderr, "chosen fileOffset=%d tableSwap=%d plausible=%d\n", _fileOffset, bestSwap ? 1 : 0, bestCount);
+    std::fprintf(stderr, "chosen fileOffset=%ld tableSwap=%d plausible=%d\n", _fileOffset, bestSwap ? 1 : 0, bestCount);
 
     // align to next 2048-byte sector (respecting file offset)
     long pos = ftell(_f);
@@ -521,9 +444,38 @@ bool RbtParser::extractFrame(size_t frameIndex, const char *outDir) {
     return true;
 }
 
+// Implement trivial read helpers for the local FILE* APIs used above
 // compression constants used by robot format
 static const uint16_t kCompressionLZS = 0;
 static const uint16_t kCompressionNone = 2;
+
+// Helper functions to read Uint16/32 using file operations
+uint16_t RbtParser::readUint16LE() {
+    uint8_t tmp[2];
+    if (fread(tmp,1,2,_f) != 2) return 0;
+    return (uint16_t)tmp[0] | (uint16_t)tmp[1] << 8;
+}
+uint16_t RbtParser::readUint16BE() {
+    uint8_t tmp[2];
+    if (fread(tmp,1,2,_f) != 2) return 0;
+    return (uint16_t)tmp[0] << 8 | (uint16_t)tmp[1];
+}
+int32_t RbtParser::readSint32(bool asBE) {
+    uint8_t tmp[4];
+    if (fread(tmp,1,4,_f) != 4) return 0;
+    if (asBE) return (int32_t)((uint32_t)tmp[0] << 24 | (uint32_t)tmp[1] << 16 | (uint32_t)tmp[2] << 8 | (uint32_t)tmp[3]);
+    return (int32_t)((uint32_t)tmp[0] | (uint32_t)tmp[1] << 8 | (uint32_t)tmp[2] << 16 | (uint32_t)tmp[3] << 24);
+}
+uint32_t RbtParser::readUint32(bool asBE) {
+    uint8_t tmp[4];
+    if (fread(tmp,1,4,_f) != 4) return 0;
+    if (asBE) return (uint32_t)tmp[0] << 24 | (uint32_t)tmp[1] << 16 | (uint32_t)tmp[2] << 8 | (uint32_t)tmp[3];
+    return (uint32_t)tmp[0] | (uint32_t)tmp[1] << 8 | (uint32_t)tmp[2] << 16 | (uint32_t)tmp[3] << 24;
+}
+
+bool RbtParser::seekSet(size_t pos) {
+    return fseek(_f, (long)pos, SEEK_SET) == 0;
+}
 
 uint32_t RbtParser::createCel5(const uint8_t *rawVideoData, const int16_t screenItemIndex, const char *outDir, size_t frameIndex) {
     const uint8_t verticalScale = rawVideoData[1];
@@ -686,7 +638,85 @@ void RbtParser::extractAllAudio(std::function<void(const int16_t*, size_t)> cb) 
         }
     }
 
-    // Now append per-frame decoded packets from the contiguous audio area
+    // First try per-frame audio headers: read `position`/`size` at
+    // _recordPositions[i] + _videoSizes[i] for each frame. If at least one
+    // frame contains a plausible `position` (>0) we'll use these headers to
+    // place packets by position (ScummVM-style). Otherwise, fall back to the
+    // contiguous audio region that follows the last header.
+    std::vector<Packet> headerPackets;
+    headerPackets.reserve(_numFramesTotal);
+    for (size_t i = 0; i < _numFramesTotal && i < _recordPositions.size(); ++i) {
+        uint64_t hdrOff = (uint64_t)_recordPositions[i] + (uint64_t)_videoSizes[i];
+        if (!seekSet((size_t)hdrOff)) continue;
+
+        int32_t audioPos = readSint32(_bigEndian);
+        int32_t audioSize = readSint32(_bigEndian);
+
+        // invalid / empty audio for this frame
+        if (audioPos == 0 || audioSize <= 0) continue;
+
+        // Some files contain bogus (0xffffffff / very large) sizes. Ignore those.
+        if ((uint32_t)audioSize > 10 * 1024 * 1024) continue;
+
+        // read compressed block (prepend zeros if zero-compress)
+        if (audioSize != _audioBlockSize && _audioBlockSize != 0) {
+            // prepend kRobotZeroCompressSize zeros
+            std::vector<uint8_t> compBuf(kRobotZeroCompressSize + audioSize);
+            std::memset(compBuf.data(), 0, kRobotZeroCompressSize);
+            if (fread(compBuf.data() + kRobotZeroCompressSize, 1, audioSize, _f) != (size_t)audioSize) continue;
+            std::vector<int16_t> samples(kRobotZeroCompressSize + audioSize);
+            int16_t predictor = 0;
+            deDPCM16Mono(samples.data(), compBuf.data(), (uint32_t)(kRobotZeroCompressSize + audioSize), predictor);
+            headerPackets.push_back(Packet{ audioPos, std::move(samples) });
+        } else {
+            std::vector<uint8_t> compBuf(audioSize);
+            if (fread(compBuf.data(), 1, audioSize, _f) != (size_t)audioSize) continue;
+            std::vector<int16_t> samples(audioSize);
+            int16_t predictor = 0;
+            deDPCM16Mono(samples.data(), compBuf.data(), (uint32_t)audioSize, predictor);
+            headerPackets.push_back(Packet{ audioPos, std::move(samples) });
+        }
+    }
+
+    if (!headerPackets.empty()) {
+        // Normalize positions by the minimum reported position (start offset),
+        // then insert primer and per-frame packets using the file's semantics
+        // (_position - startOffset) * 2 when creating RobotAudioPacket.
+        int32_t minPos = INT32_MAX;
+        for (const auto &p : headerPackets) if (p.position < minPos) minPos = p.position;
+        // If primer was present, let it participate in normalization so that
+        // primers end up placed correctly relative to real packets.
+        if (!_primerEvenRaw.empty() || !_primerOddRaw.empty()) {
+            int32_t basePos = (_primerPosition > 0) ? (int32_t)_primerPosition : 0;
+            // primer packets use positions basePos and basePos+2
+            if (basePos < minPos) minPos = basePos;
+        }
+
+        // insert primer packets (normalized) first
+        if (!_primerEvenRaw.empty()) {
+            std::vector<int16_t> evsamples(_primerEvenRaw.size());
+            int16_t predictor = 0;
+            deDPCM16Mono(evsamples.data(), _primerEvenRaw.data(), (uint32_t)_primerEvenRaw.size(), predictor);
+            int32_t primerBase = (_primerPosition > 0) ? (int32_t)_primerPosition : 0;
+            int32_t normBase = (primerBase - minPos) * 2;
+            packets.push_back(Packet{ normBase, std::move(evsamples) });
+        }
+        if (!_primerOddRaw.empty()) {
+            std::vector<int16_t> odsamples(_primerOddRaw.size());
+            int16_t predictor = 0;
+            deDPCM16Mono(odsamples.data(), _primerOddRaw.data(), (uint32_t)_primerOddRaw.size(), predictor);
+            int32_t primerBase = (_primerPosition > 0) ? (int32_t)_primerPosition : 0;
+            int32_t normBase = (primerBase - minPos) * 2 + 2;
+            packets.push_back(Packet{ normBase, std::move(odsamples) });
+        }
+
+        // insert all header packets (normalized)
+        for (auto &hp : headerPackets) {
+            int32_t norm = (hp.position - minPos) * 2;
+            packets.push_back(Packet{ norm, std::move(hp.samples) });
+        }
+    } else {
+        // Now append per-frame decoded packets from the contiguous audio area
     uint64_t accum = 0;
     for (size_t i = 0; i < _packetSizes.size(); ++i) {
         uint32_t compSize = _packetSizes[i];
@@ -719,6 +749,7 @@ void RbtParser::extractAllAudio(std::function<void(const int16_t*, size_t)> cb) 
     std::fprintf(stderr, "audio: decoded sequence samples(total packets)=%zu (incl primer)\n", outSeq.size());
 
     if (outSeq.empty()) return;
+    }
 
     // Heuristic interleaving (ScummVM-like): write packets alternately into
     // even/odd sample positions. Use packet order to determine parity. This

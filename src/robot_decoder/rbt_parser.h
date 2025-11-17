@@ -26,6 +26,10 @@ private:
     uint16_t _paletteSize = 0;
     uint16_t _primerReservedSize = 0;
     int16_t _primerZeroCompressFlag = 0;
+    int16_t _frameRate = 0;
+    int16_t _isHiRes = 0;
+    int16_t _maxSkippablePackets = 0;
+    int16_t _maxCelsPerFrame = 0;
     int32_t _totalPrimerSize = 0;
     int16_t _primerCompressionType = 0;
     int32_t _evenPrimerSize = 0;
