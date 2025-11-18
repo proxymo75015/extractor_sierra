@@ -12,6 +12,7 @@ public:
     bool parseHeader();
     void dumpMetadata(const char *outDir);
     size_t getNumFrames() const;
+    int16_t getFrameRate() const { return _frameRate; }
     // Frame audio helpers (return 0 if none)
     int32_t getFrameAudioPosition(size_t frameIndex);
     int32_t getFrameAudioSize(size_t frameIndex);

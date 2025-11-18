@@ -34,6 +34,8 @@ int main(int argc, char **argv) {
         return 3;
     }
 
+    std::fprintf(stderr, "RBT: %zu frames, frameRate=%d\n", parser.getNumFrames(), parser.getFrameRate());
+
     parser.dumpMetadata(outDir);
 
     // create frames directory
