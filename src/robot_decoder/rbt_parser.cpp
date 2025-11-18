@@ -3,6 +3,7 @@
 #include <cstring>
 #include <string>
 #include <vector>
+#include <algorithm>
 #include <fstream>
 #include <sys/stat.h>
 #include <unistd.h>
@@ -113,7 +114,7 @@ bool RbtParser::parseHeader() {
         if (_primerReservedSize != 0) {
             long primerHeaderPosition = ftell(_f);
             _totalPrimerSize = readSint32(_bigEndian);
-            _primerCompressionType = (int16_t)readSint32(_bigEndian);
+            _primerCompressionType = (int16_t)(_bigEndian ? readUint16BE() : readUint16LE());
             _evenPrimerSize = readSint32(_bigEndian);
             _oddPrimerSize = readSint32(_bigEndian);
             _primerPosition = ftell(_f);
@@ -122,8 +123,12 @@ bool RbtParser::parseHeader() {
                 std::fprintf(stderr, "Unknown primer compression type=%d\n", _primerCompressionType);
             }
 
-            if (_evenPrimerSize + _oddPrimerSize != _primerReservedSize) {
-                // move pointer to after reserved area
+            std::fprintf(stderr, "primer: even=%d odd=%d total=%d reserved=%u\n", 
+                         _evenPrimerSize, _oddPrimerSize, _evenPrimerSize + _oddPrimerSize, _primerReservedSize);
+
+            // total might be slightly less than reserved (padding)
+            if (_evenPrimerSize + _oddPrimerSize > _primerReservedSize) {
+                // invalid, move pointer to after reserved area
                 fseek(_f, primerHeaderPosition + _primerReservedSize, SEEK_SET);
             } else {
                 // read primer data into raw buffers
@@ -335,6 +340,7 @@ void RbtParser::dumpMetadata(const char *outDir) {
     std::ofstream os(meta);
     os << "version: " << _version << "\n";
     os << "frames: " << _numFramesTotal << "\n";
+    os << "frameRate: " << _frameRate << "\n";
     os << "hasAudio: " << _hasAudio << "\n";
     os << "paletteSize: " << _paletteSize << "\n";
     if (_hasAudio) {
@@ -365,6 +371,30 @@ void RbtParser::dumpMetadata(const char *outDir) {
 }
 
 size_t RbtParser::getNumFrames() const { return _numFramesTotal; }
+
+int32_t RbtParser::getFrameAudioPosition(size_t frameIndex) {
+    if (frameIndex >= _recordPositions.size()) return 0;
+    // At each frame, the audio header is at recordPositions + videoSize
+    size_t headerPos = (size_t)_recordPositions[frameIndex] + (size_t)_videoSizes[frameIndex];
+    if (!_f) return 0;
+    long cur = ftell(_f);
+    if (!seekSet(headerPos)) return 0;
+    int32_t pos = readSint32(_bigEndian);
+    seekSet(cur);
+    return pos;
+}
+
+int32_t RbtParser::getFrameAudioSize(size_t frameIndex) {
+    if (frameIndex >= _recordPositions.size()) return 0;
+    size_t headerPos = (size_t)_recordPositions[frameIndex] + (size_t)_videoSizes[frameIndex];
+    if (!_f) return 0;
+    long cur = ftell(_f);
+    if (!seekSet(headerPos)) return 0;
+    (void)readSint32(_bigEndian); // skip pos
+    int32_t size = readSint32(_bigEndian);
+    seekSet(cur);
+    return size;
+}
 
 // helper: reads little-endian uint16 without changing file pos expectation (we already implement readUint16LE above)
 
@@ -488,7 +518,8 @@ uint32_t RbtParser::createCel5(const uint8_t *rawVideoData, const int16_t screen
 
     const uint8_t *p = rawVideoData + 22; // kCelHeaderSize
 
-    std::fprintf(stderr, "    cel %d: w=%u h=%u dataSize=%u chunks=%d\n", screenItemIndex, celWidth, celHeight, dataSize, numDataChunks);
+    std::fprintf(stderr, "    cel %d: w=%u h=%u dataSize=%u chunks=%d\n", 
+                 screenItemIndex, celWidth, celHeight, dataSize, numDataChunks);
 
     const uint64_t area = (uint64_t)celWidth * (uint64_t)celHeight;
     if (area > 20000000) {
@@ -513,7 +544,7 @@ uint32_t RbtParser::createCel5(const uint8_t *rawVideoData, const int16_t screen
 
         std::fprintf(stderr, "      chunk %d: compSize=%u decompSize=%u compType=%u ptr=%ld\n", i, compSize, decompSize, compressionType, (long)(p - rawVideoData));
 
-            if (compressionType == kCompressionNone) {
+        if (compressionType == kCompressionNone) {
             // raw copy
             decompressed.insert(decompressed.end(), p, p + decompSize);
         } else if (compressionType == kCompressionLZS) {
@@ -595,271 +626,87 @@ void RbtParser::createCels5(const uint8_t *rawVideoData, const int16_t numCels, 
 void RbtParser::extractAllAudio(std::function<void(const int16_t*, size_t)> cb) {
     if (!_hasAudio) return;
 
-    struct Packet { int32_t position; std::vector<int16_t> samples; };
-    std::vector<Packet> packets;
+    // Robot audio is STEREO: left and right channels stored separately, need to interleave
+    std::vector<int16_t> leftChan, rightChan;
 
-    // If primer raw buffers were read during header parsing, decode them
-    // and insert them as initial packets so the RobotAudioStream can be primed.
-    if (!_primerEvenRaw.empty() || !_primerOddRaw.empty()) {
-        int32_t basePos = (_primerPosition > 0) ? (int32_t)_primerPosition : 0;
-        if (!_primerEvenRaw.empty()) {
-            std::vector<int16_t> evsamples(_primerEvenRaw.size());
-            int16_t predictor = 0;
-            deDPCM16Mono(evsamples.data(), _primerEvenRaw.data(), (uint32_t)_primerEvenRaw.size(), predictor);
-            packets.push_back(Packet{ basePos, std::move(evsamples) });
-        }
-        if (!_primerOddRaw.empty()) {
-            std::vector<int16_t> odsamples(_primerOddRaw.size());
-            int16_t predictor = 0;
-            deDPCM16Mono(odsamples.data(), _primerOddRaw.data(), (uint32_t)_primerOddRaw.size(), predictor);
-            // odd primer should be offset by 2 ticks so it maps to the alternate channel
-            packets.push_back(Packet{ basePos + 2, std::move(odsamples) });
-        }
+    // Step 1: Decode primers (bulk audio data)
+    if (!_primerEvenRaw.empty()) {
+        leftChan.resize(_primerEvenRaw.size());
+        int16_t pred = 0;
+        deDPCM16Mono(leftChan.data(), _primerEvenRaw.data(), (uint32_t)_primerEvenRaw.size(), pred);
+    }
+    
+    if (!_primerOddRaw.empty()) {
+        rightChan.resize(_primerOddRaw.size());
+        int16_t pred = 0;
+        deDPCM16Mono(rightChan.data(), _primerOddRaw.data(), (uint32_t)_primerOddRaw.size(), pred);
     }
 
-    // Collect and decompress packets located in the contiguous audio region.
-    // Observation: audio blocks are laid out sequentially starting at
-    // audioStart = recordPositions[0] + videoSizes[0]; each block length is
-    // _packetSizes[i]. Decode each block and append samples sequentially.
-    std::fprintf(stderr, "audio: primer packets inserted=%zu\n", packets.size());
+    // Step 2: Decode per-frame packets and append to correct channel
+    if (!_recordPositions.empty() && !_videoSizes.empty() && !_packetSizes.empty()) {
+        for (size_t i = 0; i < _numFramesTotal && i < _packetSizes.size(); ++i) {
+            if (_packetSizes[i] == 0) continue;
+            
+            uint64_t headerPos = (uint64_t)_recordPositions[i] + (uint64_t)_videoSizes[i];
+            if (!seekSet((size_t)headerPos)) break;
 
-    if (_recordPositions.empty() || _videoSizes.empty() || _packetSizes.empty()) {
-        std::fprintf(stderr, "audio: missing layout info, aborting\n");
-        return;
-    }
+            int32_t audioPos = readSint32(_bigEndian);
+            int32_t audioSizeFromHeader = readSint32(_bigEndian);
+            
+            if (audioPos == 0 || audioSizeFromHeader <= 0) continue;
+            
+            uint32_t actualSize = (uint32_t)audioSizeFromHeader;
+            if (actualSize > 10 * 1024 * 1024) continue;
 
-    uint32_t audioStart = _recordPositions[0] + _videoSizes[0];
-    std::vector<int16_t> outSeq;
+            std::vector<uint8_t> compBuf;
+            size_t decompSize = actualSize;
+            
+            if (_audioBlockSize != 0 && actualSize != _audioBlockSize) {
+                compBuf.resize(kRobotZeroCompressSize + actualSize);
+                std::memset(compBuf.data(), 0, kRobotZeroCompressSize);
+                if (fread(compBuf.data() + kRobotZeroCompressSize, 1, actualSize, _f) != actualSize) {
+                    continue;
+                }
+                decompSize += kRobotZeroCompressSize;
+            } else {
+                compBuf.resize(actualSize);
+                if (fread(compBuf.data(), 1, actualSize, _f) != actualSize) {
+                    continue;
+                }
+            }
 
-    // If there are primer-decoded packets, prepend them to the output sequence
-    for (const auto &p : packets) {
-        if (!p.samples.empty()) {
-            outSeq.insert(outSeq.end(), p.samples.begin(), p.samples.end());
-        }
-    }
+            std::vector<int16_t> samples(decompSize);
+            int16_t pred = 0;
+            deDPCM16Mono(samples.data(), compBuf.data(), (uint32_t)decompSize, pred);
 
-    // First try per-frame audio headers: read `position`/`size` at
-    // _recordPositions[i] + _videoSizes[i] for each frame. If at least one
-    // frame contains a plausible `position` (>0) we'll use these headers to
-    // place packets by position (ScummVM-style). Otherwise, fall back to the
-    // contiguous audio region that follows the last header.
-    std::vector<Packet> headerPackets;
-    headerPackets.reserve(_numFramesTotal);
-    for (size_t i = 0; i < _numFramesTotal && i < _recordPositions.size(); ++i) {
-        uint64_t hdrOff = (uint64_t)_recordPositions[i] + (uint64_t)_videoSizes[i];
-        if (!seekSet((size_t)hdrOff)) continue;
-
-        int32_t audioPos = readSint32(_bigEndian);
-        int32_t audioSize = readSint32(_bigEndian);
-
-        // invalid / empty audio for this frame
-        if (audioPos == 0 || audioSize <= 0) continue;
-
-        // Some files contain bogus (0xffffffff / very large) sizes. Ignore those.
-        if ((uint32_t)audioSize > 10 * 1024 * 1024) continue;
-
-        // read compressed block (prepend zeros if zero-compress)
-        if (audioSize != _audioBlockSize && _audioBlockSize != 0) {
-            // prepend kRobotZeroCompressSize zeros
-            std::vector<uint8_t> compBuf(kRobotZeroCompressSize + audioSize);
-            std::memset(compBuf.data(), 0, kRobotZeroCompressSize);
-            if (fread(compBuf.data() + kRobotZeroCompressSize, 1, audioSize, _f) != (size_t)audioSize) continue;
-            std::vector<int16_t> samples(kRobotZeroCompressSize + audioSize);
-            int16_t predictor = 0;
-            deDPCM16Mono(samples.data(), compBuf.data(), (uint32_t)(kRobotZeroCompressSize + audioSize), predictor);
-            headerPackets.push_back(Packet{ audioPos, std::move(samples) });
-        } else {
-            std::vector<uint8_t> compBuf(audioSize);
-            if (fread(compBuf.data(), 1, audioSize, _f) != (size_t)audioSize) continue;
-            std::vector<int16_t> samples(audioSize);
-            int16_t predictor = 0;
-            deDPCM16Mono(samples.data(), compBuf.data(), (uint32_t)audioSize, predictor);
-            headerPackets.push_back(Packet{ audioPos, std::move(samples) });
-        }
-    }
-
-    if (!headerPackets.empty()) {
-        // Normalize positions by the minimum reported position (start offset),
-        // then insert primer and per-frame packets using the file's semantics
-        // (_position - startOffset) * 2 when creating RobotAudioPacket.
-        int32_t minPos = INT32_MAX;
-        for (const auto &p : headerPackets) if (p.position < minPos) minPos = p.position;
-        // If primer was present, let it participate in normalization so that
-        // primers end up placed correctly relative to real packets.
-        if (!_primerEvenRaw.empty() || !_primerOddRaw.empty()) {
-            int32_t basePos = (_primerPosition > 0) ? (int32_t)_primerPosition : 0;
-            // primer packets use positions basePos and basePos+2
-            if (basePos < minPos) minPos = basePos;
-        }
-
-        // insert primer packets (normalized) first
-        if (!_primerEvenRaw.empty()) {
-            std::vector<int16_t> evsamples(_primerEvenRaw.size());
-            int16_t predictor = 0;
-            deDPCM16Mono(evsamples.data(), _primerEvenRaw.data(), (uint32_t)_primerEvenRaw.size(), predictor);
-            int32_t primerBase = (_primerPosition > 0) ? (int32_t)_primerPosition : 0;
-            int32_t normBase = (primerBase - minPos) * 2;
-            packets.push_back(Packet{ normBase, std::move(evsamples) });
-        }
-        if (!_primerOddRaw.empty()) {
-            std::vector<int16_t> odsamples(_primerOddRaw.size());
-            int16_t predictor = 0;
-            deDPCM16Mono(odsamples.data(), _primerOddRaw.data(), (uint32_t)_primerOddRaw.size(), predictor);
-            int32_t primerBase = (_primerPosition > 0) ? (int32_t)_primerPosition : 0;
-            int32_t normBase = (primerBase - minPos) * 2 + 2;
-            packets.push_back(Packet{ normBase, std::move(odsamples) });
-        }
-
-        // insert all header packets (normalized)
-        for (auto &hp : headerPackets) {
-            int32_t norm = (hp.position - minPos) * 2;
-            packets.push_back(Packet{ norm, std::move(hp.samples) });
-        }
-    } else {
-        // Now append per-frame decoded packets from the contiguous audio area
-    uint64_t accum = 0;
-    for (size_t i = 0; i < _packetSizes.size(); ++i) {
-        uint32_t compSize = _packetSizes[i];
-        if (compSize == 0) continue;
-        uint64_t off = (uint64_t)audioStart + accum;
-        if (!seekSet((size_t)off)) break;
-
-        std::vector<uint8_t> compBuf;
-        size_t finalCompSize = compSize;
-        if (_audioBlockSize != 0 && compSize != _audioBlockSize) {
-            compBuf.resize(kRobotZeroCompressSize + compSize);
-            std::memset(compBuf.data(), 0, kRobotZeroCompressSize);
-            if (fread(compBuf.data() + kRobotZeroCompressSize, 1, compSize, _f) != compSize) break;
-            finalCompSize += kRobotZeroCompressSize;
-        } else {
-            compBuf.resize(compSize);
-            if (fread(compBuf.data(), 1, compSize, _f) != compSize) break;
-        }
-
-        std::vector<int16_t> samples(finalCompSize);
-        int16_t predictor = 0;
-        deDPCM16Mono(samples.data(), compBuf.data(), (uint32_t)finalCompSize, predictor);
-
-        // append decoded samples sequentially
-        outSeq.insert(outSeq.end(), samples.begin(), samples.end());
-
-        accum += compSize;
-    }
-
-    std::fprintf(stderr, "audio: decoded sequence samples(total packets)=%zu (incl primer)\n", outSeq.size());
-
-    if (outSeq.empty()) return;
-    }
-
-    // Heuristic interleaving (ScummVM-like): write packets alternately into
-    // even/odd sample positions. Use packet order to determine parity. This
-    // approximates the RobotAudioStream behaviour when per-packet positions
-    // are not available. Each packet is written sequentially at the next
-    // available tick slot.
-    size_t totalSamples = outSeq.size();
-    // We'll place samples into an interleaved buffer where final size is
-    // roughly totalSamples * 2 (every-other layout). Allocate conservatively.
-    size_t approxOutSize = totalSamples * 2 + 1024;
-    std::vector<int16_t> interleaved(approxOutSize, 0);
-    std::vector<char> written(approxOutSize, 0);
-
-    size_t writeTick = 0; // logical tick cursor (in source-sample units)
-    size_t packetIndex = 0;
-    for (size_t i = 0; i < _packetSizes.size(); ++i) {
-        uint32_t compSize = _packetSizes[i];
-        if (compSize == 0) continue;
-
-        // decode block at this position (we already decoded above into outSeq
-        // as consecutive samples). Instead, read/decode again here for
-        // correctness of boundaries (performant enough for extraction tool).
-        // Seek to proper offset
-        // compute file offset for this block
-        uint64_t fileOffset = (uint64_t)(_recordPositions[0] + _videoSizes[0]);
-        // compute accumulative offset up to this block
-        uint64_t accum = 0;
-        for (size_t j = 0; j < i; ++j) accum += _packetSizes[j];
-        fileOffset += accum;
-        if (!seekSet((size_t)fileOffset)) break;
-
-        std::vector<uint8_t> compBuf;
-        size_t finalCompSize = compSize;
-        if (_audioBlockSize != 0 && compSize != _audioBlockSize) {
-            compBuf.resize(kRobotZeroCompressSize + compSize);
-            std::memset(compBuf.data(), 0, kRobotZeroCompressSize);
-            if (fread(compBuf.data() + kRobotZeroCompressSize, 1, compSize, _f) != compSize) break;
-            finalCompSize += kRobotZeroCompressSize;
-        } else {
-            compBuf.resize(compSize);
-            if (fread(compBuf.data(), 1, compSize, _f) != compSize) break;
-        }
-
-        std::vector<int16_t> samples(finalCompSize);
-        int16_t predictor = 0;
-        deDPCM16Mono(samples.data(), compBuf.data(), (uint32_t)finalCompSize, predictor);
-
-        // ensure capacity
-        size_t needed = (writeTick + samples.size()) * 2 + 4;
-        if (needed > interleaved.size()) {
-            size_t newSize = std::max(needed, interleaved.size() * 2);
-            interleaved.resize(newSize, 0);
-            written.resize(newSize, 0);
-        }
-
-        // parity: even packets -> bufIdx 0, odd -> bufIdx 1
-        size_t bufIdx = (packetIndex % 2 == 0) ? 0 : 1;
-        size_t dest = writeTick * 2 + bufIdx;
-        for (size_t s = 0; s < samples.size(); ++s) {
-            size_t idx = dest + s * 2;
-            if (idx < interleaved.size()) {
-                interleaved[idx] = samples[s];
-                written[idx] = 1;
+            // Append to correct channel: position % 4 == 0 -> left
+            if (audioPos % 4 == 0) {
+                leftChan.insert(leftChan.end(), samples.begin(), samples.end());
+            } else {
+                rightChan.insert(rightChan.end(), samples.begin(), samples.end());
             }
         }
-
-        writeTick += samples.size();
-        ++packetIndex;
     }
 
-    // Also write primer packets (they were decoded earlier) at the start
-    // if present: they should already be present in 'packets' vector; but in
-    // some flows we decoded them earlier into 'packets' — ensure they are in
-    // the interleaved buffer by prepending if necessary.
-    // (Simpler approach: already handled above by decoding each packet in order.)
-
-    // Interpolate missing samples in interleaved buffer
-    ssize_t lastIndex = (ssize_t)interleaved.size() - 1;
-    for (ssize_t i = 0; i <= lastIndex; ++i) {
-        if (written[i]) continue;
-        ssize_t l = i - 1;
-        while (l >= 0 && !written[l]) --l;
-        ssize_t r = i + 1;
-        while (r <= lastIndex && !written[r]) ++r;
-        if (l >= 0 && r <= lastIndex) {
-            int16_t lv = interleaved[l];
-            int16_t rv = interleaved[r];
-            double t = double(i - l) / double(r - l);
-            interleaved[i] = (int16_t)((1.0 - t) * lv + t * rv);
-            written[i] = 1;
-        } else if (l >= 0) {
-            interleaved[i] = interleaved[l];
-            written[i] = 1;
-        } else if (r <= lastIndex) {
-            interleaved[i] = interleaved[r];
-            written[i] = 1;
-        }
+    // Step 3: Interleave into stereo
+    size_t maxSize = std::max(leftChan.size(), rightChan.size());
+    std::vector<int16_t> stereo(maxSize * 2);
+    
+    for (size_t i = 0; i < maxSize; ++i) {
+        stereo[i * 2] = (i < leftChan.size()) ? leftChan[i] : 0;
+        stereo[i * 2 + 1] = (i < rightChan.size()) ? rightChan[i] : 0;
     }
 
-    // Compute final length (trim trailing zeros)
-    ssize_t finalLen = (ssize_t)interleaved.size();
-    while (finalLen > 0 && !written[finalLen-1]) --finalLen;
-    if (finalLen <= 0) return;
+    std::fprintf(stderr, "audio: %zu stereo frames (%.2f sec), L=%zu R=%zu\n", 
+                 maxSize, (double)maxSize / 22050.0, leftChan.size(), rightChan.size());
 
-    // Deliver via callback in chunks
+    if (stereo.empty()) return;
+
     const size_t CHUNK = 4096;
     size_t sent = 0;
-    while (sent < (size_t)finalLen) {
-        size_t toSend = std::min(CHUNK, (size_t)finalLen - sent);
-        cb(interleaved.data() + sent, toSend);
+    while (sent < stereo.size()) {
+        size_t toSend = std::min(CHUNK, stereo.size() - sent);
+        cb(stereo.data() + sent, toSend);
         sent += toSend;
     }
 }

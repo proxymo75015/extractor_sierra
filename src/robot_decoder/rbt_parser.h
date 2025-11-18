@@ -12,6 +12,9 @@ public:
     bool parseHeader();
     void dumpMetadata(const char *outDir);
     size_t getNumFrames() const;
+    // Frame audio helpers (return 0 if none)
+    int32_t getFrameAudioPosition(size_t frameIndex);
+    int32_t getFrameAudioSize(size_t frameIndex);
     bool extractFrame(size_t frameIndex, const char *outDir);
     bool hasAudio() const { return _hasAudio; }
     void extractAllAudio(std::function<void(const int16_t*, size_t)> cb);

@@ -53,6 +53,21 @@ int main(int argc, char **argv) {
         }
     }
 
+    // Optional: dump a timeline mapping frames -> audio positions
+    if (argc >= 4 && std::strcmp(argv[3], "timeline") == 0) {
+        std::string outfile = std::string(outDir) + "/timeline.csv";
+        std::ofstream tf(outfile);
+        tf << "frame,audio_pos,audio_size,audio_time_seconds\n";
+        for (size_t i = 0; i < parser.getNumFrames(); ++i) {
+            int32_t audioPos = parser.getFrameAudioPosition(i);
+            int32_t audioSize = parser.getFrameAudioSize(i);
+            double t = (double)audioPos / 22050.0; // Robot sample rate
+            tf << i << "," << audioPos << "," << audioSize << "," << t << "\n";
+        }
+        tf.close();
+        std::printf("Wrote timeline to %s\n", outfile.c_str());
+    }
+
     // Audio extraction is optional: pass fourth arg "audio" to enable.
     if (parser.hasAudio() && argc >= 5 && std::strcmp(argv[4], "audio") == 0) {
         std::string audioOut = std::string(outDir) + "/audio.raw.pcm";
@@ -64,7 +79,8 @@ int main(int argc, char **argv) {
                 totalSamples += wrote;
             });
             std::fclose(af);
-            std::printf("Wrote raw PCM to %s (mono 22050Hz 16-bit) samples=%zu\n", audioOut.c_str(), totalSamples);
+            std::printf("Wrote raw PCM to %s (stereo 22050Hz 16-bit) samples=%zu frames=%zu\n", 
+                       audioOut.c_str(), totalSamples, totalSamples/2);
         }
     } else if (parser.hasAudio()) {
         std::fprintf(stderr, "Audio present in file; skipping extraction (pass 'audio' arg to enable)\n");
