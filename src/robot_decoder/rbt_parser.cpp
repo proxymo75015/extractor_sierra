@@ -156,10 +156,62 @@ bool RbtParser::parseHeader() {
         }
     }
 
-    // Palette
+    // Palette (HunkPalette format)
     if (hasPalette) {
-        _paletteData.resize(_paletteSize);
-        fread(_paletteData.data(),1,_paletteSize,_f);
+        long palOffset = ftell(_f);
+        std::vector<uint8_t> rawPalette(_paletteSize);
+        fread(rawPalette.data(), 1, _paletteSize, _f);
+        
+        // Parse HunkPalette header
+        // Offset 10: numPalettes (1 byte)
+        uint8_t numPalettes = rawPalette[10];
+        
+        if (numPalettes == 1 && _paletteSize >= 35) {
+            // Skip hunk header (13 bytes) + palette offset table (2 bytes)
+            size_t entryOffset = 13 + 2 * numPalettes;
+            
+            // Read entry header (22 bytes total)
+            uint8_t startColor = rawPalette[entryOffset + 10];
+            uint16_t numColors = rawPalette[entryOffset + 14] | (rawPalette[entryOffset + 15] << 8);
+            uint8_t used = rawPalette[entryOffset + 16];
+            uint8_t sharedUsed = rawPalette[entryOffset + 17];
+            
+            std::fprintf(stderr, "HunkPalette: startColor=%u numColors=%u used=%u sharedUsed=%u\n",
+                        startColor, numColors, used, sharedUsed);
+            
+            // Palette data starts at entry offset + 22
+            size_t dataOffset = entryOffset + 22;
+            
+            // Allocate palette for 256 colors (initialized to black)
+            _paletteData.assign(768, 0);
+            
+            if (sharedUsed) {
+                // RGB format (3 bytes per color)
+                for (int i = 0; i < numColors && i + startColor < 256; ++i) {
+                    size_t srcIdx = dataOffset + i * 3;
+                    size_t dstIdx = (startColor + i) * 3;
+                    if (srcIdx + 2 < rawPalette.size()) {
+                        _paletteData[dstIdx] = rawPalette[srcIdx];
+                        _paletteData[dstIdx + 1] = rawPalette[srcIdx + 1];
+                        _paletteData[dstIdx + 2] = rawPalette[srcIdx + 2];
+                    }
+                }
+            } else {
+                // used+RGB format (4 bytes per color)
+                for (int i = 0; i < numColors && i + startColor < 256; ++i) {
+                    size_t srcIdx = dataOffset + i * 4;
+                    size_t dstIdx = (startColor + i) * 3;
+                    if (srcIdx + 3 < rawPalette.size()) {
+                        // Skip 'used' flag at srcIdx
+                        _paletteData[dstIdx] = rawPalette[srcIdx + 1];
+                        _paletteData[dstIdx + 1] = rawPalette[srcIdx + 2];
+                        _paletteData[dstIdx + 2] = rawPalette[srcIdx + 3];
+                    }
+                }
+            }
+        } else {
+            std::fprintf(stderr, "Warning: unexpected palette format (numPalettes=%u)\n", numPalettes);
+        }
     } else {
         fseek(_f, _paletteSize, SEEK_CUR);
     }
@@ -603,13 +655,34 @@ uint32_t RbtParser::createCel5(const uint8_t *rawVideoData, const int16_t screen
         }
     }
 
-    // write PGM
+    // write PPM (RGB) avec palette
     char name[512];
-    snprintf(name, sizeof(name), "%s/frame_%04zu_cel_%02d.pgm", outDir, frameIndex, screenItemIndex);
-    std::ofstream img(name, std::ios::binary);
-    img << "P5\n" << celWidth << " " << celHeight << "\n255\n";
-    if (!finalPixels.empty()) img.write((const char*)finalPixels.data(), finalPixels.size());
-    img.close();
+    
+    if (!_paletteData.empty() && _paletteSize >= 768) {
+        snprintf(name, sizeof(name), "%s/frame_%04zu_cel_%02d.ppm", outDir, frameIndex, screenItemIndex);
+        std::ofstream img(name, std::ios::binary);
+        img << "P6\n" << celWidth << " " << celHeight << "\n255\n";
+        
+        for (size_t i = 0; i < finalPixels.size(); ++i) {
+            uint8_t idx = finalPixels[i];
+            size_t palOffset = idx * 3;
+            
+            if (palOffset + 2 < _paletteData.size()) {
+                img.put(_paletteData[palOffset]);
+                img.put(_paletteData[palOffset + 1]);
+                img.put(_paletteData[palOffset + 2]);
+            } else {
+                img.put(0); img.put(0); img.put(0);
+            }
+        }
+        img.close();
+    } else {
+        snprintf(name, sizeof(name), "%s/frame_%04zu_cel_%02d.pgm", outDir, frameIndex, screenItemIndex);
+        std::ofstream img(name, std::ios::binary);
+        img << "P5\n" << celWidth << " " << celHeight << "\n255\n";
+        if (!finalPixels.empty()) img.write((const char*)finalPixels.data(), finalPixels.size());
+        img.close();
+    }
 
     return 22 + dataSize;
 }
