@@ -14,6 +14,7 @@
 #include "memory_stream.h"
 #include "decompressor_lzs.h"
 #include "sci_util.h"
+#include "robot_audio_stream.h"
 
 // Local constants copied from ScummVM behaviour.
 static const size_t kRobotZeroCompressSize = 2048;
@@ -699,39 +700,46 @@ void RbtParser::createCels5(const uint8_t *rawVideoData, const int16_t numCels, 
 void RbtParser::extractAllAudio(std::function<void(const int16_t*, size_t)> cb) {
     if (!_hasAudio) return;
 
-    // Extraction séquentielle: chaque packet placé l'un après l'autre
-    // Les canaux L et R progressent de manière synchronisée
+    // Utilisation du buffer circulaire RobotAudioStream pour reproduire fidèlement
+    // le comportement de ScummVM
     
-    int32_t writePositionL = 0;  // Position pour canal L (indices pairs: 0, 2, 4...)
-    int32_t writePositionR = 1;  // Position pour canal R (indices impairs: 1, 3, 5...)
-    std::vector<std::tuple<int32_t, int32_t, std::vector<int16_t>>> packets; // (writePos, bufferIndex, samples)
+    // Taille du buffer: (bytesPerSample * channels * sampleRate * 2000ms) / 1000ms) & ~3
+    // où bytesPerSample = 2, channels = 1, sampleRate = 22050
+    const int32_t bufferSize = 88200;
+    RobotAudioStream audioStream(bufferSize);
+    
+    std::fprintf(stderr, "Using RobotAudioStream with circular buffer (size=%d bytes)\n", bufferSize);
 
-    // Per-frame packets : placer séquentiellement sans primers
-    bool usePrimers = false;
-    if (usePrimers && _evenPrimerSize > 0 && !_primerEvenRaw.empty()) {
-        std::vector<int16_t> evenSamples(_evenPrimerSize);
-        int16_t pred = 0;
-        deDPCM16Mono(evenSamples.data(), _primerEvenRaw.data(), (uint32_t)_evenPrimerSize, pred);
-        packets.push_back(std::make_tuple(0, 0, evenSamples)); // position=0, bufferIndex=0 (L)
-        
-        // Even primer écrit à [0, 2, 4, ..., (size-1)*2]
-        writePositionL = _evenPrimerSize * 2;
-        std::fprintf(stderr, "DEBUG: evenPrimer pos=0, size=%d samples, nextWritePosL=%d\n", _evenPrimerSize, writePositionL);
+    // 1. Soumettre les primers (si disponibles)
+    if (_evenPrimerSize > 0 && !_primerEvenRaw.empty()) {
+        // Position 0 pour le primer even
+        RobotAudioStream::RobotAudioPacket primerPacket(
+            _primerEvenRaw.data(), 
+            _evenPrimerSize, 
+            0  // Position 0 (even)
+        );
+        audioStream.addPacket(primerPacket);
+        std::fprintf(stderr, "Added evenPrimer: pos=0, size=%d\n", _evenPrimerSize);
     }
     
-    if (usePrimers && _oddPrimerSize > 0 && !_primerOddRaw.empty()) {
-        std::vector<int16_t> oddSamples(_oddPrimerSize);
-        int16_t pred = 0;
-        deDPCM16Mono(oddSamples.data(), _primerOddRaw.data(), (uint32_t)_oddPrimerSize, pred);
-        packets.push_back(std::make_tuple(1, 1, oddSamples)); // position=1, bufferIndex=1 (R)
-        
-        // Odd primer écrit à [1, 3, 5, ..., 1 + (size-1)*2]
-        writePositionR = 1 + _oddPrimerSize * 2;
-        std::fprintf(stderr, "DEBUG: oddPrimer pos=1, size=%d samples, nextWritePosR=%d\n", 
-                    _oddPrimerSize, writePositionR);
+    if (_oddPrimerSize > 0 && !_primerOddRaw.empty()) {
+        // Position 2 pour le primer odd (ScummVM utilise position % 4 pour déterminer even/odd)
+        RobotAudioStream::RobotAudioPacket primerPacket(
+            _primerOddRaw.data(), 
+            _oddPrimerSize, 
+            2  // Position 2 (odd car 2 % 4 != 0)
+        );
+        audioStream.addPacket(primerPacket);
+        std::fprintf(stderr, "Added oddPrimer: pos=2, size=%d\n", _oddPrimerSize);
     }
 
-    // 2. Ajouter per-frame packets
+    // 2. Collecter tous les packets audio per-frame
+    struct AudioPacketData {
+        int32_t audioPos;
+        std::vector<uint8_t> compressedData;
+    };
+    std::vector<AudioPacketData> packets;
+
     if (!_recordPositions.empty() && !_videoSizes.empty() && !_packetSizes.empty()) {
         for (size_t i = 0; i < _numFramesTotal && i < _packetSizes.size(); ++i) {
             if (_packetSizes[i] == 0) continue;
@@ -739,100 +747,161 @@ void RbtParser::extractAllAudio(std::function<void(const int16_t*, size_t)> cb) 
             uint64_t headerPos = (uint64_t)_recordPositions[i] + (uint64_t)_videoSizes[i];
             if (!seekSet((size_t)headerPos)) break;
 
-            int32_t audioPos = readSint32(_bigEndian);
-            int32_t audioSizeFromHeader = readSint32(_bigEndian);
+            // Audio headers are ALWAYS little-endian, even in Mac files
+            int32_t audioPos = readSint32(false);  // force little-endian
+            int32_t audioSizeFromHeader = readSint32(false);  // force little-endian
             
             if (audioPos == 0 || audioSizeFromHeader <= 0) continue;
             
             uint32_t actualSize = (uint32_t)audioSizeFromHeader;
             if (actualSize > 10 * 1024 * 1024) continue;
 
-            std::vector<uint8_t> compBuf;
-            const uint8_t *dataPtr = nullptr;
-            size_t decompSize = actualSize;  // Décompresser UNIQUEMENT actualSize
+            AudioPacketData pkt;
+            pkt.audioPos = audioPos;
             
+            // Lire les données compressées
             if (_audioBlockSize != 0 && actualSize != _audioBlockSize) {
-                compBuf.resize(kRobotZeroCompressSize + actualSize);
-                std::memset(compBuf.data(), 0, kRobotZeroCompressSize);
-                if (fread(compBuf.data() + kRobotZeroCompressSize, 1, actualSize, _f) != actualSize) {
+                // Ajouter le padding zero-compress
+                pkt.compressedData.resize(kRobotZeroCompressSize + actualSize);
+                std::memset(pkt.compressedData.data(), 0, kRobotZeroCompressSize);
+                if (fread(pkt.compressedData.data() + kRobotZeroCompressSize, 1, actualSize, _f) != actualSize) {
                     continue;
                 }
-                // Pointer vers les données réelles (après les 2048 zéros artificiels)
-                dataPtr = compBuf.data() + kRobotZeroCompressSize;
             } else {
-                compBuf.resize(actualSize);
-                if (fread(compBuf.data(), 1, actualSize, _f) != actualSize) {
+                pkt.compressedData.resize(actualSize);
+                if (fread(pkt.compressedData.data(), 1, actualSize, _f) != actualSize) {
                     continue;
                 }
-                dataPtr = compBuf.data();
             }
-
-            std::vector<int16_t> samples(decompSize);
-            int16_t pred = 0;  // Predictor reset à 0 pour CHAQUE paquet
-            deDPCM16Mono(samples.data(), dataPtr, (uint32_t)decompSize, pred);
             
-            // Pour extraction séquentielle : placer après les primers
             int8_t bufferIndex = (audioPos % 4) ? 1 : 0;
+            if (true) {
+                std::fprintf(stderr, "Frame %zu: audioPos=%d bufferIndex=%d (%s) compSize=%u\n", 
+                            i, audioPos, bufferIndex, bufferIndex ? "ODD" : "EVEN", actualSize);
+            }
             
-            // Choisir la position selon le canal
-            int32_t startPos = (bufferIndex == 0) ? writePositionL : writePositionR;
-            packets.push_back(std::make_tuple(startPos, bufferIndex, samples));
-            
-            // Avancer les DEUX positions ensemble (synchronisation stéréo)
-            int32_t advancement = (int32_t)samples.size() * 2;  // *2 car on écrit tous les 2 indices
-            writePositionL += advancement;
-            writePositionR += advancement;
+            packets.push_back(std::move(pkt));
         }
     }
 
-    if (packets.empty()) return;
+    std::fprintf(stderr, "Collected %zu audio packets from frames\n", packets.size());
+    
+    // Debug: afficher les derniers packets
+    if (packets.size() > 0) {
+        std::fprintf(stderr, "Last 10 packets:\n");
+        for (size_t i = std::max(size_t(0), packets.size() - 10); i < packets.size(); ++i) {
+            int8_t bufferIndex = (packets[i].audioPos % 4) ? 1 : 0;
+            std::fprintf(stderr, "  Packet %zu: audioPos=%d, size=%zu, bufferIndex=%d (%s)\n",
+                        i, packets[i].audioPos, packets[i].compressedData.size(),
+                        bufferIndex, bufferIndex ? "ODD" : "EVEN");
+        }
+    }
 
-    // Créer buffer stéréo basé sur la position maximale atteinte
-    int32_t maxPosition = std::max(writePositionL, writePositionR);
-    size_t bufferSizeInSamples = (size_t)maxPosition;  // En int16_t
-    std::vector<int16_t> stereoBuffer(bufferSizeInSamples, 0);
-
-    // Écrire tous les packets avec copyEveryOtherSample logic
-    int pkt_idx = 0;
-    for (auto &pkt : packets) {
-        int32_t writePos = std::get<0>(pkt);  // Maintenant c'est writePosition, pas audioPos
-        int32_t bufferIndex = std::get<1>(pkt);
-        const std::vector<int16_t> &samples = std::get<2>(pkt);
-        
-        // writePos est déjà en index int16, pas en bytes
-        size_t targetSampleIdx = (size_t)writePos;
-        
-        // DEBUG
-        int written = 0, skipped = 0;
-        
-        // copyEveryOtherSample: écrit tous les 2 samples
-        for (size_t i = 0; i < samples.size(); ++i) {
-            size_t idx = targetSampleIdx + i * 2;
-            if (idx < stereoBuffer.size()) {
-                stereoBuffer[idx] = samples[i];
-                written++;
+    // 3. Streaming progressif : ajouter packets et lire en même temps
+    std::vector<int16_t> monoBuffer;
+    const int CHUNK_SIZE = 11025;  // 0.5 sec @ 22050 Hz stéréo
+    int16_t chunk[CHUNK_SIZE];
+    
+    size_t nextPacketIndex = 0;
+    int totalRead = 0;
+    bool allPacketsSubmitted = false;
+    
+    // Boucle de streaming : ajouter des packets et lire des échantillons
+    while (true) {
+        // Ajouter des packets tant qu'il y en a et que le buffer les accepte
+        int packetsAdded = 0;
+        while (nextPacketIndex < packets.size()) {
+            auto &pkt = packets[nextPacketIndex];
+            
+            const uint8_t *dataPtr = pkt.compressedData.data();
+            int dataSize = (int)pkt.compressedData.size();
+            
+            // Ajuster le pointeur si on a le padding zero-compress
+            if (dataSize > kRobotZeroCompressSize && _audioBlockSize != 0) {
+                dataPtr += kRobotZeroCompressSize;
+                dataSize -= kRobotZeroCompressSize;
+            }
+            
+            RobotAudioStream::RobotAudioPacket packet(dataPtr, dataSize, pkt.audioPos);
+            
+            bool accepted = audioStream.addPacket(packet);
+            if (accepted) {
+                nextPacketIndex++;
+                packetsAdded++;
             } else {
-                skipped++;
+                // Buffer plein, on doit lire avant de continuer
+                break;
             }
         }
         
-        if (skipped > 0) {
-            std::fprintf(stderr, "WARNING: pkt#%d skipped %d samples (buffer overflow)\n", pkt_idx, skipped);
+        // Si tous les packets ont été soumis, le marquer
+        if (nextPacketIndex >= packets.size() && !allPacketsSubmitted) {
+            // Calculer la position de fin: dernier packet position + size
+            int32_t endPosition = 0;
+            if (!packets.empty()) {
+                const auto& lastPacket = packets.back();
+                // Position de fin = audioPos + taille décompressée
+                // Taille décompressée = taille compressée (1 byte DPCM par sample)
+                endPosition = lastPacket.audioPos + (int32_t)lastPacket.compressedData.size();
+                // Enlever le padding zero-compress si présent
+                if (_audioBlockSize != 0 && lastPacket.compressedData.size() > kRobotZeroCompressSize) {
+                    endPosition -= kRobotZeroCompressSize;
+                }
+                std::fprintf(stderr, "Calculated audio end position: %d (last packet %d + %zu bytes)\n",
+                            endPosition, lastPacket.audioPos, lastPacket.compressedData.size());
+            }
+            
+            audioStream.finish(endPosition);
+            allPacketsSubmitted = true;
+            std::fprintf(stderr, "All %zu packets submitted to stream\n", packets.size());
         }
-        pkt_idx++;
+        
+        // Lire des échantillons disponibles
+        // Si buffer plein, lire plusieurs chunks pour libérer de l'espace
+        int chunksToRead = (packetsAdded == 0 && nextPacketIndex < packets.size()) ? 4 : 1;
+        int totalChunkRead = 0;
+        
+        for (int c = 0; c < chunksToRead; ++c) {
+            int numRead = audioStream.readBuffer(chunk, CHUNK_SIZE);
+            if (numRead > 0) {
+                monoBuffer.insert(monoBuffer.end(), chunk, chunk + numRead);
+                totalRead += numRead;
+                totalChunkRead += numRead;
+            } else {
+                break;
+            }
+        }
+        
+        // Terminer si plus rien à lire et tous les packets soumis
+        if (totalChunkRead == 0 && allPacketsSubmitted) {
+            break;
+        }
+        
+        // Sécurité : éviter boucle infinie si bloqué
+        if (totalChunkRead == 0 && nextPacketIndex < packets.size()) {
+            std::fprintf(stderr, "Warning: Deadlock - packet %zu/%zu waiting\n", nextPacketIndex, packets.size());
+            break;
+        }
     }
 
-    std::fprintf(stderr, "audio: %zu samples (%.2f sec @ 22050Hz stereo), %d packets (inc. primers), maxPos=%d\n", 
-                 stereoBuffer.size(), (double)stereoBuffer.size() / 22050.0 / 2, 
-                 (int)packets.size(), maxPosition);
+    std::fprintf(stderr, "Streaming complete: read %d stereo samples from RobotAudioStream\n", totalRead);
 
-    if (stereoBuffer.empty()) return;
+    if (monoBuffer.empty()) {
+        std::fprintf(stderr, "Warning: No audio samples read from stream\n");
+        return;
+    }
 
-    const size_t CHUNK = 4096;
+    // Le buffer est déjà en stéréo (EVEN et ODD entrelacés) !
+    // Pas besoin de conversion mono → stéréo
+    std::fprintf(stderr, "Audio extraction complete: %zu samples (%.2f sec @ 22050Hz stereo)\n", 
+                 monoBuffer.size(), (double)monoBuffer.size() / 22050.0 / 2);
+
+    // Envoyer les données au callback (déjà en stéréo)
+    const size_t SEND_CHUNK = 4096;
     size_t sent = 0;
-    while (sent < stereoBuffer.size()) {
-        size_t toSend = std::min(CHUNK, stereoBuffer.size() - sent);
-        cb(stereoBuffer.data() + sent, toSend);
+    while (sent < monoBuffer.size()) {
+        size_t toSend = std::min(SEND_CHUNK, monoBuffer.size() - sent);
+        cb(monoBuffer.data() + sent, toSend);
         sent += toSend;
     }
 }

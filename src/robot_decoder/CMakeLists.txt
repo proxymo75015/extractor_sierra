@@ -9,6 +9,7 @@ add_executable(robot_decoder
     dpcm.cpp
     decompressor_lzs.cpp
     sci_util.cpp
+    robot_audio_stream.cpp
 )
 
 target_include_directories(robot_decoder PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

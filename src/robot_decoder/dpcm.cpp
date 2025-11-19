@@ -23,8 +23,9 @@ static void deDPCM16Channel(int16_t *out, int16_t &sample, uint8_t delta) {
     if (delta & 0x80) nextSample -= tableDPCM16[delta & 0x7f];
     else nextSample += tableDPCM16[delta];
 
-    if (nextSample > 32767) nextSample -= 65536;
-    else if (nextSample < -32768) nextSample += 65536;
+    // Clamp to avoid clipping artifacts instead of wrapping
+    if (nextSample > 32767) nextSample = 32767;
+    else if (nextSample < -32768) nextSample = -32768;
 
     *out = sample = (int16_t)nextSample;
 }
