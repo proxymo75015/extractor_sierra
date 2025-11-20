@@ -71,10 +71,65 @@ audioPos = position_du_packet_dans_le_flux_audio
 bufferIndex = 0 if (audioPos % 4 == 0) else 1
 
 if bufferIndex == 0:
-    canal = LEFT   # EVEN
+    canal = LEFT   # EVEN (divisible par 4)
 else:
-    canal = RIGHT  # ODD
+    canal = RIGHT  # ODD (divisible par 2, mais PAS par 4)
 ```
+
+### ⚠️ Clarification importante
+
+**Formule correcte** : `audioPos % 4`
+
+Le commentaire dans ScummVM dit :
+> "values of position will always be divisible either by 2 (even) or by 4 (odd)"
+
+Cela signifie :
+- **Buffer EVEN (LEFT)** : `audioPos % 4 == 0` → positions 0, 4, 8, 12, 16...
+- **Buffer ODD (RIGHT)** : `audioPos % 4 != 0` → positions 2, 6, 10, 14, 18...
+
+Toutes les positions sont divisibles par 2 (format stéréo entrelacé), mais seules les positions EVEN sont divisibles par 4.
+
+### 🎯 Runway DPCM (8 bytes)
+
+Les packets audio Robot contiennent un **runway DPCM de 8 bytes** au début :
+
+**Packets réguliers** (frames normales) :
+- Taille compressée: 2213 bytes
+- Décompressé: 2213 samples (16-bit)
+- Runway: 8 premiers samples (pour initialiser le décodeur)
+- Samples utiles: 2205 samples
+- **audioPos avance de 2205** → le runway est **automatiquement exclu** des positions
+
+**Primers** (initialisation) :
+- Even primer: 19,922 bytes → runway **INCLUS** (utilisé pour initialisation)
+- Odd primer: 21,024 bytes → runway **INCLUS** (utilisé pour initialisation)
+
+Le runway sert à amener le signal DPCM à la bonne amplitude au 9ème sample.
+
+**Implémentation** :
+- **C++ (robot_decoder)** : Utilise `RobotAudioStream` qui gère le runway via le système de positions. Les 2213 bytes sont décompressés, mais seuls 2205 samples sont placés dans le buffer final (le runway est automatiquement exclu par le calcul de `sourceByte`).
+- **Python (extract_lr_simple.py)** : Saute explicitement le runway avec `samples = all_samples[8:8+2205]` (ligne 114).
+
+Les deux approches sont correctes et produisent le même résultat.
+
+### Exemple concret
+
+```
+audioPos:    0    2    4    6    8   10   12   14   16   18
+% 2:         0    0    0    0    0    0    0    0    0    0  ← Toutes divisibles par 2
+% 4:         0    2    0    2    0    2    0    2    0    2  ← Seules 0,4,8,12,16 == 0
+Buffer:     EVEN ODD EVEN ODD EVEN ODD EVEN ODD EVEN ODD
+Canal:       L    R    L    R    L    R    L    R    L    R
+```
+
+**Pourquoi % 4 et pas % 2 ?**
+
+Si on utilisait `audioPos % 2 == 0` pour EVEN, on aurait :
+- Positions 0, 2, 4, 6, 8, 10... → EVEN
+- Positions 1, 3, 5, 7, 9, 11... → ODD
+
+Or, les positions sont **toujours paires** (0, 2, 4, 6...), donc % 2 donnerait toujours 0 !
+C'est pour cela que ScummVM utilise `% 4` pour distinguer les deux buffers.
 
 ### Pattern observé (91.RBT)
 

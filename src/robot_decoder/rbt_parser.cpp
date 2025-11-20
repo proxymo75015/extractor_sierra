@@ -711,23 +711,26 @@ void RbtParser::extractAllAudio(std::function<void(const int16_t*, size_t)> cb) 
     std::fprintf(stderr, "Using RobotAudioStream with circular buffer (size=%d bytes)\n", bufferSize);
 
     // 1. Soumettre les primers (si disponibles)
+    // Note: Les primers INCLUENT le runway DPCM de 8 bytes (utilisés pour initialisation)
     if (_evenPrimerSize > 0 && !_primerEvenRaw.empty()) {
         // Position 0 pour le primer even
+        // bufferIndex = (0 % 4) ? 1 : 0 = 0 (EVEN)
         RobotAudioStream::RobotAudioPacket primerPacket(
             _primerEvenRaw.data(), 
-            _evenPrimerSize, 
-            0  // Position 0 (even)
+            _evenPrimerSize,  // 19922 bytes compressés → 19922 samples (incluant runway)
+            0  // Position 0 (EVEN)
         );
         audioStream.addPacket(primerPacket);
         std::fprintf(stderr, "Added evenPrimer: pos=0, size=%d\n", _evenPrimerSize);
     }
     
     if (_oddPrimerSize > 0 && !_primerOddRaw.empty()) {
-        // Position 2 pour le primer odd (ScummVM utilise position % 4 pour déterminer even/odd)
+        // Position 2 pour le primer odd
+        // bufferIndex = (2 % 4) ? 1 : 0 = 1 (ODD car 2 % 4 = 2 ≠ 0)
         RobotAudioStream::RobotAudioPacket primerPacket(
             _primerOddRaw.data(), 
-            _oddPrimerSize, 
-            2  // Position 2 (odd car 2 % 4 != 0)
+            _oddPrimerSize,  // 21024 bytes compressés → 21024 samples (incluant runway)
+            2  // Position 2 (ODD)
         );
         audioStream.addPacket(primerPacket);
         std::fprintf(stderr, "Added oddPrimer: pos=2, size=%d\n", _oddPrimerSize);
@@ -779,6 +782,10 @@ void RbtParser::extractAllAudio(std::function<void(const int16_t*, size_t)> cb) 
                 std::fprintf(stderr, "Frame %zu: audioPos=%d bufferIndex=%d (%s) compSize=%u\n", 
                             i, audioPos, bufferIndex, bufferIndex ? "ODD" : "EVEN", actualSize);
             }
+            
+            // Note: audioPos avance de 2205 entre packets (pas 2213)
+            // → Le runway DPCM de 8 bytes est déjà EXCLU des positions dans le fichier
+            // RobotAudioStream décompresse les 2213 bytes mais utilise seulement 2205 samples utiles
             
             packets.push_back(std::move(pkt));
         }

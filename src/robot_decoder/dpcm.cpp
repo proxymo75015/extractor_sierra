@@ -30,6 +30,12 @@ static void deDPCM16Channel(int16_t *out, int16_t &sample, uint8_t delta) {
     *out = sample = (int16_t)nextSample;
 }
 
+// Décompression DPCM16 mono (Sierra SOL format)
+// Note: Les packets audio Robot contiennent un "runway" de 8 bytes au début
+// qui sert à initialiser le décodeur DPCM (pour atteindre la bonne amplitude au 9ème sample).
+// - Packets réguliers: 2213 bytes compressés → 2213 samples, mais audioPos avance de 2205
+//   → Les 8 premiers samples sont le runway (ignorés lors du placement dans le buffer final)
+// - Primers: 19922 et 21024 bytes → runway INCLUS et UTILISÉ (fait partie du signal)
 void deDPCM16Mono(int16_t *out, const uint8_t *in, uint32_t numBytes, int16_t &sample) {
     for (uint32_t i=0;i<numBytes;i++) {
         uint8_t delta = *in++;
