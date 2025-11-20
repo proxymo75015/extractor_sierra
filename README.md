@@ -44,60 +44,31 @@ make -j$(nproc)
 
 ## 💡 Utilisation
 
-### 1. Extraction complète (vidéo + audio)
+### Extraction complète (vidéo + audio)
 
 ```bash
 ./build/robot_decoder \
     ScummVM/rbt/91.RBT \  # Fichier RBT source
     output/ \              # Répertoire de sortie
-    90 \                   # Nombre de frames
-    audio                  # Mode: video, audio, ou all
+    90                     # Nombre de frames (optionnel)
 ```
 
 **Résultat** :
 ```
 output/
 ├── frames/
-│   ├── frame_0000.ppm
-│   ├── frame_0001.ppm
+│   ├── frame_0000_cel_00.ppm
+│   ├── frame_0001_cel_00.ppm
 │   └── ...
-└── audio.raw.pcm (mono 22050Hz, 16-bit)
+├── LEFT.wav   (canal gauche @ 11025Hz mono)
+├── RIGHT.wav  (canal droit @ 11025Hz mono)
+└── output.mp4 (vidéo H.264 + audio AAC stéréo)
 ```
 
-### 2. Génération vidéo MP4
-
-```bash
-# Méthode 1: Script Python (recommandé)
-python3 tools/extract_and_make_video.py \
-    ScummVM/rbt/91.RBT \
-    output/
-
-# Méthode 2: FFmpeg direct
-cd output/
-ffmpeg -framerate 10 -pattern_type glob -i 'frames/*.ppm' \
-       -f s16le -ar 22050 -ac 2 -i audio.raw.pcm \
-       -c:v libx264 -pix_fmt yuv420p -c:a aac \
-       -shortest output.mp4
-```
-
-### 3. Extraction canaux LEFT/RIGHT
-
-```bash
-# 1. Générer le log d'extraction
-./build/robot_decoder \
-    ScummVM/rbt/91.RBT output/ 90 audio 2>&1 | tee audio_extraction.log
-
-# 2. Extraire les canaux séparés
-python3 tools/extract_lr_simple.py \
-    ScummVM/rbt/91.RBT \
-    output_lr/
-```
-
-**Résultat** :
-```
-output_lr/
-├── 91_LEFT_simple.wav   (EVEN channel @ 11025Hz)
-├── 91_RIGHT_simple.wav  (ODD channel @ 11025Hz)
+**Détails** :
+- Les canaux LEFT (EVEN) et RIGHT (ODD) sont extraits **directement** sans buffer circulaire
+- FFmpeg fusionne automatiquement LEFT.wav + RIGHT.wav en stéréo 11025Hz
+- La vidéo finale est générée automatiquement (pas besoin de script Python)
 └── 91_MONO_22050Hz.pcm  (entrelacé)
 ```
 
@@ -147,7 +118,8 @@ extractor_sierra/
 **Structure** :
 ```
 Robot Audio = EVEN channel (11025Hz) + ODD channel (11025Hz)
-           → Entrelacés → Mono 22050Hz
+           → Extraction directe → LEFT.wav + RIGHT.wav
+           → FFmpeg merge → Stéréo 11025Hz
 ```
 
 **Classification des packets** :
@@ -162,13 +134,19 @@ bufferIndex = (audioPos % 4) ? 1 : 0;
 - Primers (19922 + 21024 samples) : runway INCLUS
 - Packets réguliers (2213 bytes) : runway EXCLU (audioPos avance de 2205)
 
+**Différences avec ScummVM** :
+- ✅ Extraction directe (pas de buffer circulaire)
+- ✅ Pas d'interpolation multi-pass
+- ✅ Génération automatique MP4
+- ⚠️ Qualité audio légèrement différente (pas d'interpolation)
+
 ### Algorithme DPCM16
 
 ```cpp
 // Décompression différentielle avec table de lookup
 nextSample = prevSample ± tableDPCM16[delta];
 
-// Clamping (notre amélioration vs wrapping ScummVM)
+// Clamping
 if (nextSample > 32767) nextSample = 32767;
 else if (nextSample < -32768) nextSample = -32768;
 ```

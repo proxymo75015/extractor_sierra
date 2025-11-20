@@ -18,7 +18,7 @@ public:
     int32_t getFrameAudioSize(size_t frameIndex);
     bool extractFrame(size_t frameIndex, const char *outDir);
     bool hasAudio() const { return _hasAudio; }
-    void extractAllAudio(std::function<void(const int16_t*, size_t)> cb);
+    void extractAudioChannels(const char *outDir);
 
 private:
     FILE *_f;

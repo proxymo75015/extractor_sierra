@@ -10,11 +10,11 @@
 #include <sstream>
 
 #include "core/rbt_parser.h"
-#include "formats/dpcm.h"
 
 int main(int argc, char **argv) {
     if (argc < 3) {
-        std::printf("Usage: %s <input.rbt> <out_dir>\n", argv[0]);
+        std::printf("Usage: %s <input.rbt> <out_dir> [max_frames]\n", argv[0]);
+        std::printf("Extracts video frames and LEFT/RIGHT audio to WAV files, then generates MP4\n");
         return 1;
     }
 
@@ -36,59 +36,85 @@ int main(int argc, char **argv) {
 
     std::fprintf(stderr, "RBT: %zu frames, frameRate=%d\n", parser.getNumFrames(), parser.getFrameRate());
 
-    parser.dumpMetadata(outDir);
-
-    // create frames directory
+    // Create output directory structure
+    std::string cmd = std::string("mkdir -p ") + outDir;
+    std::system(cmd.c_str());
+    
     std::string framesDir = std::string(outDir) + "/frames";
-    std::string cmd = std::string("mkdir -p ") + framesDir;
+    cmd = std::string("mkdir -p ") + framesDir;
     std::system(cmd.c_str());
 
+    parser.dumpMetadata(outDir);
+
+    // Extract frames
     size_t maxFrames = parser.getNumFrames();
     if (argc >= 4) {
         int mf = std::atoi(argv[3]);
         if (mf > 0) maxFrames = (size_t)mf;
     }
 
+    std::fprintf(stderr, "\n=== Extracting %zu frames ===\n", maxFrames);
     for (size_t i = 0; i < maxFrames && i < parser.getNumFrames(); ++i) {
         if (!parser.extractFrame(i, framesDir.c_str())) {
             std::fprintf(stderr, "Warning: failed to extract frame %zu\n", i);
         }
     }
 
-    // Optional: dump a timeline mapping frames -> audio positions
-    if (argc >= 4 && std::strcmp(argv[3], "timeline") == 0) {
-        std::string outfile = std::string(outDir) + "/timeline.csv";
-        std::ofstream tf(outfile);
-        tf << "frame,audio_pos,audio_size,audio_time_seconds\n";
-        for (size_t i = 0; i < parser.getNumFrames(); ++i) {
-            int32_t audioPos = parser.getFrameAudioPosition(i);
-            int32_t audioSize = parser.getFrameAudioSize(i);
-            double t = (double)audioPos / 22050.0; // Robot sample rate
-            tf << i << "," << audioPos << "," << audioSize << "," << t << "\n";
-        }
-        tf.close();
-        std::printf("Wrote timeline to %s\n", outfile.c_str());
+    // Extract audio to LEFT.wav and RIGHT.wav
+    if (parser.hasAudio()) {
+        std::fprintf(stderr, "\n=== Extracting audio ===\n");
+        parser.extractAudioChannels(outDir);
     }
 
-    // Audio extraction is optional: pass fourth arg "audio" to enable.
-    if (parser.hasAudio() && argc >= 5 && std::strcmp(argv[4], "audio") == 0) {
-        std::string audioOut = std::string(outDir) + "/audio.raw.pcm";
-        std::FILE *af = std::fopen(audioOut.c_str(), "wb");
-        if (af) {
-            size_t totalSamples = 0;
-            parser.extractAllAudio([&](const int16_t *samples, size_t sampleCount){
-                size_t wrote = fwrite(samples, sizeof(int16_t), sampleCount, af);
-                totalSamples += wrote;
-            });
-            std::fclose(af);
-            std::printf("Wrote raw PCM to %s (stereo 22050Hz 16-bit) samples=%zu frames=%zu\n", 
-                       audioOut.c_str(), totalSamples, totalSamples/2);
-        }
-    } else if (parser.hasAudio()) {
-        std::fprintf(stderr, "Audio present in file; skipping extraction (pass 'audio' arg to enable)\n");
+    // Generate MP4 video with FFmpeg
+    std::fprintf(stderr, "\n=== Generating MP4 video ===\n");
+    
+    std::string leftWav = std::string(outDir) + "/LEFT.wav";
+    std::string rightWav = std::string(outDir) + "/RIGHT.wav";
+    std::string outputMp4 = std::string(outDir) + "/output.mp4";
+    
+    // Check if audio files exist
+    bool hasLeft = (std::ifstream(leftWav).good());
+    bool hasRight = (std::ifstream(rightWav).good());
+    
+    std::ostringstream ffmpegCmd;
+    ffmpegCmd << "ffmpeg -y -framerate " << parser.getFrameRate() 
+              << " -pattern_type glob -i '" << framesDir << "/*.ppm'";
+    
+    if (hasLeft && hasRight) {
+        // Merge L+R into stereo
+        ffmpegCmd << " -i " << leftWav << " -i " << rightWav
+                  << " -filter_complex '[1:a][2:a]amerge=inputs=2[a]' -map 0:v -map '[a]'"
+                  << " -c:v libx264 -pix_fmt yuv420p -preset fast -crf 18"
+                  << " -c:a aac -b:a 192k"
+                  << " -shortest " << outputMp4;
+    } else if (hasLeft) {
+        ffmpegCmd << " -i " << leftWav
+                  << " -c:v libx264 -pix_fmt yuv420p -preset fast -crf 18"
+                  << " -c:a aac -b:a 128k"
+                  << " -shortest " << outputMp4;
+    } else {
+        // Video only
+        ffmpegCmd << " -c:v libx264 -pix_fmt yuv420p -preset fast -crf 18"
+                  << " " << outputMp4;
+    }
+    
+    std::fprintf(stderr, "Running: %s\n", ffmpegCmd.str().c_str());
+    int ret = std::system(ffmpegCmd.str().c_str());
+    
+    if (ret == 0) {
+        std::fprintf(stderr, "\n✅ Success! Output:\n");
+        std::fprintf(stderr, "   Frames:  %s/\n", framesDir.c_str());
+        if (hasLeft) std::fprintf(stderr, "   Audio L: %s\n", leftWav.c_str());
+        if (hasRight) std::fprintf(stderr, "   Audio R: %s\n", rightWav.c_str());
+        std::fprintf(stderr, "   Video:   %s\n", outputMp4.c_str());
+    } else {
+        std::fprintf(stderr, "⚠️  FFmpeg failed (code %d). Output still available:\n", ret);
+        std::fprintf(stderr, "   Frames:  %s/\n", framesDir.c_str());
+        if (hasLeft) std::fprintf(stderr, "   Audio L: %s\n", leftWav.c_str());
+        if (hasRight) std::fprintf(stderr, "   Audio R: %s\n", rightWav.c_str());
     }
 
     std::fclose(f);
-    std::printf("Done. Output in %s\n", outDir);
     return 0;
 }
