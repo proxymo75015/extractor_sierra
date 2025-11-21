@@ -699,6 +699,49 @@ void RbtParser::createCels5(const uint8_t *rawVideoData, const int16_t numCels, 
 }
 
 // ----------------------------------------------------------------------------
+// Helper: interpolateChannel
+// Interpolation des échantillons manquants dans un canal
+// Basé sur ScummVM robot_decoder.cpp (interpolateChannel)
+// ----------------------------------------------------------------------------
+static void interpolateChannel(int16_t *buffer, int32_t numSamples, const int8_t bufferIndex) {
+    if (numSamples <= 0) {
+        return;
+    }
+
+    int16_t *inBuffer, *outBuffer;
+    int16_t sample, previousSample;
+
+    // kEOSExpansion = 2 (expansion every-other-sample)
+    constexpr int kEOSExpansion = 2;
+
+    if (bufferIndex) {
+        // Canal ODD (indices impairs: 1, 3, 5...)
+        outBuffer = buffer + 1;
+        inBuffer = buffer + 2;
+        previousSample = sample = *buffer;
+        --numSamples;
+    } else {
+        // Canal EVEN (indices pairs: 0, 2, 4...)
+        outBuffer = buffer;
+        inBuffer = buffer + 1;
+        previousSample = sample = *inBuffer;
+    }
+
+    while (numSamples--) {
+        // Interpolation linéaire: moyenne des deux échantillons voisins
+        sample = (*inBuffer + previousSample) >> 1;
+        previousSample = *inBuffer;
+        *outBuffer = sample;
+        inBuffer += kEOSExpansion;
+        outBuffer += kEOSExpansion;
+    }
+
+    if (bufferIndex) {
+        *outBuffer = sample;
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Helper: write WAV file header
 // ----------------------------------------------------------------------------
 static void writeWavHeader(FILE *f, uint32_t sampleRate, uint16_t numChannels, uint32_t numSamples) {
@@ -849,7 +892,22 @@ void RbtParser::extractAudio(const char *outDir, size_t maxFrames)
     std::fprintf(stderr, "  Processed %zu audio packets from frames\n", packetsProcessed);
 
     // ========================================================================
-    // ÉTAPE 3: Écrire le fichier WAV final (22050 Hz mono)
+    // ÉTAPE 3: Interpolation des samples manquants
+    // Basé sur ScummVM: "for any skipped samples where the opposing (even/odd)
+    // channel did not yet write, interpolate the skipped areas by adding together
+    // the neighbouring samples from this audio block and dividing by two."
+    // ========================================================================
+    std::fprintf(stderr, "Interpolating missing samples...\n");
+    
+    // Interpoler les échantillons manquants dans chaque canal
+    // Canal EVEN: indices pairs (0, 2, 4, 6...)
+    interpolateChannel(audioBuffer.data(), totalSamples / 2, 0);
+    
+    // Canal ODD: indices impairs (1, 3, 5, 7...)
+    interpolateChannel(audioBuffer.data(), totalSamples / 2, 1);
+
+    // ========================================================================
+    // ÉTAPE 4: Écrire le fichier WAV final (22050 Hz mono)
     // ========================================================================
     std::string audioPath = std::string(outDir) + "/audio.wav";
     FILE *audioFile = fopen(audioPath.c_str(), "wb");
