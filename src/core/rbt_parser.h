@@ -18,7 +18,23 @@ public:
     int32_t getFrameAudioSize(size_t frameIndex);
     bool extractFrame(size_t frameIndex, const char *outDir);
     bool hasAudio() const { return _hasAudio; }
-    void extractAudioChannels(const char *outDir);
+    
+    /**
+     * Extrait l'audio complet au format WAV (22050 Hz mono)
+     * 
+     * Format audio Robot:
+     * - 2 canaux DPCM16 (EVEN/ODD) à 11025 Hz chacun
+     * - Entrelacés pour produire 22050 Hz mono
+     * - Chaque paquet contient 8 bytes de "runway" DPCM ignorés
+     * 
+     * @param outDir    Dossier de sortie (fichier audio.wav créé)
+     * @param maxFrames Nombre max de frames à extraire (0 = toutes)
+     * 
+     * Références:
+     * - FORMAT_RBT_DOCUMENTATION.md (section "Format audio")
+     * - DPCM16_DECODER_DOCUMENTATION.md
+     */
+    void extractAudio(const char *outDir, size_t maxFrames = 0);
 
 private:
     FILE *_f;

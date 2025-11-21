@@ -5,7 +5,6 @@ project(robot_decoder LANGUAGES CXX)
 add_executable(robot_decoder
     main.cpp
     core/rbt_parser.cpp
-    core/robot_audio_stream.cpp
     formats/dpcm.cpp
     formats/lzs.cpp
     formats/decompressor_lzs.cpp

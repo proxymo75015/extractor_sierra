@@ -1,6 +1,8 @@
 #include "rbt_parser.h"
 #include <cassert>
 #include <cstring>
+#include <map>
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -729,116 +731,163 @@ static void writeWavHeader(FILE *f, uint32_t sampleRate, uint16_t numChannels, u
 }
 
 // ----------------------------------------------------------------------------
-// extractAudioChannels - Extract LEFT (EVEN) and RIGHT (ODD) to WAV files
+// extractAudio - Extraction audio basique (DPCM16 → WAV 22050Hz mono)
+// Basé sur la documentation de référence LZS_DECODER_DOCUMENTATION.md
 // ----------------------------------------------------------------------------
-void RbtParser::extractAudioChannels(const char *outDir)
+void RbtParser::extractAudio(const char *outDir, size_t maxFrames)
 {
     if (!_hasAudio) {
         std::fprintf(stderr, "No audio in file\n");
         return;
     }
 
-    std::vector<int16_t> leftSamples;
-    std::vector<int16_t> rightSamples;
+    // Si maxFrames == 0, extraire toutes les frames
+    if (maxFrames == 0) maxFrames = _numFramesTotal;
 
-    // Process primers if available
-    if (_evenPrimerSize > 0 && !_primerEvenRaw.empty()) {
-        std::vector<int16_t> samples;
-        DPCMDecoder::decodeDPCM16Mono(_primerEvenRaw.data(), _evenPrimerSize, samples);
-        if (samples.size() > 8) {
-            leftSamples.insert(leftSamples.end(), samples.begin() + 8, samples.end());
-            std::fprintf(stderr, "Added LEFT primer: %zu samples @ 11025Hz\n", samples.size() - 8);
+    // Calcul de la taille du buffer audio final
+    // Robot audio: 2 canaux (EVEN/ODD) à 11025 Hz chacun → 22050 Hz après entrelacement
+    // Chaque frame @ 10fps = 0.1s → 2205 samples total (1102.5 par canal)
+    const size_t samplesPerFrame = (_frameRate > 0) ? (22050 / _frameRate) : 2205;
+    const size_t totalSamples = maxFrames * samplesPerFrame;
+    std::vector<int16_t> audioBuffer(totalSamples, 0);
+
+    // Positions d'écriture pour les canaux EVEN et ODD
+    // EVEN: indices pairs (0, 2, 4, 6...) - ODD: indices impairs (1, 3, 5, 7...)
+    size_t evenWritePos = 0;
+    size_t oddWritePos = 1;
+
+    // ========================================================================
+    // ÉTAPE 1: Extraire les PRIMERS (si présents)
+    // Les primers initialisent les buffers audio avant la lecture des frames
+    // ========================================================================
+    std::fprintf(stderr, "Audio extraction: evenPrimerSize=%d oddPrimerSize=%d\n",
+                _evenPrimerSize, _oddPrimerSize);
+    
+    if (_evenPrimerSize > 0 && _oddPrimerSize > 0 && !_primerEvenRaw.empty() && !_primerOddRaw.empty()) {
+        // Primer EVEN (canal pair)
+        std::vector<int16_t> evenSamples(_evenPrimerSize);
+        int16_t carry = 0;
+        deDPCM16Mono(evenSamples.data(), _primerEvenRaw.data(), _evenPrimerSize, carry);
+        
+        // Écrire aux positions paires (0, 2, 4, 6...)
+        for (size_t s = 0; s < evenSamples.size() && evenWritePos < totalSamples; ++s) {
+            audioBuffer[evenWritePos] = evenSamples[s];
+            evenWritePos += 2;
+        }
+        std::fprintf(stderr, "  Primer EVEN: %d samples written\n", _evenPrimerSize);
+        
+        // Primer ODD (canal impair)
+        std::vector<int16_t> oddSamples(_oddPrimerSize);
+        carry = 0;
+        deDPCM16Mono(oddSamples.data(), _primerOddRaw.data(), _oddPrimerSize, carry);
+        
+        // Écrire aux positions impaires (1, 3, 5, 7...)
+        for (size_t s = 0; s < oddSamples.size() && oddWritePos < totalSamples; ++s) {
+            audioBuffer[oddWritePos] = oddSamples[s];
+            oddWritePos += 2;
+        }
+        std::fprintf(stderr, "  Primer ODD: %d samples written\n", _oddPrimerSize);
+    }
+
+    // ========================================================================
+    // ÉTAPE 2: Extraire les paquets audio des frames
+    // Chaque paquet contient: [header 8 bytes][runway DPCM 8 bytes][données compressées]
+    // ========================================================================
+    size_t packetsProcessed = 0;
+    
+    for (size_t frameIdx = 0; frameIdx < maxFrames && frameIdx < _packetSizes.size(); ++frameIdx) {
+        if (_packetSizes[frameIdx] == 0) continue;
+        
+        // Position de l'en-tête audio = position frame + taille vidéo
+        uint64_t audioHeaderPos = (uint64_t)_recordPositions[frameIdx] + (uint64_t)_videoSizes[frameIdx];
+        if (!seekSet((size_t)audioHeaderPos)) break;
+
+        // Lire l'en-tête audio (8 bytes)
+        int32_t audioAbsolutePosition = readSint32(_bigEndian);
+        int32_t audioBlockSize = readSint32(_bigEndian);
+        
+        if (audioAbsolutePosition < 0 || audioBlockSize <= 0) continue;
+        if (audioBlockSize > 10 * 1024 * 1024) continue;  // Sanity check
+        
+        // Déterminer le canal selon la doc:
+        // "Channel packets are 'even' if they have an 'absolute position of audio'
+        //  that is evenly divisible by 2; otherwise, they are 'odd'."
+        // Mais en pratique ScummVM utilise (position % 4 == 0) pour EVEN
+        const bool isEvenChannel = (audioAbsolutePosition % 4 == 0);
+        
+        // Lire les données audio compressées
+        // Note: audioBlockSize EXCLUT l'en-tête de 8 bytes (déjà lu)
+        std::vector<uint8_t> compressedData(audioBlockSize);
+        if (fread(compressedData.data(), 1, audioBlockSize, _f) != (size_t)audioBlockSize) {
+            continue;
+        }
+        
+        // Décompression DPCM16
+        // Important: Chaque paquet commence avec sample = 0 (pas de carry entre paquets)
+        std::vector<int16_t> decompressedSamples(audioBlockSize);
+        int16_t sampleValue = 0;  // Valeur initiale = 0
+        deDPCM16Mono(decompressedSamples.data(), compressedData.data(), audioBlockSize, sampleValue);
+        
+        // Selon la doc: "there is an 8-byte runway at the start of every audio block
+        // that is never written to the output stream, which is used to move the signal
+        // to the correct location by the 9th sample."
+        const size_t kRunwaySamples = 8;
+        
+        // Écrire les samples décompressés (en sautant le runway)
+        // dans le canal approprié (positions paires ou impaires)
+        size_t *writePos = isEvenChannel ? &evenWritePos : &oddWritePos;
+        
+        for (size_t s = kRunwaySamples; s < decompressedSamples.size(); ++s) {
+            if (*writePos < totalSamples) {
+                audioBuffer[*writePos] = decompressedSamples[s];
+                *writePos += 2;  // Avancer de 2 pour entrelacer les canaux
+            }
+        }
+        
+        packetsProcessed++;
+    }
+    
+    std::fprintf(stderr, "  Processed %zu audio packets from frames\n", packetsProcessed);
+
+    // ========================================================================
+    // ÉTAPE 3: Interpolation des gaps (optionnel)
+    // Les positions non écrites par un canal peuvent être interpolées
+    // selon la doc: "interpolate the skipped areas by adding together the
+    // neighbouring samples from this audio block and dividing by two"
+    // ========================================================================
+    size_t gapsInterpolated = 0;
+    for (size_t i = 2; i < audioBuffer.size() - 2; i += 2) {
+        // Interpoler les gaps dans le canal EVEN (positions paires)
+        if (audioBuffer[i] == 0 && audioBuffer[i - 2] != 0 && audioBuffer[i + 2] != 0) {
+            audioBuffer[i] = (audioBuffer[i - 2] + audioBuffer[i + 2]) / 2;
+            gapsInterpolated++;
         }
     }
-
-    if (_oddPrimerSize > 0 && !_primerOddRaw.empty()) {
-        std::vector<int16_t> samples;
-        DPCMDecoder::decodeDPCM16Mono(_primerOddRaw.data(), _oddPrimerSize, samples);
-        if (samples.size() > 8) {
-            rightSamples.insert(rightSamples.end(), samples.begin() + 8, samples.end());
-            std::fprintf(stderr, "Added RIGHT primer: %zu samples @ 11025Hz\n", samples.size() - 8);
+    for (size_t i = 3; i < audioBuffer.size() - 2; i += 2) {
+        // Interpoler les gaps dans le canal ODD (positions impaires)
+        if (audioBuffer[i] == 0 && audioBuffer[i - 2] != 0 && audioBuffer[i + 2] != 0) {
+            audioBuffer[i] = (audioBuffer[i - 2] + audioBuffer[i + 2]) / 2;
+            gapsInterpolated++;
         }
     }
-
-    // Process each frame
-    if (!_recordPositions.empty() && !_videoSizes.empty() && !_packetSizes.empty()) {
-        for (size_t i = 0; i < _numFramesTotal && i < _packetSizes.size(); ++i) {
-            if (_packetSizes[i] == 0) continue;
-            
-            uint64_t headerPos = (uint64_t)_recordPositions[i] + (uint64_t)_videoSizes[i];
-            if (!seekSet((size_t)headerPos)) break;
-
-            int32_t audioPos = readSint32(false);  // force little-endian
-            int32_t audioSizeFromHeader = readSint32(false);
-            
-            if (audioPos == 0 || audioSizeFromHeader <= 0) continue;
-            
-            uint32_t actualSize = (uint32_t)audioSizeFromHeader;
-            if (actualSize > 10 * 1024 * 1024) continue;
-
-            std::vector<uint8_t> compData;
-            if (_audioBlockSize != 0 && actualSize != _audioBlockSize) {
-                compData.resize(kRobotZeroCompressSize + actualSize);
-                std::memset(compData.data(), 0, kRobotZeroCompressSize);
-                if (fread(compData.data() + kRobotZeroCompressSize, 1, actualSize, _f) != actualSize) {
-                    continue;
-                }
-            } else {
-                compData.resize(actualSize);
-                if (fread(compData.data(), 1, actualSize, _f) != actualSize) {
-                    continue;
-                }
-            }
-
-            // Skip zero-compress padding if present
-            const uint8_t *dataPtr = compData.data();
-            int dataSize = (int)compData.size();
-            if (dataSize > (int)kRobotZeroCompressSize && _audioBlockSize != 0) {
-                dataPtr += kRobotZeroCompressSize;
-                dataSize -= kRobotZeroCompressSize;
-            }
-
-            // Decompress DPCM16
-            std::vector<int16_t> samples;
-            DPCMDecoder::decodeDPCM16Mono(dataPtr, dataSize, samples);
-
-            // Skip first 8 samples (runway)
-            if (samples.size() <= 8) continue;
-            std::vector<int16_t> usableSamples(samples.begin() + 8, samples.end());
-
-            // Classify: audioPos % 4 == 0 → EVEN (LEFT), else → ODD (RIGHT)
-            bool isEven = (audioPos % 4) == 0;
-            if (isEven) {
-                leftSamples.insert(leftSamples.end(), usableSamples.begin(), usableSamples.end());
-                std::fprintf(stderr, "Frame %3zu: LEFT  - audioPos=%6d - %zu samples @ 11025Hz\n",
-                           i, audioPos, usableSamples.size());
-            } else {
-                rightSamples.insert(rightSamples.end(), usableSamples.begin(), usableSamples.end());
-                std::fprintf(stderr, "Frame %3zu: RIGHT - audioPos=%6d - %zu samples @ 11025Hz\n",
-                           i, audioPos, usableSamples.size());
-            }
-        }
+    if (gapsInterpolated > 0) {
+        std::fprintf(stderr, "  Interpolated %zu gaps in audio\n", gapsInterpolated);
     }
 
-    // Write LEFT.wav
-    std::string leftPath = std::string(outDir) + "/LEFT.wav";
-    FILE *leftFile = fopen(leftPath.c_str(), "wb");
-    if (leftFile) {
-        writeWavHeader(leftFile, 11025, 1, leftSamples.size());
-        fwrite(leftSamples.data(), sizeof(int16_t), leftSamples.size(), leftFile);
-        fclose(leftFile);
-        std::fprintf(stderr, "\nWrote %s: %zu samples, %.2f sec @ 11025Hz\n",
-                   leftPath.c_str(), leftSamples.size(), (double)leftSamples.size() / 11025.0);
+    // ========================================================================
+    // ÉTAPE 4: Écrire le fichier WAV final (22050 Hz mono)
+    // ========================================================================
+    std::string audioPath = std::string(outDir) + "/audio.wav";
+    FILE *audioFile = fopen(audioPath.c_str(), "wb");
+    if (!audioFile) {
+        std::fprintf(stderr, "Failed to create audio file: %s\n", audioPath.c_str());
+        return;
     }
-
-    // Write RIGHT.wav
-    std::string rightPath = std::string(outDir) + "/RIGHT.wav";
-    FILE *rightFile = fopen(rightPath.c_str(), "wb");
-    if (rightFile) {
-        writeWavHeader(rightFile, 11025, 1, rightSamples.size());
-        fwrite(rightSamples.data(), sizeof(int16_t), rightSamples.size(), rightFile);
-        fclose(rightFile);
-        std::fprintf(stderr, "Wrote %s: %zu samples, %.2f sec @ 11025Hz\n",
-                   rightPath.c_str(), rightSamples.size(), (double)rightSamples.size() / 11025.0);
-    }
+    
+    writeWavHeader(audioFile, 22050, 1, audioBuffer.size());
+    fwrite(audioBuffer.data(), sizeof(int16_t), audioBuffer.size(), audioFile);
+    fclose(audioFile);
+    
+    std::fprintf(stderr, "\nWrote %s: %zu samples (%.2f seconds @ 22050Hz)\n",
+                 audioPath.c_str(), audioBuffer.size(), (double)audioBuffer.size() / 22050.0);
 }

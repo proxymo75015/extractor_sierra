@@ -14,7 +14,7 @@
 int main(int argc, char **argv) {
     if (argc < 3) {
         std::printf("Usage: %s <input.rbt> <out_dir> [max_frames]\n", argv[0]);
-        std::printf("Extracts video frames and LEFT/RIGHT audio to WAV files, then generates MP4\n");
+        std::printf("Extracts video frames and interleaved mono audio to WAV file, then generates MP4\n");
         return 1;
     }
 
@@ -60,36 +60,28 @@ int main(int argc, char **argv) {
         }
     }
 
-    // Extract audio to LEFT.wav and RIGHT.wav
+    // Extract audio to audio.wav (22050 Hz mono)
     if (parser.hasAudio()) {
         std::fprintf(stderr, "\n=== Extracting audio ===\n");
-        parser.extractAudioChannels(outDir);
+        parser.extractAudio(outDir, maxFrames);
     }
 
     // Generate MP4 video with FFmpeg
     std::fprintf(stderr, "\n=== Generating MP4 video ===\n");
     
-    std::string leftWav = std::string(outDir) + "/LEFT.wav";
-    std::string rightWav = std::string(outDir) + "/RIGHT.wav";
+    std::string audioWav = std::string(outDir) + "/audio.wav";
     std::string outputMp4 = std::string(outDir) + "/output.mp4";
     
-    // Check if audio files exist
-    bool hasLeft = (std::ifstream(leftWav).good());
-    bool hasRight = (std::ifstream(rightWav).good());
+    // Check if audio file exists
+    bool hasAudio = (std::ifstream(audioWav).good());
     
     std::ostringstream ffmpegCmd;
     ffmpegCmd << "ffmpeg -y -framerate " << parser.getFrameRate() 
               << " -pattern_type glob -i '" << framesDir << "/*.ppm'";
     
-    if (hasLeft && hasRight) {
-        // Merge L+R into stereo
-        ffmpegCmd << " -i " << leftWav << " -i " << rightWav
-                  << " -filter_complex '[1:a][2:a]amerge=inputs=2[a]' -map 0:v -map '[a]'"
-                  << " -c:v libx264 -pix_fmt yuv420p -preset fast -crf 18"
-                  << " -c:a aac -b:a 192k"
-                  << " -shortest " << outputMp4;
-    } else if (hasLeft) {
-        ffmpegCmd << " -i " << leftWav
+    if (hasAudio) {
+        // Audio 22050 Hz mono
+        ffmpegCmd << " -i " << audioWav
                   << " -c:v libx264 -pix_fmt yuv420p -preset fast -crf 18"
                   << " -c:a aac -b:a 128k"
                   << " -shortest " << outputMp4;
@@ -105,14 +97,12 @@ int main(int argc, char **argv) {
     if (ret == 0) {
         std::fprintf(stderr, "\n✅ Success! Output:\n");
         std::fprintf(stderr, "   Frames:  %s/\n", framesDir.c_str());
-        if (hasLeft) std::fprintf(stderr, "   Audio L: %s\n", leftWav.c_str());
-        if (hasRight) std::fprintf(stderr, "   Audio R: %s\n", rightWav.c_str());
+        if (hasAudio) std::fprintf(stderr, "   Audio: %s (22050 Hz mono)\n", audioWav.c_str());
         std::fprintf(stderr, "   Video:   %s\n", outputMp4.c_str());
     } else {
         std::fprintf(stderr, "⚠️  FFmpeg failed (code %d). Output still available:\n", ret);
         std::fprintf(stderr, "   Frames:  %s/\n", framesDir.c_str());
-        if (hasLeft) std::fprintf(stderr, "   Audio L: %s\n", leftWav.c_str());
-        if (hasRight) std::fprintf(stderr, "   Audio R: %s\n", rightWav.c_str());
+        if (hasAudio) std::fprintf(stderr, "   Audio: %s (22050 Hz mono)\n", audioWav.c_str());
     }
 
     std::fclose(f);

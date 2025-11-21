@@ -23,19 +23,34 @@ static void deDPCM16Channel(int16_t *out, int16_t &sample, uint8_t delta) {
     if (delta & 0x80) nextSample -= tableDPCM16[delta & 0x7f];
     else nextSample += tableDPCM16[delta];
 
-    // Clamp to avoid clipping artifacts instead of wrapping
-    if (nextSample > 32767) nextSample = 32767;
-    else if (nextSample < -32768) nextSample = -32768;
+    // Emulating x86 16-bit signed register overflow (EXACT ScummVM behavior)
+    if (nextSample > 32767) {
+        nextSample -= 65536;
+    } else if (nextSample < -32768) {
+        nextSample += 65536;
+    }
 
     *out = sample = (int16_t)nextSample;
 }
 
-// Décompression DPCM16 mono (Sierra SOL format)
-// Note: Les packets audio Robot contiennent un "runway" de 8 bytes au début
-// qui sert à initialiser le décodeur DPCM (pour atteindre la bonne amplitude au 9ème sample).
-// - Packets réguliers: 2213 bytes compressés → 2213 samples, mais audioPos avance de 2205
-//   → Les 8 premiers samples sont le runway (ignorés lors du placement dans le buffer final)
-// - Primers: 19922 et 21024 bytes → runway INCLUS et UTILISÉ (fait partie du signal)
+// Décompression DPCM16 mono (Sierra SOL/Robot format)
+// 
+// Principe DPCM (Differential Pulse Code Modulation):
+// - Chaque octet d'entrée encode la DIFFÉRENCE avec le sample précédent
+// - Bit 7: signe (0=positif, 1=négatif)
+// - Bits 0-6: index dans tableDPCM16 (0-127)
+// - Le sample courant est accumulé: sample += delta ou sample -= delta
+//
+// Overflow x86: Le débordement 16-bit signé est émulé (wraparound)
+// - Si sample > 32767: sample -= 65536
+// - Si sample < -32768: sample += 65536
+//
+// Note sur le RUNWAY (Robot audio uniquement):
+// Chaque paquet audio Robot contient 8 bytes de "runway" au début qui servent
+// à initialiser le décodeur DPCM pour atteindre la bonne amplitude au 9ème sample.
+// Ces 8 premiers samples sont DÉCOMPRESSÉS mais PAS écrits dans le flux final.
+//
+// Référence: DPCM16_DECODER_DOCUMENTATION.md et FORMAT_RBT_DOCUMENTATION.md
 void deDPCM16Mono(int16_t *out, const uint8_t *in, uint32_t numBytes, int16_t &sample) {
     for (uint32_t i=0;i<numBytes;i++) {
         uint8_t delta = *in++;
