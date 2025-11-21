@@ -16,14 +16,20 @@ add_executable(robot_decoder
     src/robot_decoder/dpcm.cpp
     src/robot_decoder/decompressor_lzs.cpp
     src/robot_decoder/lzs.cpp
+    src/formats/robot_exr_exporter.cpp
+    src/utils/exr_writer.cpp
 )
 target_include_directories(robot_decoder PRIVATE 
     ${CMAKE_SOURCE_DIR} 
     ${CMAKE_SOURCE_DIR}/include 
     ${CMAKE_SOURCE_DIR}/src
 )
+target_link_libraries(robot_decoder PRIVATE OpenEXR::OpenEXR)
 
 include(FetchContent)
+
+# Find OpenEXR (required for EXR export functionality)
+find_package(OpenEXR REQUIRED CONFIG)
 
 # Find or fetch nlohmann_json
 find_package(nlohmann_json 3.11.2 CONFIG QUIET)
