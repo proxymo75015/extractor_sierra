@@ -809,11 +809,10 @@ void RbtParser::extractAudio(const char *outDir, size_t maxFrames)
         if (audioAbsolutePosition < 0 || audioBlockSize <= 0) continue;
         if (audioBlockSize > 10 * 1024 * 1024) continue;  // Sanity check
         
-        // Déterminer le canal selon la doc:
-        // "Channel packets are 'even' if they have an 'absolute position of audio'
-        //  that is evenly divisible by 2; otherwise, they are 'odd'."
-        // Mais en pratique ScummVM utilise (position % 4 == 0) pour EVEN
-        const bool isEvenChannel = (audioAbsolutePosition % 4 == 0);
+        // Déterminer le canal selon la spécification Robot:
+        // Canal EVEN si position absolue est paire (divisible par 2)
+        // Canal ODD si position absolue est impaire
+        const bool isEvenChannel = (audioAbsolutePosition % 2 == 0);
         
         // Lire les données audio compressées
         // Note: audioBlockSize EXCLUT l'en-tête de 8 bytes (déjà lu)
@@ -850,32 +849,7 @@ void RbtParser::extractAudio(const char *outDir, size_t maxFrames)
     std::fprintf(stderr, "  Processed %zu audio packets from frames\n", packetsProcessed);
 
     // ========================================================================
-    // ÉTAPE 3: Interpolation des gaps (optionnel)
-    // Les positions non écrites par un canal peuvent être interpolées
-    // selon la doc: "interpolate the skipped areas by adding together the
-    // neighbouring samples from this audio block and dividing by two"
-    // ========================================================================
-    size_t gapsInterpolated = 0;
-    for (size_t i = 2; i < audioBuffer.size() - 2; i += 2) {
-        // Interpoler les gaps dans le canal EVEN (positions paires)
-        if (audioBuffer[i] == 0 && audioBuffer[i - 2] != 0 && audioBuffer[i + 2] != 0) {
-            audioBuffer[i] = (audioBuffer[i - 2] + audioBuffer[i + 2]) / 2;
-            gapsInterpolated++;
-        }
-    }
-    for (size_t i = 3; i < audioBuffer.size() - 2; i += 2) {
-        // Interpoler les gaps dans le canal ODD (positions impaires)
-        if (audioBuffer[i] == 0 && audioBuffer[i - 2] != 0 && audioBuffer[i + 2] != 0) {
-            audioBuffer[i] = (audioBuffer[i - 2] + audioBuffer[i + 2]) / 2;
-            gapsInterpolated++;
-        }
-    }
-    if (gapsInterpolated > 0) {
-        std::fprintf(stderr, "  Interpolated %zu gaps in audio\n", gapsInterpolated);
-    }
-
-    // ========================================================================
-    // ÉTAPE 4: Écrire le fichier WAV final (22050 Hz mono)
+    // ÉTAPE 3: Écrire le fichier WAV final (22050 Hz mono)
     // ========================================================================
     std::string audioPath = std::string(outDir) + "/audio.wav";
     FILE *audioFile = fopen(audioPath.c_str(), "wb");

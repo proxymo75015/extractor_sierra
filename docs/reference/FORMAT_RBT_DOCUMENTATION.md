@@ -535,21 +535,25 @@ Si une frame contient de l'audio, les données audio suivent immédiatement les 
 
 L'audio est divisé en **deux canaux alternés** :
 
-- **Canal 'Even'** (pair) : Paquets dont `absolute position of audio` est divisible par 2
-- **Canal 'Odd'** (impair) : Paquets dont `absolute position of audio` n'est PAS divisible par 2
+- **Canal 'Even'** (pair) : Paquets dont `absolute position of audio` est **divisible par 2** (pair)
+- **Canal 'Odd'** (impair) : Paquets dont `absolute position of audio` n'est **PAS divisible par 2** (impair)
+
+**Note importante** : La spécification officielle utilise la divisibilité par 2 (pair/impair). Cependant, le code ScummVM utilise `position % 4 == 0` pour des raisons d'implémentation interne de leur buffer audio. Pour une implémentation conforme à la spécification, utilisez `position % 2 == 0`.
 
 **Reconstruction du signal** :
 1. Décompresser chaque canal séparément
 2. Entrelacer les échantillons : Even[0], Odd[0], Even[1], Odd[1], ...
 
-**Exemple** :
+**Exemple avec positions réelles** :
 ```
-Position absolue = 0   → Canal Even
-Position absolue = 1   → Canal Odd
-Position absolue = 2   → Canal Even
-Position absolue = 3   → Canal Odd
+Position absolue = 39844 (paire)   → Canal Even
+Position absolue = 42049 (impaire) → Canal Odd
+Position absolue = 44254 (paire)   → Canal Even
+Position absolue = 46459 (impaire) → Canal Odd
 ...
 ```
+
+**Distribution** : Dans un fichier Robot standard, la distribution est équilibrée 50/50 entre les canaux EVEN et ODD.
 
 ### Algorithme de décodage audio
 
@@ -560,8 +564,9 @@ Position absolue = 3   → Canal Odd
    - `size` = taille du bloc
 
 2. **Déterminer le canal** :
-   - Si `position % 4 == 0` → Canal Even (index 0)
-   - Sinon → Canal Odd (index 1)
+   - **Méthode spécification** : Si `position % 2 == 0` → Canal Even, sinon → Canal Odd
+   - **Méthode ScummVM** : Si `position % 4 == 0` → Canal Even, sinon → Canal Odd
+   - **Recommandation** : Utilisez la méthode spécification (% 2) pour une distribution équilibrée
 
 3. **Vérifier si le bloc doit être ignoré** :
    - Calculer `packetEndByte = position + (size × (sizeof(int16) + kEOSExpansion))`

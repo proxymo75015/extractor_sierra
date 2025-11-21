@@ -1,0 +1,11 @@
+version: 5
+frames: 90
+frameRate: 10
+hasAudio: 1
+paletteSize: 1200
+audioBlockSize: 2221
+primerReservedSize: 40960
+primerZeroCompressFlag: 0
+primer_totalSize: 40946
+primer_evenSize: 19922
+primer_oddSize: 21024
