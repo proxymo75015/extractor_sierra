@@ -1,15 +1,15 @@
 /**
- * Programme d'export vidéo Robot en MKV multi-couches
+ * Programme d'export vidéo Robot en MKV multi-couches (mode batch)
  * 
- * Génère un fichier MKV avec 4 pistes vidéo + audio:
- * - Track 0: BASE layer (RGB, pixels 0-235)
- * - Track 1: REMAP layer (RGB, pixels 236-254)  
- * - Track 2: ALPHA layer (transparency, pixel 255)
- * - Track 3: LUMINANCE layer (grayscale Y)
- * - Audio: PCM 48 kHz mono
+ * Scanne automatiquement le répertoire RBT/ et traite tous les fichiers .RBT
+ * Les résultats sont placés dans output/<rbt_name>/ avec:
+ *   - <rbt>_video.mkv (MKV 4 pistes + audio)
+ *   - <rbt>_audio.wav (PCM 22 kHz natif)
+ *   - <rbt>_composite.mp4 (vidéo composite H.264 + audio)
+ *   - <rbt>_metadata.txt (métadonnées)
  * 
  * Usage:
- *   export_robot_mkv <input.rbt> <output_dir> [codec]
+ *   export_robot_mkv [codec]
  * 
  * Codecs supportés:
  *   h264  - x264 (défaut, universel)
@@ -25,33 +25,51 @@
 #include <sys/stat.h>
 #include <climits>
 #include <ctime>
+#include <dirent.h>
+#include <vector>
+#include <string>
+#include <algorithm>
 
 using namespace RobotExtractor;
 
-// Fonction helper pour extraire une frame et la décomposer en couches
-bool extractFrameAsLayers(RbtParser& parser, size_t frameIdx, 
-                          const std::vector<uint8_t>& palette,
-                          RobotLayerFrame& outLayer);
-
-int main(int argc, char* argv[]) {
-    if (argc < 3) {
-        fprintf(stderr, "Usage: %s <input.rbt> <output_dir> [codec]\n", argv[0]);
-        fprintf(stderr, "\nCodecs: h264 (default), h265, vp9, ffv1\n");
-        return 1;
+// Fonction pour lister tous les fichiers .RBT dans un répertoire
+std::vector<std::string> findRbtFiles(const std::string& directory) {
+    std::vector<std::string> rbtFiles;
+    DIR* dir = opendir(directory.c_str());
+    
+    if (!dir) {
+        return rbtFiles;
     }
     
-    const char* inputPath = argv[1];
-    const char* outputDir = argv[2];
-    const char* codecStr = (argc >= 4) ? argv[3] : "h264";
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        std::string filename = entry->d_name;
+        
+        // Vérifier extension .RBT (insensible à la casse)
+        if (filename.length() > 4) {
+            std::string ext = filename.substr(filename.length() - 4);
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::toupper);
+            
+            if (ext == ".RBT") {
+                rbtFiles.push_back(directory + "/" + filename);
+            }
+        }
+    }
     
-    // Créer le dossier de sortie
-    mkdir(outputDir, 0755);
+    closedir(dir);
+    std::sort(rbtFiles.begin(), rbtFiles.end());
+    return rbtFiles;
+}
+
+// Fonction pour traiter un seul fichier RBT
+bool processRbtFile(const std::string& inputPath, const std::string& outputDir, 
+                    const char* codecName, MKVExportConfig::Codec codec) {
     
     // Ouvrir le fichier Robot
-    FILE* f = fopen(inputPath, "rb");
+    FILE* f = fopen(inputPath.c_str(), "rb");
     if (!f) {
-        fprintf(stderr, "Error: Cannot open %s\n", inputPath);
-        return 1;
+        fprintf(stderr, "Error: Cannot open %s\n", inputPath.c_str());
+        return false;
     }
     
     RbtParser parser(f);
@@ -60,36 +78,21 @@ int main(int argc, char* argv[]) {
     if (!parser.parseHeader()) {
         fprintf(stderr, "Error: Failed to parse Robot header\n");
         fclose(f);
-        return 1;
+        return false;
     }
     
     size_t numFrames = parser.getNumFrames();
     int frameRate = parser.getFrameRate();
     bool hasAudio = parser.hasAudio();
     
-    fprintf(stderr, "\n=== Robot File Info ===\n");
-    fprintf(stderr, "Input: %s\n", inputPath);
-    fprintf(stderr, "Output directory: %s\n", outputDir);
-    fprintf(stderr, "Frames: %zu @ %d fps (%.2f seconds)\n", 
+    fprintf(stderr, "\nFrames: %zu @ %d fps (%.2f seconds)\n", 
             numFrames, frameRate, (double)numFrames / frameRate);
     fprintf(stderr, "Audio: %s\n", hasAudio ? "yes" : "no");
     
     // Configuration MKV
     MKVExportConfig config;
     config.framerate = frameRate;
-    
-    if (strcmp(codecStr, "h265") == 0) {
-        config.codec = MKVExportConfig::Codec::H265;
-    } else if (strcmp(codecStr, "vp9") == 0) {
-        config.codec = MKVExportConfig::Codec::VP9;
-    } else if (strcmp(codecStr, "ffv1") == 0) {
-        config.codec = MKVExportConfig::Codec::FFV1;
-    } else {
-        config.codec = MKVExportConfig::Codec::H264;
-        codecStr = "h264";
-    }
-    
-    fprintf(stderr, "Codec: %s\n", codecStr);
+    config.codec = codec;
     
     // Extraire le nom de base du fichier RBT (sans extension et chemin)
     std::string inputFilename = inputPath;
@@ -102,10 +105,11 @@ int main(int argc, char* argv[]) {
         inputFilename = inputFilename.substr(0, lastDot);
     }
     
-    // Chemins de sortie avec nom du fichier RBT
-    std::string mkvPath = std::string(outputDir) + "/" + inputFilename + "_video";
-    std::string wavPath = std::string(outputDir) + "/" + inputFilename + "_audio.wav";
-    std::string metadataPath = std::string(outputDir) + "/" + inputFilename + "_metadata.txt";
+    // Chemins de sortie
+    std::string mkvPath = outputDir + "/" + inputFilename + "_video";
+    std::string wavPath = outputDir + "/" + inputFilename + "_audio.wav";
+    std::string mp4Path = outputDir + "/" + inputFilename + "_composite.mp4";
+    std::string metadataPath = outputDir + "/" + inputFilename + "_metadata.txt";
     
     // Extraire la palette globale
     std::vector<uint8_t> globalPalette = parser.getPalette();
@@ -113,11 +117,11 @@ int main(int argc, char* argv[]) {
     if (globalPalette.empty()) {
         fprintf(stderr, "Error: No palette found\n");
         fclose(f);
-        return 1;
+        return false;
     }
     
     // Extraire toutes les frames et les décomposer en couches
-    fprintf(stderr, "\n=== Extracting Frames (decomposing into layers) ===\n");
+    fprintf(stderr, "Extracting %zu frames...\n", numFrames);
     
     std::vector<RobotLayerFrame> allLayers;
     allLayers.reserve(numFrames);
@@ -137,93 +141,56 @@ int main(int argc, char* argv[]) {
         allLayers.push_back(std::move(layer));
         
         if ((i + 1) % 10 == 0 || i == numFrames - 1) {
-            fprintf(stderr, "\rExtracting frame %zu/%zu...", i + 1, numFrames);
+            fprintf(stderr, "\r  Frame %zu/%zu...", i + 1, numFrames);
             fflush(stderr);
         }
     }
     fprintf(stderr, "\n");
     
-    // Statistiques sur les types de pixels
-    fprintf(stderr, "\n=== Pixel Classification Statistics ===\n");
-    if (!allLayers.empty()) {
-        size_t totalPixels = allLayers[0].width * allLayers[0].height;
-        
-        // Analyser TOUTES les frames pour trouver des pixels REMAP/SKIP
-        size_t totalBase = 0, totalRemap = 0, totalSkip = 0;
-        int firstRemapFrame = -1, firstSkipFrame = -1;
-        
-        for (size_t frameIdx = 0; frameIdx < allLayers.size(); ++frameIdx) {
-            const auto& layer = allLayers[frameIdx];
-            size_t baseCount = 0, remapCount = 0, skipCount = 0;
-            
-            for (size_t i = 0; i < totalPixels; ++i) {
-                if (layer.alpha[i] == 0) {
-                    skipCount++;
-                } else if (layer.remap_mask[i] == 255) {
-                    remapCount++;
-                } else {
-                    baseCount++;
-                }
-            }
-            
-            totalBase += baseCount;
-            totalRemap += remapCount;
-            totalSkip += skipCount;
-            
-            if (remapCount > 0 && firstRemapFrame == -1) {
-                firstRemapFrame = frameIdx;
-                fprintf(stderr, "  Frame %zu: first REMAP pixels detected! base=%zu remap=%zu skip=%zu\n",
-                        frameIdx, baseCount, remapCount, skipCount);
-            }
-            if (skipCount > 0 && firstSkipFrame == -1) {
-                firstSkipFrame = frameIdx;
-                fprintf(stderr, "  Frame %zu: first SKIP pixels detected! base=%zu remap=%zu skip=%zu\n",
-                        frameIdx, baseCount, remapCount, skipCount);
-            }
-        }
-        
-        fprintf(stderr, "\n  Summary across ALL frames:\n");
-        size_t grandTotal = totalBase + totalRemap + totalSkip;
-        fprintf(stderr, "    base=%zu (%.1f%%) remap=%zu (%.1f%%) skip=%zu (%.1f%%)\n",
-                totalBase, 100.0 * totalBase / grandTotal,
-                totalRemap, 100.0 * totalRemap / grandTotal,
-                totalSkip, 100.0 * totalSkip / grandTotal);
-        
-        if (firstRemapFrame == -1) {
-            fprintf(stderr, "  ⚠ WARNING: NO REMAP pixels found in any frame!\n");
-        }
-        if (firstSkipFrame == -1) {
-            fprintf(stderr, "  ⚠ WARNING: NO SKIP pixels found in any frame!\n");
-        }
-    }
-    
     // Extraire l'audio
-    std::vector<int16_t> audioSamples;
     if (hasAudio) {
-        fprintf(stderr, "\n=== Extracting Audio ===\n");
+        fprintf(stderr, "Extracting audio...\n");
         parser.extractAudio(wavPath);
-        
-        // Charger audio.wav pour le passer à l'exporteur MKV
-        fprintf(stderr, "✓ Audio exported: %s\n", wavPath.c_str());
+        fprintf(stderr, "  ✓ Audio: %s\n", wavPath.c_str());
     }
     
     // Exporter en MKV multi-couches
-    fprintf(stderr, "\n=== Exporting Multi-Track MKV ===\n");
+    fprintf(stderr, "Encoding MKV (%s)...\n", codecName);
     
     RobotMKVExporter exporter(config);
     if (!exporter.exportMultiTrack(allLayers, mkvPath, hasAudio ? wavPath : "")) {
-        fprintf(stderr, "\nError: Multi-track MKV export failed\n");
+        fprintf(stderr, "Error: Multi-track MKV export failed\n");
         fclose(f);
-        return 1;
+        return false;
+    }
+    fprintf(stderr, "  ✓ MKV: %s.mkv\n", mkvPath.c_str());
+    
+    // Générer vidéo composite MP4
+    fprintf(stderr, "Generating composite MP4...\n");
+    std::string ffmpegCmd = "ffmpeg -loglevel error -y -i \"" + mkvPath + ".mkv\" -map 0:0 ";
+    if (hasAudio) {
+        ffmpegCmd += "-map 0:4 ";  // Piste audio (track 4)
+    }
+    ffmpegCmd += "-c:v libx264 -preset medium -crf 18 ";
+    if (hasAudio) {
+        ffmpegCmd += "-c:a aac -b:a 192k ";
+    }
+    ffmpegCmd += "\"" + mp4Path + "\" 2>&1";
+    
+    int ret = system(ffmpegCmd.c_str());
+    if (ret == 0) {
+        fprintf(stderr, "  ✓ MP4: %s\n", mp4Path.c_str());
+    } else {
+        fprintf(stderr, "  ⚠ Warning: MP4 generation failed\n");
     }
     
     // Générer le fichier de métadonnées
-    fprintf(stderr, "\n=== Writing Metadata ===\n");
+    fprintf(stderr, "Writing metadata...\n");
     FILE* metaFile = fopen(metadataPath.c_str(), "w");
     if (metaFile) {
         fprintf(metaFile, "=== Robot Video Metadata ===\n\n");
-        fprintf(metaFile, "Source File: %s\n", inputPath);
-        fprintf(metaFile, "Format: Sierra Robot Video (v5/6)\n");
+        fprintf(metaFile, "Source File: %s\n", inputPath.c_str());
+        fprintf(metaFile, "Format: Sierra Robot Video (v5/v6)\n");
         fprintf(metaFile, "Platform: PC\n\n");
         
         fprintf(metaFile, "Video:\n");
@@ -235,7 +202,7 @@ int main(int argc, char* argv[]) {
             fprintf(metaFile, "  Resolution: %dx%d\n", allLayers[0].width, allLayers[0].height);
         }
         
-        fprintf(metaFile, "  Codec: %s\n\n", codecStr);
+        fprintf(metaFile, "  Codec: %s\n\n", codecName);
         
         fprintf(metaFile, "Audio:\n");
         if (hasAudio) {
@@ -257,33 +224,156 @@ int main(int argc, char* argv[]) {
         fprintf(metaFile, "  Type 3 (Skip): Index 255 (transparent)\n\n");
         
         fprintf(metaFile, "Output Files:\n");
-        fprintf(metaFile, "  %s_video.mkv - Matroska with 4 video tracks:\n", inputFilename.c_str());
+        fprintf(metaFile, "  %s_video.mkv - Matroska with 4 video tracks + audio\n", inputFilename.c_str());
         fprintf(metaFile, "    * Track 0: BASE layer (pixels 0-235, RGB)\n");
         fprintf(metaFile, "    * Track 1: REMAP layer (pixels 236-254, RGB)\n");
         fprintf(metaFile, "    * Track 2: ALPHA layer (pixel 255, transparency mask)\n");
         fprintf(metaFile, "    * Track 3: LUMINANCE (grayscale Y)\n");
         fprintf(metaFile, "    * Audio: PCM 48 kHz mono\n");
         fprintf(metaFile, "  %s_audio.wav - PCM WAV 22 kHz (native quality)\n", inputFilename.c_str());
+        fprintf(metaFile, "  %s_composite.mp4 - H.264 composite video + AAC audio\n", inputFilename.c_str());
         fprintf(metaFile, "  %s_metadata.txt - This file\n\n", inputFilename.c_str());
         
         time_t now = time(nullptr);
         fprintf(metaFile, "Export Date: %s", ctime(&now));
         
         fclose(metaFile);
-        fprintf(stderr, "✓ Metadata written: %s\n", metadataPath.c_str());
+        fprintf(stderr, "  ✓ Metadata: %s\n", metadataPath.c_str());
     }
-    
-    fprintf(stderr, "\n✓ Export complete!\n");
-    fprintf(stderr, "  Video (MKV): %s.mkv (4 video tracks + audio)\n", mkvPath.c_str());
-    fprintf(stderr, "    - Track 0: BASE layer (RGB, pixels 0-235)\n");
-    fprintf(stderr, "    - Track 1: REMAP layer (RGB, pixels 236-254)\n");
-    fprintf(stderr, "    - Track 2: ALPHA layer (transparency mask)\n");
-    fprintf(stderr, "    - Track 3: LUMINANCE layer (grayscale Y)\n");
-    if (hasAudio) {
-        fprintf(stderr, "  Audio: %s\n", wavPath.c_str());
-    }
-    fprintf(stderr, "  Metadata: %s\n", metadataPath.c_str());
     
     fclose(f);
-    return 0;
+    return true;
+}
+
+int main(int argc, char* argv[]) {
+    const char* codecStr = (argc >= 2) ? argv[1] : "h264";
+    
+    // Déterminer le codec
+    MKVExportConfig::Codec codec;
+    if (strcmp(codecStr, "h265") == 0) {
+        codec = MKVExportConfig::Codec::H265;
+    } else if (strcmp(codecStr, "vp9") == 0) {
+        codec = MKVExportConfig::Codec::VP9;
+    } else if (strcmp(codecStr, "ffv1") == 0) {
+        codec = MKVExportConfig::Codec::FFV1;
+    } else {
+        codec = MKVExportConfig::Codec::H264;
+        codecStr = "h264";
+    }
+    
+    fprintf(stderr, "\n=== Robot Video Batch Export ===\n");
+    fprintf(stderr, "Codec: %s\n", codecStr);
+    
+    // Vérifier si FFmpeg est disponible
+    fprintf(stderr, "\nChecking FFmpeg availability...\n");
+#ifdef _WIN32
+    int ffmpegCheck = system("ffmpeg -version >nul 2>&1");
+#else
+    int ffmpegCheck = system("ffmpeg -version >/dev/null 2>&1");
+#endif
+    if (ffmpegCheck != 0) {
+        fprintf(stderr, "\n");
+        fprintf(stderr, "========================================\n");
+        fprintf(stderr, "ERROR: FFmpeg is not installed or not in PATH!\n");
+        fprintf(stderr, "========================================\n");
+        fprintf(stderr, "\n");
+        fprintf(stderr, "This program requires FFmpeg to create MKV and MP4 files.\n");
+        fprintf(stderr, "\n");
+        fprintf(stderr, "Please install FFmpeg:\n");
+        fprintf(stderr, "  Windows: https://ffmpeg.org/download.html#build-windows\n");
+        fprintf(stderr, "  Linux:   sudo apt install ffmpeg\n");
+        fprintf(stderr, "  macOS:   brew install ffmpeg\n");
+        fprintf(stderr, "\n");
+        fprintf(stderr, "Without FFmpeg, only WAV audio files will be generated.\n");
+        fprintf(stderr, "\n");
+        return 1;
+    }
+    fprintf(stderr, "FFmpeg found!\n");
+    
+    // Chercher le répertoire RBT (essayer RBT/ puis RBT_test/)
+    std::vector<std::string> rbtFiles;
+    std::string rbtDir;
+    
+    // Essayer RBT/
+    rbtFiles = findRbtFiles("RBT");
+    if (!rbtFiles.empty()) {
+        rbtDir = "RBT";
+    } else {
+        // Essayer RBT_test/
+        rbtFiles = findRbtFiles("RBT_test");
+        if (!rbtFiles.empty()) {
+            rbtDir = "RBT_test";
+        }
+    }
+    
+    if (rbtFiles.empty()) {
+        fprintf(stderr, "\nError: No .RBT files found in RBT/ or RBT_test/ directory\n");
+        fprintf(stderr, "Please create a 'RBT' directory and place your .RBT files there.\n");
+        return 1;
+    }
+    
+    fprintf(stderr, "Scanning %s/...\n\n", rbtDir.c_str());
+    fprintf(stderr, "Found %zu RBT file(s):\n", rbtFiles.size());
+    for (const auto& file : rbtFiles) {
+        fprintf(stderr, "  - %s\n", file.c_str());
+    }
+    fprintf(stderr, "\n");
+    
+    // Créer le répertoire output/
+#ifdef _WIN32
+    mkdir("output");
+#else
+    mkdir("output", 0755);
+#endif
+    
+    // Traiter chaque fichier
+    size_t successCount = 0;
+    size_t failCount = 0;
+    
+    for (size_t i = 0; i < rbtFiles.size(); ++i) {
+        const std::string& inputPath = rbtFiles[i];
+        
+        // Extraire le nom de base du fichier (sans extension)
+        std::string filename = inputPath;
+        size_t lastSlash = filename.find_last_of("/\\");
+        if (lastSlash != std::string::npos) {
+            filename = filename.substr(lastSlash + 1);
+        }
+        size_t lastDot = filename.find_last_of(".");
+        if (lastDot != std::string::npos) {
+            filename = filename.substr(0, lastDot);
+        }
+        
+        // Créer le sous-répertoire output/<rbt_name>/
+        std::string fileOutputDir = "output/" + filename;
+#ifdef _WIN32
+        mkdir(fileOutputDir.c_str());
+#else
+        mkdir(fileOutputDir.c_str(), 0755);
+#endif
+        
+        fprintf(stderr, "\n========================================\n");
+        fprintf(stderr, "Processing [%zu/%zu]: %s\n", i + 1, rbtFiles.size(), filename.c_str());
+        fprintf(stderr, "========================================\n");
+        
+        // Traiter le fichier
+        if (processRbtFile(inputPath, fileOutputDir, codecStr, codec)) {
+            successCount++;
+            fprintf(stderr, "✓ SUCCESS: %s\n", filename.c_str());
+        } else {
+            failCount++;
+            fprintf(stderr, "✗ FAILED: %s\n", filename.c_str());
+        }
+    }
+    
+    // Résumé final
+    fprintf(stderr, "\n========================================\n");
+    fprintf(stderr, "=== Batch Export Complete ===\n");
+    fprintf(stderr, "========================================\n");
+    fprintf(stderr, "Total files: %zu\n", rbtFiles.size());
+    fprintf(stderr, "  Success: %zu\n", successCount);
+    fprintf(stderr, "  Failed: %zu\n", failCount);
+    fprintf(stderr, "\nAll outputs saved to: output/\n");
+    
+    return (failCount > 0) ? 1 : 0;
 }

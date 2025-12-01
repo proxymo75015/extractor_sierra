@@ -77,11 +77,3 @@ endif()
 
 install(FILES readme.md DESTINATION . CONFIGURATIONS Release)
 
-# Test REMAP pixels
-add_executable(test_remap_pixels test_remap_pixels.cpp 
-    src/core/rbt_parser.cpp
-    src/formats/decompressor_lzs.cpp
-    src/formats/lzs.cpp
-    src/formats/dpcm.cpp
-    src/utils/sci_util.cpp)
-target_include_directories(test_remap_pixels PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

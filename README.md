@@ -50,8 +50,18 @@ cmake --build .
 
 ### Export MKV Multi-couches (Recommandé)
 
+Le programme scanne automatiquement le répertoire `RBT/` et traite tous les fichiers `.RBT` qu'il contient.
+
+**Préparation** :
 ```bash
-./export_robot_mkv <fichier.rbt> <dossier_sortie> [codec]
+# Créer le répertoire RBT et y placer vos fichiers
+mkdir RBT
+cp /chemin/vers/vos/fichiers/*.RBT RBT/
+```
+
+**Lancement** :
+```bash
+./export_robot_mkv [codec]
 ```
 
 **Codecs disponibles** :
@@ -62,15 +72,23 @@ cmake --build .
 
 **Exemple** :
 ```bash
-./export_robot_mkv ScummVM/rbt/170.RBT output_170 h264
+./export_robot_mkv h264
 ```
 
-**Fichiers générés** :
+**Résultats** :
 ```
-output_170/
-├── 170_video.mkv        # MKV avec 4 pistes vidéo + audio
-├── 170_audio.wav        # Audio natif 22050 Hz (optionnel)
-└── 170_metadata.txt     # Métadonnées complètes
+output/
+├── 91/
+│   ├── 91_video.mkv        # MKV 4 pistes + audio
+│   ├── 91_audio.wav        # Audio natif 22050 Hz
+│   ├── 91_composite.mp4    # Vidéo composite H.264 + AAC
+│   └── 91_metadata.txt     # Métadonnées complètes
+├── 170/
+│   ├── 170_video.mkv
+│   ├── 170_audio.wav
+│   ├── 170_composite.mp4
+│   └── 170_metadata.txt
+└── ...
 ```
 
 **Structure du MKV** :

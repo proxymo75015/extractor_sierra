@@ -834,11 +834,19 @@ void RbtParser::extractAudio(const char *outDir, size_t maxFrames) {
     // ========================================================================
     // ÉTAPE 2: Extraire les paquets audio des frames
     // Chaque paquet contient: [header 8 bytes][runway DPCM 8 bytes][données compressées]
+    // IMPORTANT: Ne pas générer d'audio pour les frames skip (videoSize == 0)
     // ========================================================================
     size_t packetsProcessed = 0;
     
     for (size_t frameIdx = 0; frameIdx < maxFrames && frameIdx < _packetSizes.size(); ++frameIdx) {
         if (_packetSizes[frameIdx] == 0) continue;
+        
+        // Vérifier si c'est une frame skip (pas de vidéo)
+        // Les frames skip ne doivent PAS générer d'audio pour maintenir la sync A/V
+        if (frameIdx < _videoSizes.size() && _videoSizes[frameIdx] == 0) {
+            std::fprintf(stderr, "  Frame %zu: skip (no video) - audio position not advanced\n", frameIdx);
+            continue;
+        }
         
         // Position de l'en-tête audio = position frame + taille vidéo
         uint64_t audioHeaderPos = (uint64_t)_recordPositions[frameIdx] + (uint64_t)_videoSizes[frameIdx];
@@ -969,6 +977,13 @@ void RbtParser::extractAudio(const std::string& outputWavPath, size_t maxFrames)
     
     for (size_t frameIdx = 0; frameIdx < maxFrames && frameIdx < _packetSizes.size(); ++frameIdx) {
         if (_packetSizes[frameIdx] == 0) continue;
+        
+        // Vérifier si c'est une frame skip (pas de vidéo)
+        // Les frames skip ne doivent PAS générer d'audio pour maintenir la sync A/V
+        if (frameIdx < _videoSizes.size() && _videoSizes[frameIdx] == 0) {
+            std::fprintf(stderr, "  Frame %zu: skip (no video) - audio position not advanced\n", frameIdx);
+            continue;
+        }
         
         uint64_t audioHeaderPos = (uint64_t)_recordPositions[frameIdx] + (uint64_t)_videoSizes[frameIdx];
         if (!seekSet((size_t)audioHeaderPos)) break;

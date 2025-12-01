@@ -4,6 +4,45 @@ Historique des modifications du projet `extractor_sierra`.
 
 ---
 
+## [2.1.0] - 2024-12-01 - Batch Processing + Corrections Windows
+
+### 🎯 Nouveautés
+
+#### Mode Batch Automatique
+- **Scan automatique** : Détection de tous les fichiers .RBT dans le dossier RBT/
+- **Structure organisée** : Chaque RBT génère son propre sous-dossier `output/<rbt_name>/`
+- **Traitement en série** : Tous les fichiers traités en une seule commande
+- **Statistiques complètes** : Compteur de succès/échecs, progression affichée
+
+#### Corrections Windows
+- **Commandes système corrigées** :
+  - `tail -5` → `2>nul` sous Windows
+  - `rm -rf` → `rd /s /q` sous Windows
+  - Vérification FFmpeg adaptée (>nul vs >/dev/null)
+- **Vérification FFmpeg obligatoire** : Message d'erreur explicite si FFmpeg absent
+- **Encodage fichiers .bat** : Suppression des accents pour compatibilité CP1252
+- **DLLs incluses** : Package Windows contient libstdc++-6.dll, libgcc_s_seh-1.dll, libwinpthread-1.dll
+
+### 🐛 Corrections
+
+#### Synchronisation Audio/Vidéo
+- **Bug critique corrigé** : Décalage audio sur fichiers avec frames skip (temps morts)
+- **Cause** : Les frames skip (videoSize==0) généraient de l'audio sans vidéo
+- **Solution** : L'audio ne génère plus de samples pour les frames skip
+- **Impact** : Synchronisation parfaite entre audio et vidéo maintenue
+
+#### Couche Luminance
+- **Bug visuel corrigé** : La piste luminance affichait des artefacts verts dans VLC
+- **Format PNG** : Conversion de grayscale (1 canal) → RGB (3 canaux identiques)
+- **Compatibilité codec** : Les codecs H.264/H.265 gèrent mieux les RGB uniformes
+
+#### Documentation
+- **README_WINDOWS.txt** : Instructions détaillées d'installation FFmpeg
+- **TEST_WINDOWS.md** : Guide de débogage pour problèmes Windows
+- **Messages d'erreur** : Textes en anglais et plus explicites
+
+---
+
 ## [2.0.0] - 2024 - Export MKV Multi-couches
 
 ### 🎯 Nouveautés Majeures

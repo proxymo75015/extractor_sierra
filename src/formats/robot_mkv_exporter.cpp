@@ -96,10 +96,17 @@ bool RobotMKVExporter::exportMultiTrack(
     std::string tempDirAlpha = tempBase + "_alpha";
     std::string tempDirComposite = tempBase + "_composite";
     
+#ifdef _WIN32
+    mkdir(tempDirBase.c_str());
+    mkdir(tempDirRemap.c_str());
+    mkdir(tempDirAlpha.c_str());
+    mkdir(tempDirComposite.c_str());
+#else
     mkdir(tempDirBase.c_str(), 0755);
     mkdir(tempDirRemap.c_str(), 0755);
     mkdir(tempDirAlpha.c_str(), 0755);
     mkdir(tempDirComposite.c_str(), 0755);
+#endif
     
     // ========================================================================
     // ÉTAPE 1: Générer les frames PNG pour chaque couche
@@ -116,8 +123,8 @@ bool RobotMKVExporter::exportMultiTrack(
         std::vector<uint8_t> remapRGB(pixelCount * 3);
         // Couche ALPHA: Masque de transparence (pixel 255)
         std::vector<uint8_t> alphaGray(pixelCount);
-        // Couche LUMINANCE: Image finale en niveau de gris (Y)
-        std::vector<uint8_t> luminanceGray(pixelCount);
+        // Couche LUMINANCE: Image finale en niveau de gris (RGB identiques pour compatibilité)
+        std::vector<uint8_t> luminanceRGB(pixelCount * 3);
         
         for (size_t i = 0; i < pixelCount; ++i) {
             // BASE: Pixels opaques non-remap (RGB complet)
@@ -165,7 +172,9 @@ bool RobotMKVExporter::exportMultiTrack(
             
             // Formule de luminance standard (BT.601)
             uint8_t Y = (uint8_t)(0.299f * finalR + 0.587f * finalG + 0.114f * finalB);
-            luminanceGray[i] = Y;
+            luminanceRGB[i * 3 + 0] = Y;
+            luminanceRGB[i * 3 + 1] = Y;
+            luminanceRGB[i * 3 + 2] = Y;
         }
         
         // Écrire les 4 PNG
@@ -190,7 +199,7 @@ bool RobotMKVExporter::exportMultiTrack(
         }
         
         snprintf(filename, sizeof(filename), "%s/frame_%04zu.png", tempDirComposite.c_str(), frameIdx);
-        if (!stbi_write_png(filename, w, h, 1, luminanceGray.data(), w)) {
+        if (!stbi_write_png(filename, w, h, 3, luminanceRGB.data(), w * 3)) {
             fprintf(stderr, "Error: failed to write luminance layer %s\n", filename);
             return false;
         }
@@ -265,7 +274,11 @@ bool RobotMKVExporter::exportMultiTrack(
         << " -metadata:s:v:2 title=\"ALPHA - Transparency\" "
         << " -metadata:s:v:3 title=\"LUMINANCE - Grayscale Y\" ";
     
+#ifdef _WIN32
+    cmd << " -f matroska \"" << outputFile << "\" 2>nul";
+#else
     cmd << " -f matroska \"" << outputFile << "\" 2>&1 | tail -5";
+#endif
     
     fprintf(stderr, "  Encoding 4 video tracks + audio into MKV...\n");
     int result = system(cmd.str().c_str());
@@ -281,8 +294,13 @@ bool RobotMKVExporter::exportMultiTrack(
     fprintf(stderr, "\nStep 3/4: Cleaning up temporary files...\n");
     
     std::ostringstream cleanupCmd;
+#ifdef _WIN32
+    cleanupCmd << "rd /s /q \"" << tempDirBase << "\" \"" << tempDirRemap << "\" "
+               << "\"" << tempDirAlpha << "\" \"" << tempDirComposite << "\" 2>nul";
+#else
     cleanupCmd << "rm -rf " << tempDirBase << " " << tempDirRemap << " " 
                << tempDirAlpha << " " << tempDirComposite;
+#endif
     system(cleanupCmd.str().c_str());
     
     fprintf(stderr, "\nStep 4/4: Export complete!\n");
