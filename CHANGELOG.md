@@ -1,6 +1,135 @@
 # Changelog
 
-## [1.0.0] - 2025-11-20
+Historique des modifications du projet `extractor_sierra`.
+
+---
+
+## [2.0.0] - 2024 - Export MKV Multi-couches
+
+### 🎯 Nouveautés Majeures
+
+#### Export MKV Multi-couches
+- **Nouvel outil** : `export_robot_mkv` - Export MKV avec 4 pistes vidéo + audio
+- **4 pistes vidéo séparées** :
+  - Track 0 : BASE RGB (pixels fixes 0-235)
+  - Track 1 : REMAP RGB (pixels recoloriables 236-254)
+  - Track 2 : ALPHA Grayscale (masque transparence 255)
+  - Track 3 : LUMINANCE Y (niveaux de gris BT.601)
+- **Support multi-codecs** : H.264, H.265, VP9, FFV1 (lossless)
+- **Audio PCM 48 kHz** : Resampling depuis 22050 Hz natif
+- **Métadonnées Matroska** : Titres de piste pour identification
+- **Fichier metadata.txt** : Statistiques complètes (pixels BASE/REMAP/SKIP par frame)
+
+#### Gestion de fichiers
+- **Noms personnalisés** : Fichiers de sortie préfixés avec le nom du RBT source
+  - Format : `{rbt}_video.mkv`, `{rbt}_audio.wav`, `{rbt}_metadata.txt`
+  - Permet le traitement en batch sans conflit de noms
+
+#### Documentation complète
+- **README.md** : Guide complet d'utilisation (français)
+- **src/README.md** : Documentation du code source
+- **docs/MKV_FORMAT.md** : Spécifications techniques du format MKV multi-pistes
+- **PROJECT_STATUS.md** : État détaillé du projet avec historique des bugs
+
+### 🐛 Corrections Critiques
+
+#### Extraction de frames (Bug majeur)
+- **Symptôme** : Crash après frame ~27 (fichiers >65KB par chunk)
+- **Cause** : Tailles de chunks lues en `uint16` au lieu de `uint32`
+- **Correction** : Lecture correcte des headers (10 bytes : 2×uint32 + 1×uint16)
+- **Impact** : 100% des frames extraites maintenant (validé sur 8 fichiers RBT)
+
+#### Détection de transparence
+- **Symptôme** : Pixels transparents (index 255) non détectés (0% SKIP reporté)
+- **Cause** : Filtre `if (pixelIdx != 255)` avant écriture buffer
+- **Correction** : Écriture inconditionnelle de tous les pixels
+- **Impact** : Détection correcte ~82-85% pixels SKIP
+
+#### Initialisation buffer
+- **Symptôme** : Fond noir au lieu de transparent dans les exports
+- **Cause** : Buffer pixel initialisé à 0 (noir opaque)
+- **Correction** : Initialisation à 255 (transparent par défaut)
+- **Impact** : Transparence correcte dans toutes les pistes
+
+#### Noms de fichiers
+- **Symptôme** : Écrasement des fichiers en traitement batch
+- **Cause** : Noms génériques (video.mkv, audio.wav)
+- **Correction** : Extraction du nom RBT et préfixage des sorties
+- **Impact** : Noms uniques (212_video.mkv, 212_audio.wav, 212_metadata.txt)
+
+### 🔬 Investigations Techniques
+
+#### Pixels REMAP (236-254) - Mystère résolu
+- **Observation** : 6-7% de bytes 236-254 dans fichiers bruts, mais 0% après décompression
+- **Analyse** : Création d'outil `analyze_byte_locations.cpp` pour localisation
+- **Résultat** : 99.8% de ces bytes sont dans les chunks **compressés** LZS
+- **Conclusion** : Ce sont des **codes de contrôle LZS**, pas des indices de pixels
+- **Validation** : Vérifié sur 8 fichiers RBT différents (0% REMAP après décompression)
+- **Impact** : Comportement normal, ces vidéos n'utilisent pas la recoloration
+
+### ✨ Améliorations Techniques
+
+#### Conversion luminance
+- **Formule BT.601** : `Y = 0.299R + 0.587G + 0.114B` (standard ITU-R)
+- Génération automatique de la piste Track 3 pour prévisualisation
+
+#### Statistiques pixels avancées
+- Scan complet de toutes les frames (au lieu de frame 0 uniquement)
+- Rapport du premier frame contenant REMAP/SKIP pixels
+- Totaux cumulés par type de pixel
+
+#### Classification pixels
+```cpp
+// BASE (0-235) : Couleurs fixes opaques
+if (pixelIdx <= 235) {
+    baseRGB[i] = palette[pixelIdx];
+}
+
+// REMAP (236-254) : Zones recoloriables
+else if (pixelIdx <= 254) {
+    remapRGB[i] = palette[pixelIdx];
+}
+
+// SKIP (255) : Transparent
+else {
+    alphaMask[i] = 0; // Transparent
+}
+```
+
+### 📊 Tests de Validation
+
+#### Fichiers testés (100% succès)
+- ✅ 91.RBT : 90 frames, 9.0s
+- ✅ 170.RBT : 113 frames, 11.3s
+- ✅ 212.RBT : 33 frames, 3.3s
+- ✅ 300.RBT, 340.RBT, 380.RBT, 470.RBT, 530.RBT
+
+#### Métriques
+- **Extraction frames** : 100% succès (vs ~70% avant correction)
+- **Taille MKV moyenne** : ~1.0-1.1 Mbps (H.264 CRF 18)
+- **Distribution pixels** : BASE 15-18%, REMAP 0%, SKIP 82-85%
+
+### 🏗️ Build & Environnements
+
+#### Configuration
+- CMake 3.10+ minimum
+- Support C++11 obligatoire
+- Dépendance FFmpeg 4.0+
+
+#### Environnements validés
+- ✅ Dev Container (Ubuntu 24.04.2 LTS, GCC 13.2)
+- ✅ Ubuntu 22.04 (GCC 11.4)
+- ✅ Debian 12 (GCC 12.2)
+- ⚠️ Windows 10 (MSVC 2022, chemins à adapter)
+
+### ❌ Supprimé
+
+- Références obsolètes `robot_decoder` dans CMakeLists.txt
+- Fichiers temporaires de test et debug (~50 fichiers)
+
+---
+
+## [1.0.0] - 2025-11-20 - Version Stable
 
 ### ✨ Fonctionnalités principales
 

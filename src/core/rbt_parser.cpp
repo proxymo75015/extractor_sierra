@@ -777,8 +777,7 @@ static void writeWavHeader(FILE *f, uint32_t sampleRate, uint16_t numChannels, u
 // extractAudio - Extraction audio basique (DPCM16 → WAV 22050Hz mono)
 // Basé sur la documentation de référence LZS_DECODER_DOCUMENTATION.md
 // ----------------------------------------------------------------------------
-void RbtParser::extractAudio(const char *outDir, size_t maxFrames)
-{
+void RbtParser::extractAudio(const char *outDir, size_t maxFrames) {
     if (!_hasAudio) {
         std::fprintf(stderr, "No audio in file\n");
         return;
@@ -922,4 +921,231 @@ void RbtParser::extractAudio(const char *outDir, size_t maxFrames)
     
     std::fprintf(stderr, "\nWrote %s: %zu samples (%.2f seconds @ 22050Hz)\n",
                  audioPath.c_str(), audioBuffer.size(), (double)audioBuffer.size() / 22050.0);
+}
+
+// Surcharge acceptant un chemin complet pour le fichier WAV
+void RbtParser::extractAudio(const std::string& outputWavPath, size_t maxFrames) {
+    if (!_hasAudio) {
+        std::fprintf(stderr, "No audio in file\n");
+        return;
+    }
+
+    // Si maxFrames == 0, extraire toutes les frames
+    if (maxFrames == 0) maxFrames = _numFramesTotal;
+
+    const size_t samplesPerFrame = (_frameRate > 0) ? (22050 / _frameRate) : 2205;
+    const size_t totalSamples = maxFrames * samplesPerFrame;
+    std::vector<int16_t> audioBuffer(totalSamples, 0);
+
+    size_t evenWritePos = 0;
+    size_t oddWritePos = 1;
+
+    std::fprintf(stderr, "Audio extraction: evenPrimerSize=%d oddPrimerSize=%d\n",
+                _evenPrimerSize, _oddPrimerSize);
+    
+    if (_evenPrimerSize > 0 && _oddPrimerSize > 0 && !_primerEvenRaw.empty() && !_primerOddRaw.empty()) {
+        std::vector<int16_t> evenSamples(_evenPrimerSize);
+        int16_t carry = 0;
+        deDPCM16Mono(evenSamples.data(), _primerEvenRaw.data(), _evenPrimerSize, carry);
+        
+        for (size_t s = 0; s < evenSamples.size() && evenWritePos < totalSamples; ++s) {
+            audioBuffer[evenWritePos] = evenSamples[s];
+            evenWritePos += 2;
+        }
+        std::fprintf(stderr, "  Primer EVEN: %d samples written\n", _evenPrimerSize);
+        
+        std::vector<int16_t> oddSamples(_oddPrimerSize);
+        carry = 0;
+        deDPCM16Mono(oddSamples.data(), _primerOddRaw.data(), _oddPrimerSize, carry);
+        
+        for (size_t s = 0; s < oddSamples.size() && oddWritePos < totalSamples; ++s) {
+            audioBuffer[oddWritePos] = oddSamples[s];
+            oddWritePos += 2;
+        }
+        std::fprintf(stderr, "  Primer ODD: %d samples written\n", _oddPrimerSize);
+    }
+
+    size_t packetsProcessed = 0;
+    
+    for (size_t frameIdx = 0; frameIdx < maxFrames && frameIdx < _packetSizes.size(); ++frameIdx) {
+        if (_packetSizes[frameIdx] == 0) continue;
+        
+        uint64_t audioHeaderPos = (uint64_t)_recordPositions[frameIdx] + (uint64_t)_videoSizes[frameIdx];
+        if (!seekSet((size_t)audioHeaderPos)) break;
+
+        int32_t audioAbsolutePosition = readSint32(_bigEndian);
+        int32_t audioBlockSize = readSint32(_bigEndian);
+        
+        if (audioAbsolutePosition < 0 || audioBlockSize <= 0) continue;
+        if (audioBlockSize > 10 * 1024 * 1024) continue;
+        
+        const bool isEvenChannel = (audioAbsolutePosition % 2 == 0);
+        
+        std::vector<uint8_t> compressedData(audioBlockSize);
+        if (fread(compressedData.data(), 1, audioBlockSize, _f) != (size_t)audioBlockSize) {
+            continue;
+        }
+        
+        std::vector<int16_t> decompressedSamples(audioBlockSize);
+        int16_t sampleValue = 0;
+        deDPCM16Mono(decompressedSamples.data(), compressedData.data(), audioBlockSize, sampleValue);
+        
+        const size_t kRunwaySamples = 8;
+        size_t *writePos = isEvenChannel ? &evenWritePos : &oddWritePos;
+        
+        for (size_t s = kRunwaySamples; s < decompressedSamples.size(); ++s) {
+            if (*writePos < totalSamples) {
+                audioBuffer[*writePos] = decompressedSamples[s];
+                *writePos += 2;
+            }
+        }
+        
+        packetsProcessed++;
+    }
+    
+    std::fprintf(stderr, "  Processed %zu audio packets from frames\n", packetsProcessed);
+    std::fprintf(stderr, "Interpolating missing samples...\n");
+    
+    interpolateChannel(audioBuffer.data(), totalSamples / 2, 0);
+    interpolateChannel(audioBuffer.data(), totalSamples / 2, 1);
+
+    FILE *audioFile = fopen(outputWavPath.c_str(), "wb");
+    if (!audioFile) {
+        std::fprintf(stderr, "Failed to create audio file: %s\n", outputWavPath.c_str());
+        return;
+    }
+    
+    writeWavHeader(audioFile, 22050, 1, audioBuffer.size());
+    fwrite(audioBuffer.data(), sizeof(int16_t), audioBuffer.size(), audioFile);
+    fclose(audioFile);
+    
+    std::fprintf(stderr, "\nWrote %s: %zu samples (%.2f seconds @ 22050Hz)\n",
+                 outputWavPath.c_str(), audioBuffer.size(), (double)audioBuffer.size() / 22050.0);
+}
+
+// ============================================================================
+// extractFramePixels - Extrait les pixels indexés d'une frame (sans conversion RGB)
+// ============================================================================
+bool RbtParser::extractFramePixels(size_t frameIndex, std::vector<uint8_t>& outPixels, int& outWidth, int& outHeight) {
+    if (frameIndex >= _recordPositions.size()) {
+        return false;
+    }
+    
+    // Position de la frame
+    size_t startPos = _recordPositions[frameIndex];
+    if (!seekSet(startPos)) return false;
+    
+    // Lire le nombre de cels
+    uint16_t numCels = _bigEndian ? readUint16BE() : readUint16LE();
+    if (numCels == 0 || numCels > 10) return false;
+    
+    // Pour Robot, résolution standard est 320x200 ou 320x240
+    outWidth = 320;
+    outHeight = 240;
+    outPixels.assign(outWidth * outHeight, 255);  // Fond transparent (skip=255)
+    
+    // Lire les données brutes de la frame
+    std::vector<uint8_t> rawVideoData(_videoSizes[frameIndex]);
+    seekSet(startPos);
+    if (fread(rawVideoData.data(), 1, _videoSizes[frameIndex], _f) != _videoSizes[frameIndex]) {
+        return false;
+    }
+    
+    const uint8_t *p = rawVideoData.data() + 2;  // Skip numCels
+    
+    // Traiter chaque cel et les composer dans le buffer final
+    for (uint16_t celIdx = 0; celIdx < numCels; ++celIdx) {
+        // Lire l'en-tête du cel (22 bytes) - MÊME ORDRE QUE createCel5
+        const uint8_t horizontalScale = p[0];
+        const uint8_t verticalScale = p[1];
+        const uint16_t celWidth = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 2);
+        const uint16_t celHeight = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 4);
+        // Note: offset 6-9 sont d'autres champs (priorité, etc.)
+        const uint16_t celX = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 10);
+        const uint16_t celY = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 12);
+        const uint16_t dataSize = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 14);
+        const int16_t numDataChunks = (int16_t)SciHelpers::READ_SCI11ENDIAN_UINT16(p + 16);
+        
+        p += 22;  // kCelHeaderSize
+        
+        if (celWidth == 0 || celHeight == 0 || numDataChunks <= 0) {
+            return false;
+        }
+        
+        // Calculer la taille de décompression
+        const int verticalScaleFactor = verticalScale;
+        int sourceHeight = (verticalScaleFactor == 100) ? celHeight : (celHeight * verticalScaleFactor) / 100;
+        if (sourceHeight <= 0) sourceHeight = 1;
+        const size_t decompressedArea = (size_t)celWidth * (size_t)sourceHeight;
+        
+        std::vector<uint8_t> decompressed;
+        decompressed.reserve(decompressedArea);
+        
+        // Décompresser les chunks - UTILISER 10 BYTES HEADER COMME createCel5
+        for (int16_t chunk = 0; chunk < numDataChunks; ++chunk) {
+            const uint32_t compSize = SciHelpers::READ_SCI11ENDIAN_UINT32(p);
+            const uint32_t decompSize = SciHelpers::READ_SCI11ENDIAN_UINT32(p + 4);
+            const uint16_t compressionType = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 8);
+            p += 10;  // Header size: 4 + 4 + 2 = 10 bytes
+            
+            if (compressionType == 2) {  // kCompressionNone
+                decompressed.insert(decompressed.end(), p, p + decompSize);
+            } else if (compressionType == 0) {  // kCompressionLZS
+                Common::MemoryReadStream mrs(p, compSize);
+                DecompressorLZS dec;
+                std::vector<uint8_t> out(decompSize);
+                int rc = dec.unpack(&mrs, out.data(), compSize, decompSize);
+                if (rc != 0) return false;
+                decompressed.insert(decompressed.end(), out.begin(), out.end());
+            } else {
+                return false;
+            }
+            
+            p += compSize;
+        }
+        
+        // Expansion verticale - MÊME ALGORITHME QUE createCel5
+        const size_t area = (size_t)celWidth * (size_t)celHeight;
+        std::vector<uint8_t> finalCelPixels(area, 0);
+        
+        if (verticalScaleFactor == 100) {
+            if (decompressed.size() >= area) {
+                std::copy_n(decompressed.data(), area, finalCelPixels.data());
+            }
+        } else {
+            // Algorithme d'expansion de createCel5 (de bas en haut)
+            int numerator = celHeight;
+            int denominator = sourceHeight;
+            int remainder = 0;
+            const uint8_t *srcPtr = decompressed.data();
+            uint8_t *dstPtr = finalCelPixels.data();
+            
+            for (int y = sourceHeight - 1; y >= 0; --y) {
+                remainder += numerator;
+                int linesToDraw = remainder / denominator;
+                remainder %= denominator;
+                
+                for (int l = 0; l < linesToDraw; ++l) {
+                    if ((size_t)(srcPtr - decompressed.data()) + celWidth <= decompressed.size()) {
+                        std::copy_n(srcPtr, celWidth, dstPtr);
+                    } else {
+                        std::fill_n(dstPtr, celWidth, 0);
+                    }
+                    dstPtr += celWidth;
+                }
+                srcPtr += celWidth;
+            }
+        }
+        
+        // Composer le cel dans le buffer final
+        for (int y = 0; y < (int)celHeight && (celY + y) < (int)outHeight; ++y) {
+            for (int x = 0; x < (int)celWidth && (celX + x) < (int)outWidth; ++x) {
+                uint8_t pixelIdx = finalCelPixels[y * celWidth + x];
+                // Écrire TOUS les pixels (y compris skip=255)
+                outPixels[(celY + y) * outWidth + (celX + x)] = pixelIdx;
+            }
+        }
+    }
+    
+    return true;
 }

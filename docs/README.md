@@ -1,33 +1,56 @@
 # Documentation Technique - Extracteur Sierra
 
-Documentation complète des formats de fichiers Sierra (SCI/SCI32) et des algorithmes de décompression.
+Documentation complète des formats de fichiers Sierra (SCI/SCI32) et des outils d'extraction vidéo Robot.
 
 ---
 
 ## 📚 Index des Documents
 
+### Outils & Usage
+
+| Document | Description | Statut |
+|----------|-------------|--------|
+| [../README.md](../README.md) | Guide d'utilisation principal | ✅ Complet |
+| [../src/README.md](../src/README.md) | Documentation du code source | ✅ Complet |
+| [MKV_FORMAT.md](MKV_FORMAT.md) | Spécifications MKV multi-couches | ✅ Complet |
+| [QUICK_REFERENCE.md](QUICK_REFERENCE.md) | Référence rapide des APIs | ✅ Complet |
+
 ### Formats de Fichiers
 
 | Document | Description | Pages | Statut |
 |----------|-------------|-------|--------|
-| [FORMAT_RBT_DOCUMENTATION.md](FORMAT_RBT_DOCUMENTATION.md) | Format vidéo Robot (.RBT) complet | ~30 | ✅ Complet |
-| [SOL_FILE_FORMAT_DOCUMENTATION.md](SOL_FILE_FORMAT_DOCUMENTATION.md) | Format audio SOL Sierra | ~25 | ✅ Complet |
+| [reference/FORMAT_RBT_DOCUMENTATION.md](reference/FORMAT_RBT_DOCUMENTATION.md) | Format vidéo Robot (.RBT) complet | ~30 | ✅ Complet |
+| [reference/SOL_FILE_FORMAT_DOCUMENTATION.md](reference/SOL_FILE_FORMAT_DOCUMENTATION.md) | Format audio SOL Sierra | ~25 | ✅ Complet |
 
 ### Algorithmes de Décompression
 
 | Document | Description | Pages | Statut |
 |----------|-------------|-------|--------|
-| [LZS_DECODER_DOCUMENTATION.md](LZS_DECODER_DOCUMENTATION.md) | Décodeur LZS/STACpack | ~35 | ✅ Complet |
-| [DPCM16_DECODER_DOCUMENTATION.md](DPCM16_DECODER_DOCUMENTATION.md) | Décodeur DPCM16 audio | ~30 | ✅ Complet |
+| [reference/LZS_DECODER_DOCUMENTATION.md](reference/LZS_DECODER_DOCUMENTATION.md) | Décodeur LZS/STACpack | ~35 | ✅ Complet |
+| [reference/DPCM16_DECODER_DOCUMENTATION.md](reference/DPCM16_DECODER_DOCUMENTATION.md) | Décodeur DPCM16 audio | ~30 | ✅ Complet |
 
 ### Guides Pratiques
 
 | Document | Description | Pages | Statut |
 |----------|-------------|-------|--------|
 | [AUDIO_EXTRACTION_NOTES.md](AUDIO_EXTRACTION_NOTES.md) | Guide extraction audio RBT | ~10 | ✅ Complet |
-| [QUICK_REFERENCE.md](QUICK_REFERENCE.md) | Référence rapide des APIs | ~5 | ✅ Complet |
+| [VERIFICATION_REPORT.md](VERIFICATION_REPORT.md) | Rapport validation extraction | ~15 | ✅ Complet |
 
-### Rapports Techniques
+### Systèmes Graphiques (Référence ScummVM)
+
+| Document | Description | Statut |
+|----------|-------------|--------|
+| [reference/GFXPALETTE32_SYSTEM.md](reference/GFXPALETTE32_SYSTEM.md) | Système palette SCI32 | ✅ Complet |
+| [reference/ROBOT_PALETTE_DECODING.md](reference/ROBOT_PALETTE_DECODING.md) | Décodage palette Robot | ✅ Complet |
+| [reference/ROBOT_PALETTE_REMAPPING.md](reference/ROBOT_PALETTE_REMAPPING.md) | Remapping palette Robot | ✅ Complet |
+| [reference/GFXREMAP_SCI16.md](reference/GFXREMAP_SCI16.md) | Système remap SCI16 | ✅ Complet |
+| [reference/ROBOT_VIRTUAL_BACKGROUND.md](reference/ROBOT_VIRTUAL_BACKGROUND.md) | Virtual background Robot | ✅ Complet |
+
+### Export & Post-Production
+
+| Document | Description | Statut |
+|----------|-------------|--------|
+| [reference/OPENEXR_EXPORT.md](reference/OPENEXR_EXPORT.md) | Export OpenEXR (référence) | ⚠️ Expérimental |
 
 | Document | Description | Pages | Statut |
 |----------|-------------|-------|--------|

@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <vector>
+#include <string>
 #include <functional>
 
 class RbtParser {
@@ -20,6 +21,17 @@ public:
     bool hasAudio() const { return _hasAudio; }
     
     /**
+     * Extrait les pixels indexés d'une frame (sans conversion RGB)
+     * @return true si succès, pixels stockés dans outPixels (320x240)
+     */
+    bool extractFramePixels(size_t frameIndex, std::vector<uint8_t>& outPixels, int& outWidth, int& outHeight);
+    
+    /**
+     * Récupère la palette RGB courante
+     */
+    const std::vector<uint8_t>& getPalette() const { return _paletteData; }
+    
+    /**
      * Extrait l'audio complet au format WAV (22050 Hz mono)
      * 
      * Format audio Robot:
@@ -35,6 +47,7 @@ public:
      * - DPCM16_DECODER_DOCUMENTATION.md
      */
     void extractAudio(const char *outDir, size_t maxFrames = 0);
+    void extractAudio(const std::string& outputWavPath, size_t maxFrames = 0);
 
 private:
     FILE *_f;

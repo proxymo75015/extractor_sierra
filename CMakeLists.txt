@@ -7,29 +7,39 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(BUILD_TESTS "Construire les tests unitaires" ON)
 
-# Add robot_decoder executable
-add_executable(robot_decoder 
-    src/robot_decoder/main.cpp
-    src/robot_decoder/rbt_parser.cpp
-    src/robot_decoder/robot_audio_stream.cpp
-    src/robot_decoder/sci_util.cpp
-    src/robot_decoder/dpcm.cpp
-    src/robot_decoder/decompressor_lzs.cpp
-    src/robot_decoder/lzs.cpp
-    src/formats/robot_exr_exporter.cpp
-    src/utils/exr_writer.cpp
+# Add main executable
+add_executable(robot_extractor
+    src/main.cpp
+    src/core/rbt_parser.cpp
+    src/formats/decompressor_lzs.cpp
+    src/formats/lzs.cpp
+    src/formats/dpcm.cpp
+    src/utils/sci_util.cpp
 )
-target_include_directories(robot_decoder PRIVATE 
+target_include_directories(robot_extractor PRIVATE 
     ${CMAKE_SOURCE_DIR} 
     ${CMAKE_SOURCE_DIR}/include 
     ${CMAKE_SOURCE_DIR}/src
 )
-target_link_libraries(robot_decoder PRIVATE OpenEXR::OpenEXR)
+
+# Add MKV exporter executable
+add_executable(export_robot_mkv
+    src/export_robot_mkv.cpp
+    src/core/rbt_parser.cpp
+    src/formats/robot_mkv_exporter.cpp
+    src/formats/decompressor_lzs.cpp
+    src/formats/lzs.cpp
+    src/formats/dpcm.cpp
+    src/utils/sci_util.cpp
+    src/utils/stb_impl.cpp
+)
+target_include_directories(export_robot_mkv PRIVATE 
+    ${CMAKE_SOURCE_DIR} 
+    ${CMAKE_SOURCE_DIR}/include 
+    ${CMAKE_SOURCE_DIR}/src
+)
 
 include(FetchContent)
-
-# Find OpenEXR (required for EXR export functionality)
-find_package(OpenEXR REQUIRED CONFIG)
 
 # Find or fetch nlohmann_json
 find_package(nlohmann_json 3.11.2 CONFIG QUIET)
@@ -66,3 +76,12 @@ if(BUILD_TESTS)
 endif()
 
 install(FILES readme.md DESTINATION . CONFIGURATIONS Release)
+
+# Test REMAP pixels
+add_executable(test_remap_pixels test_remap_pixels.cpp 
+    src/core/rbt_parser.cpp
+    src/formats/decompressor_lzs.cpp
+    src/formats/lzs.cpp
+    src/formats/dpcm.cpp
+    src/utils/sci_util.cpp)
+target_include_directories(test_remap_pixels PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
