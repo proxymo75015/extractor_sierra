@@ -1050,9 +1050,36 @@ bool RbtParser::extractFramePixels(size_t frameIndex, std::vector<uint8_t>& outP
     uint16_t numCels = _bigEndian ? readUint16BE() : readUint16LE();
     if (numCels == 0 || numCels > 10) return false;
     
-    // Pour Robot, résolution standard est 320x200 ou 320x240
-    outWidth = 320;
+    // Pour Robot, résolution dépend des cels eux-mêmes
+    // On scanne tous les cels pour trouver les dimensions maximales
+    outWidth = 320;   // Minimum par défaut
     outHeight = 240;
+    
+    // Lire les données brutes de la frame pour trouver les dimensions réelles
+    if (frameIndex < _videoSizes.size()) {
+        std::vector<uint8_t> tempData(_videoSizes[frameIndex]);
+        seekSet(startPos);
+        if (fread(tempData.data(), 1, _videoSizes[frameIndex], _f) == _videoSizes[frameIndex]) {
+            const uint8_t *tp = tempData.data() + 2;  // Skip numCels
+            for (uint16_t c = 0; c < numCels; ++c) {
+                if ((size_t)(tp - tempData.data()) + 22 > tempData.size()) break;
+                
+                uint16_t cw = SciHelpers::READ_SCI11ENDIAN_UINT16(tp + 2);
+                uint16_t ch = SciHelpers::READ_SCI11ENDIAN_UINT16(tp + 4);
+                uint16_t cx = SciHelpers::READ_SCI11ENDIAN_UINT16(tp + 10);
+                uint16_t cy = SciHelpers::READ_SCI11ENDIAN_UINT16(tp + 12);
+                uint16_t dsz = SciHelpers::READ_SCI11ENDIAN_UINT16(tp + 14);
+                
+                int maxX = cx + cw;
+                int maxY = cy + ch;
+                if (maxX > outWidth) outWidth = maxX;
+                if (maxY > outHeight) outHeight = maxY;
+                
+                tp += 22 + dsz;
+            }
+        }
+    }
+    
     outPixels.assign(outWidth * outHeight, 255);  // Fond transparent (skip=255)
     
     // Lire les données brutes de la frame
