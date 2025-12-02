@@ -200,10 +200,14 @@ Le format Robot utilise une variante de LZS avec :
 
 ### Audio DPCM16
 
-- Codage différentiel 16-bit
-- 2 canaux entrelacés (EVEN/ODD)
-- Runway de 8 samples au début de chaque bloc
-- Interpolation des échantillons manquants
+- **Encodage** : Codage différentiel 16-bit (Delta PCM)
+- **Architecture** : 2 canaux entrelacés (EVEN/ODD) formant un flux mono 22050 Hz
+- **Runway** : 8 samples de préparation au début de chaque bloc audio
+- **Interpolation** : Lissage des transitions entre canaux EVEN et ODD
+- **Synchronisation** : `audioAbsolutePosition` indique la position exacte dans le buffer entrelaçé final
+- **Format de sortie** : WAV 22050 Hz mono (natif) ou 48 kHz (resamplé pour MKV)
+
+**Note importante** : La synchronisation audio/vidéo est garantie par le respect strict de `audioAbsolutePosition` qui pointe directement dans le buffer final entrelaçé. L'interpolation est appliquée uniquement pour lisser les transitions entre les canaux EVEN (positions paires) et ODD (positions impaires).
 
 ### Export MKV
 
