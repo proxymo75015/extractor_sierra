@@ -7,6 +7,7 @@
  *   - <rbt>_audio.wav (PCM 22 kHz natif)
  *   - <rbt>_composite.mp4 (vidéo composite H.264 + audio)
  *   - <rbt>_metadata.txt (métadonnées)
+ *   - <rbt>_frames/ (frames PNG individuelles)
  * 
  * Usage:
  *   export_robot_mkv [codec]
@@ -21,6 +22,7 @@
 #include "core/rbt_parser.h"
 #include "formats/robot_mkv_exporter.h"
 #include "utils/sci_util.h"
+#include "../include/stb_image_write.h"
 #include <cstring>
 #include <sys/stat.h>
 #include <climits>
@@ -110,6 +112,14 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
     std::string wavPath = outputDir + "/" + inputFilename + "_audio.wav";
     std::string mp4Path = outputDir + "/" + inputFilename + "_composite.mp4";
     std::string metadataPath = outputDir + "/" + inputFilename + "_metadata.txt";
+    std::string framesDir = outputDir + "/" + inputFilename + "_frames";
+    
+    // Créer le sous-répertoire pour les frames
+#ifdef _WIN32
+    mkdir(framesDir.c_str());
+#else
+    mkdir(framesDir.c_str(), 0755);
+#endif
     
     // Extraire la palette globale
     std::vector<uint8_t> globalPalette = parser.getPalette();
@@ -139,6 +149,37 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
         // Décomposer en couches
         RobotLayerFrame layer = decomposeRobotFrame(pixelIndices, globalPalette, width, height);
         allLayers.push_back(std::move(layer));
+        
+        // Sauvegarder la frame composite en PNG
+        char framePath[512];
+        snprintf(framePath, sizeof(framePath), "%s/frame_%04zu.png", framesDir.c_str(), i);
+        
+        // Créer image composite RGBA avec transparence
+        std::vector<uint8_t> rgbaImage(width * height * 4);
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                size_t pixelIdx = y * width + x;
+                uint8_t paletteIndex = pixelIndices[pixelIdx];
+                
+                if (paletteIndex == 255) {
+                    // Pixel transparent (skip) = transparent
+                    rgbaImage[pixelIdx * 4 + 0] = 0;
+                    rgbaImage[pixelIdx * 4 + 1] = 0;
+                    rgbaImage[pixelIdx * 4 + 2] = 0;
+                    rgbaImage[pixelIdx * 4 + 3] = 0;  // Alpha = 0 (transparent)
+                } else {
+                    // Couleur depuis la palette (opaque)
+                    rgbaImage[pixelIdx * 4 + 0] = globalPalette[paletteIndex * 3 + 0];
+                    rgbaImage[pixelIdx * 4 + 1] = globalPalette[paletteIndex * 3 + 1];
+                    rgbaImage[pixelIdx * 4 + 2] = globalPalette[paletteIndex * 3 + 2];
+                    rgbaImage[pixelIdx * 4 + 3] = 255;  // Alpha = 255 (opaque)
+                }
+            }
+        }
+        
+        if (!stbi_write_png(framePath, width, height, 4, rgbaImage.data(), width * 4)) {
+            fprintf(stderr, "Warning: Failed to write frame %zu to %s\n", i, framePath);
+        }
         
         if ((i + 1) % 10 == 0 || i == numFrames - 1) {
             fprintf(stderr, "\r  Frame %zu/%zu...", i + 1, numFrames);

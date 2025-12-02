@@ -13,6 +13,7 @@ Historique des modifications du projet `extractor_sierra`.
 - **Structure organisée** : Chaque RBT génère son propre sous-dossier `output/<rbt_name>/`
 - **Traitement en série** : Tous les fichiers traités en une seule commande
 - **Statistiques complètes** : Compteur de succès/échecs, progression affichée
+- **Export frames PNG** : Chaque frame est sauvegardée dans `<rbt_name>_frames/frame_XXXX.png`
 
 #### Corrections Windows
 - **Commandes système corrigées** :

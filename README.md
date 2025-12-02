@@ -82,12 +82,17 @@ output/
 │   ├── 91_video.mkv        # MKV 4 pistes + audio
 │   ├── 91_audio.wav        # Audio natif 22050 Hz
 │   ├── 91_composite.mp4    # Vidéo composite H.264 + AAC
-│   └── 91_metadata.txt     # Métadonnées complètes
+│   ├── 91_metadata.txt     # Métadonnées complètes
+│   └── 91_frames/          # Frames PNG individuelles
+│       ├── frame_0000.png
+│       ├── frame_0001.png
+│       └── ...
 ├── 170/
 │   ├── 170_video.mkv
 │   ├── 170_audio.wav
 │   ├── 170_composite.mp4
-│   └── 170_metadata.txt
+│   ├── 170_metadata.txt
+│   └── 170_frames/
 └── ...
 ```
 
