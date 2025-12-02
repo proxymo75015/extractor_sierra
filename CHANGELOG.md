@@ -4,6 +4,62 @@ Historique des modifications du projet `extractor_sierra`.
 
 ---
 
+## [2.2.0] - 2024-12-02 - Correction Synchronisation Audio (Positions)
+
+### 🐛 Correction Critique
+
+#### Synchronisation Audio - Correction Calcul de Position
+- **Bug identifié** : Distorsion audio après le début (son ralenti/déformé)
+- **Cause racine** : Mauvaise interprétation de `audioAbsolutePosition` 
+  - Code précédent : `bufferPos = (audioAbsolutePosition * 2) + offset` → doublait la position!
+  - `audioAbsolutePosition` est DÉJÀ une position dans le buffer entrelaçé final
+- **Solution** : Utilisation directe de `audioAbsolutePosition` comme index de base
+  - Nouveau calcul : `bufferPos = audioAbsolutePosition + (sample * 2)`
+  - Le `* 2` s'applique seulement à l'offset des samples, pas à la position de départ
+- **Résultat** : Audio correctement synchronisé sans distorsion
+- **Impact** : Synchronisation parfaite sur toute la durée de la vidéo
+
+#### Détails Techniques
+- `audioAbsolutePosition` pour EVEN : 39844, 44254, 48664... (positions paires)
+- `audioAbsolutePosition` pour ODD  : 42049, 46459, 50869... (positions impaires)  
+- Ces valeurs incluent déjà l'offset des primers (40946 samples)
+- L'interpolation entre canaux EVEN/ODD reste active pour assurer un flux audio continu
+
+### 📚 Documentation
+
+#### Nouvelles Documentations
+- **TECHNICAL.md** : Documentation technique complète
+  - Architecture audio DPCM16 entrelaçé
+  - Explication détaillée de `audioAbsolutePosition`
+  - Processus d'extraction complet avec diagrammes
+  - Historique des corrections avec analyses
+  - Références ScummVM et format LZS
+  
+- **QUICKSTART.md** : Guide de démarrage rapide
+  - Installation et vérification
+  - Exemples d'utilisation
+  - Tests de synchronisation audio
+  - Dépannage courant
+  - Commandes pratiques
+
+#### Mises à Jour
+- **README.md** : Section audio améliorée avec détails sur l'interpolation
+- **Code source** : Commentaires mis à jour pour refléter le calcul correct
+- Suppression des commentaires de debug obsolètes
+
+### 🧹 Nettoyage du Projet
+
+- Suppression des fichiers de debug temporaires (`debug_audio_positions.cpp`)
+- Nettoyage des logs temporaires dans `/tmp/`
+- Suppression du répertoire `build_windows/` obsolète
+- Commentaires de code mis à jour (suppression des références aux bugs corrigés)
+- Build final propre pour Linux et Windows
+
+### 📝 Corrections Précédentes (Annulées)
+Une tentative précédente de désactivation de l'interpolation a été annulée car elle n'était pas la cause du problème. L'interpolation est nécessaire pour créer des transitions douces entre les canaux EVEN et ODD.
+
+---
+
 ## [2.1.0] - 2024-12-01 - Batch Processing + Corrections Windows
 
 ### 🎯 Nouveautés

@@ -859,10 +859,10 @@ void RbtParser::extractAudio(const char *outDir, size_t maxFrames) {
         if (audioAbsolutePosition < 0 || audioBlockSize <= 0) continue;
         if (audioBlockSize > 10 * 1024 * 1024) continue;  // Sanity check
         
-        // Déterminer le canal selon la spécification Robot:
-        // Canal EVEN si position absolue est paire (divisible par 2)
-        // Canal ODD si position absolue est impaire
         const bool isEvenChannel = (audioAbsolutePosition % 2 == 0);
+        
+        // IMPORTANT: audioAbsolutePosition est la position dans le BUFFER FINAL entrelaçé
+        size_t absoluteSamplePos = (size_t)audioAbsolutePosition;
         
         // Lire les données audio compressées
         // Note: audioBlockSize EXCLUT l'en-tête de 8 bytes (déjà lu)
@@ -882,14 +882,11 @@ void RbtParser::extractAudio(const char *outDir, size_t maxFrames) {
         // to the correct location by the 9th sample."
         const size_t kRunwaySamples = 8;
         
-        // Écrire les samples décompressés (en sautant le runway)
-        // dans le canal approprié (positions paires ou impaires)
-        size_t *writePos = isEvenChannel ? &evenWritePos : &oddWritePos;
-        
+        // Écrire les samples directement à audioAbsolutePosition (déjà dans le buffer entrelaçé)
         for (size_t s = kRunwaySamples; s < decompressedSamples.size(); ++s) {
-            if (*writePos < totalSamples) {
-                audioBuffer[*writePos] = decompressedSamples[s];
-                *writePos += 2;  // Avancer de 2 pour entrelacer les canaux
+            size_t bufferPos = absoluteSamplePos + (s - kRunwaySamples) * 2;  // *2 car entrelacé
+            if (bufferPos < totalSamples) {
+                audioBuffer[bufferPos] = decompressedSamples[s];
             }
         }
         
@@ -899,18 +896,12 @@ void RbtParser::extractAudio(const char *outDir, size_t maxFrames) {
     std::fprintf(stderr, "  Processed %zu audio packets from frames\n", packetsProcessed);
 
     // ========================================================================
-    // ÉTAPE 3: Interpolation des samples manquants
-    // Basé sur ScummVM: "for any skipped samples where the opposing (even/odd)
-    // channel did not yet write, interpolate the skipped areas by adding together
-    // the neighbouring samples from this audio block and dividing by two."
+    // ÉTAPE 3: Interpolation des canaux EVEN/ODD
+    // L'interpolation lisse les transitions entre les deux canaux entrelacés
+    // pour créer un flux audio continu sans discontinuités.
     // ========================================================================
     std::fprintf(stderr, "Interpolating missing samples...\n");
-    
-    // Interpoler les échantillons manquants dans chaque canal
-    // Canal EVEN: indices pairs (0, 2, 4, 6...)
     interpolateChannel(audioBuffer.data(), totalSamples / 2, 0);
-    
-    // Canal ODD: indices impairs (1, 3, 5, 7...)
     interpolateChannel(audioBuffer.data(), totalSamples / 2, 1);
 
     // ========================================================================
@@ -996,6 +987,12 @@ void RbtParser::extractAudio(const std::string& outputWavPath, size_t maxFrames)
         
         const bool isEvenChannel = (audioAbsolutePosition % 2 == 0);
         
+        // IMPORTANT: audioAbsolutePosition est la position dans le BUFFER FINAL entrelaçé
+        // Pas la position dans le canal! Il faut donc l'utiliser directement.
+        // Pour EVEN: audioAbsolutePosition sera 0, 2, 4, 6...
+        // Pour ODD: audioAbsolutePosition sera 1, 3, 5, 7...
+        size_t absoluteSamplePos = (size_t)audioAbsolutePosition;
+        
         std::vector<uint8_t> compressedData(audioBlockSize);
         if (fread(compressedData.data(), 1, audioBlockSize, _f) != (size_t)audioBlockSize) {
             continue;
@@ -1006,12 +1003,12 @@ void RbtParser::extractAudio(const std::string& outputWavPath, size_t maxFrames)
         deDPCM16Mono(decompressedSamples.data(), compressedData.data(), audioBlockSize, sampleValue);
         
         const size_t kRunwaySamples = 8;
-        size_t *writePos = isEvenChannel ? &evenWritePos : &oddWritePos;
         
+        // Écrire les samples directement à audioAbsolutePosition (déjà dans le buffer entrelaçé)
         for (size_t s = kRunwaySamples; s < decompressedSamples.size(); ++s) {
-            if (*writePos < totalSamples) {
-                audioBuffer[*writePos] = decompressedSamples[s];
-                *writePos += 2;
+            size_t bufferPos = absoluteSamplePos + (s - kRunwaySamples) * 2;  // *2 car entrelacé
+            if (bufferPos < totalSamples) {
+                audioBuffer[bufferPos] = decompressedSamples[s];
             }
         }
         
@@ -1020,7 +1017,6 @@ void RbtParser::extractAudio(const std::string& outputWavPath, size_t maxFrames)
     
     std::fprintf(stderr, "  Processed %zu audio packets from frames\n", packetsProcessed);
     std::fprintf(stderr, "Interpolating missing samples...\n");
-    
     interpolateChannel(audioBuffer.data(), totalSamples / 2, 0);
     interpolateChannel(audioBuffer.data(), totalSamples / 2, 1);
 
