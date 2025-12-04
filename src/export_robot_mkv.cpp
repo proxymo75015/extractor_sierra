@@ -303,7 +303,9 @@ int main(int argc, char* argv[]) {
     }
     
     fprintf(stderr, "\n=== Robot Video Batch Export ===\n");
+    fprintf(stderr, "Version: 2.2.1 (2024-12-04)\n");
     fprintf(stderr, "Codec: %s\n", codecStr);
+    fprintf(stderr, "Max Resolution: 640x480\n", codecStr);
     
     // Vérifier si FFmpeg est disponible
     fprintf(stderr, "\nChecking FFmpeg availability...\n");
