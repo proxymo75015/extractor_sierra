@@ -4,7 +4,70 @@ Historique des modifications du projet `extractor_sierra`.
 
 ---
 
-## [2.2.1] - 2024-12-04 - Correction Crash Grandes Résolutions
+## [2.3.0] - 2024-12-04 - Résolution Adaptive (Sans Limites Artificielles)
+
+### ✨ Amélioration Majeure
+
+#### Suppression des Limites de Résolution
+- **Objectif** : L'extracteur doit s'**adapter au format vidéo réel** du fichier RBT
+- **Avant** : Limitation artificielle à 640×480 → perte de résolution sur certains fichiers
+- **Maintenant** : Résolution adaptive jusqu'à Full HD (1920×1080)
+  - Détection automatique des dimensions réelles
+  - Pas de clamping ni de redimensionnement forcé
+  - Résolutions supportées : de 320×240 jusqu'à 1920×1080
+
+#### Gestion Robuste de la Mémoire
+- **Protection contre allocations excessives**
+  - Try/catch sur toutes les allocations de buffers
+  - Messages d'erreur explicites en cas de problème
+  - Limite raisonnable à Full HD pour détecter données corrompues
+- **Gestion d'erreur améliorée**
+  ```cpp
+  try {
+      RobotLayerFrame layer(width, height);
+      // ...
+  } catch (const std::bad_alloc& e) {
+      fprintf(stderr, "Error: Memory allocation failed for %dx%d\n", width, height);
+      return false;
+  }
+  ```
+
+#### Détails Techniques
+- Allocation sécurisée dans `RobotLayerFrame::RobotLayerFrame()`
+- Protection contre overflow dans calculs de taille (`size_t` au lieu de `int`)
+- Vérification que résolution < Full HD (évite valeurs aberrantes de fichiers corrompus)
+- Messages de warning si allocation > Full HD détectée
+
+### 📊 Résolutions Supportées
+
+| Type de Fichier | Résolution Typique | Status |
+|-----------------|-------------------|--------|
+| Standard PC | 320×240 | ✅ Optimal |
+| Haute Qualité | 514×382 | ✅ Supporté nativement |
+| Très Haute Qualité | 640×480 | ✅ Supporté nativement |
+| Full HD | 1920×1080 | ✅ Limite max raisonnable |
+| > Full HD | > 1920×1080 | ⚠️ Erreur (données probablement corrompues) |
+
+### 🐛 Correction
+
+**Problème Précédent (v2.2.1)** :
+- Limitation à 640×480 empêchait de traiter les résolutions natives
+- Fichiers comme `1011.RBT` (514×382) étaient forcés à 480×480
+- Perte de qualité et d'informations
+
+**Solution (v2.3.0)** :
+- Résolution native préservée
+- Meilleure gestion d'erreur mémoire
+- Crash évité par try/catch, pas par limitation artificielle
+
+### 💡 Philosophie
+
+> L'extracteur doit **respecter le format original** des fichiers RBT.  
+> Les limites doivent servir uniquement à **détecter les erreurs**, pas à contraindre les données valides.
+
+---
+
+## [2.2.1] - 2024-12-04 - Correction Crash Grandes Résolutions [DEPRECATED]
 
 ### 🐛 Correction Critique
 
