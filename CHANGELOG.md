@@ -4,6 +4,133 @@ Historique des modifications du projet `extractor_sierra`.
 
 ---
 
+## [2.4.1] - 2024-12-04 - Normalisation Dimensions MOV ProRes
+
+### 🔧 Corrections Critiques
+
+#### Résolution du problème "MOV sans image"
+- **Bug** : Frames PNG avec dimensions variables (ex: 466×320, 519×382) → FFmpeg redimensionne → corruption vidéo
+- **Solution** : Normalisation sur dimensions maximales détectées dans le RBT
+- **Implémentation** :
+  1. Scan complet des frames pour détecter `maxWidth` et `maxHeight`
+  2. Génération PNG avec dimensions fixes (`maxWidth × maxHeight`)
+  3. Centrage de l'image réelle dans canvas padded
+  4. Padding transparent (RGBA `{0,0,0,0}`)
+
+#### Centrage d'image dans canvas
+```cpp
+const int offsetX = (maxWidth - frameWidth) / 2;
+const int offsetY = (maxHeight - frameHeight) / 2;
+// Image centrée au lieu de coin haut-gauche
+```
+
+#### Résultats validés
+- **Linux** : 3042 pixels colorés détectés dans MOV (validation complète)
+- **Windows** : Encodage réussi (519×382, ProRes 4444 RGBA)
+- **Transparence** : Canal alpha 10-12 bit fonctionnel
+- **Compatibilité** : DaVinci Resolve, Premiere Pro, After Effects
+
+### 📦 Package Windows v2.4.1
+- Scripts diagnostic inclus : `verify_mov.bat`, `PAS_DIMAGE.txt`
+- Guide dépannage lecteur vidéo incompatible
+- Vérification automatique codec ProRes
+
+### 🧹 Nettoyage du projet
+- Suppression fichiers debug (`debug_audio_positions`, `test_audio_positions`)
+- Conservation 2 exemples RBT : `230.RBT` (390×461), `1014.RBT` (551×277)
+- Réorganisation `examples/sample_rbt/`
+
+---
+
+## [2.4.0] - 2024-12-04 - Export ProRes 4444 avec Transparence
+
+### ✨ Nouvelle Fonctionnalité Majeure
+
+#### Remplacement MP4 par MOV ProRes 4444
+- **Avant** : Export composite en H.264 MP4 (RGB, pas de transparence)
+- **Maintenant** : Export composite en **ProRes 4444 MOV** (RGBA avec canal alpha)
+
+#### Support Natif de la Transparence
+- **Utilisation des pixels transparents du RBT**
+  - Pixel index 255 (skip) → Alpha = 0 (transparent)
+  - Pixels opaques (0-254) → Alpha = 255 (opaque)
+- **Format de sortie** : RGBA 4:4:4:4 10-bit
+- **Codec** : ProRes 4444 (`prores_ks -profile:v 4444`)
+- **Pixel format** : `yuva444p10le` (YUV 4:4:4 + Alpha 10-bit)
+
+#### Avantages du ProRes 4444
+| Critère | H.264 MP4 | ProRes 4444 MOV |
+|---------|-----------|-----------------|
+| **Transparence** | ❌ Non supportée | ✅ Canal alpha natif |
+| **Qualité** | Avec pertes (CRF 18) | Quasi-lossless |
+| **Editing** | Difficile (GOP) | ✅ I-frame only |
+| **Compatibilité** | Web/streaming | Post-production pro |
+| **Taille fichier** | ~5-10 MB | ~50-100 MB |
+
+#### Détails Techniques
+```bash
+# Ancienne commande (MP4 H.264)
+ffmpeg -i video.mkv -map 0:0 -c:v libx264 -crf 18 -c:a aac output.mp4
+
+# Nouvelle commande (MOV ProRes 4444)
+ffmpeg -framerate 15 -i frames/frame_%04d.png \
+  -i audio.wav \
+  -c:v prores_ks -profile:v 4444 -pix_fmt yuva444p10le \
+  -c:a pcm_s16le \
+  output.mov
+```
+
+#### Export PNG avec Alpha
+- Les frames PNG sont maintenant exportées en **RGBA** (4 canaux)
+- Canal alpha préservé depuis le RBT original
+- Compatible avec ProRes 4444 qui requiert RGBA en entrée
+
+### 📋 Nouveaux Fichiers de Sortie
+
+Pour chaque fichier RBT traité :
+```
+output/<rbt_name>/
+├── <rbt>_video.mkv           # MKV multi-pistes (4 vidéo + audio)
+├── <rbt>_audio.wav           # Audio PCM 22 kHz natif
+├── <rbt>_composite.mov       # 🆕 ProRes 4444 RGBA + transparence
+├── <rbt>_metadata.txt        # Métadonnées
+└── <rbt>_frames/
+    └── frame_*.png           # 🆕 PNG RGBA (4 canaux)
+```
+
+### 🎬 Cas d'Usage
+
+**Post-Production Professionnelle** :
+- Compositing dans Adobe After Effects / DaVinci Resolve
+- Overlay vidéo avec transparence préservée
+- Color grading sur format quasi-lossless
+- Masking automatique via canal alpha
+
+**Archivage Haute Qualité** :
+- Format non destructif pour restauration
+- Préservation complète de la transparence originale
+- Compatible avec workflows ProRes standards
+
+### ⚠️ Prérequis FFmpeg
+
+Le codec ProRes nécessite FFmpeg compilé avec support `prores_ks` :
+```bash
+# Vérifier support ProRes
+ffmpeg -codecs | grep prores
+
+# Installation (si nécessaire)
+# Windows: https://ffmpeg.org/download.html (build full)
+# Linux: sudo apt install ffmpeg
+# macOS: brew install ffmpeg
+```
+
+### 💡 Philosophie
+
+> La vidéo Robot contient des **informations de transparence natives** (pixel 255).  
+> ProRes 4444 est le format professionnel standard pour **préserver la transparence** sans perte de qualité.
+
+---
+
 ## [2.3.2] - 2024-12-04 - Support Résolutions Variables avec Padding
 
 ### ✨ Amélioration Majeure

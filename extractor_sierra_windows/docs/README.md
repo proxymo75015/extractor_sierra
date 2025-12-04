@@ -12,10 +12,17 @@ Extracteur et convertisseur pour fichiers vidéo Robot (`.RBT`) de Sierra SCI ut
    - Codecs : H.264, H.265, VP9, FFV1
    - Métadonnées complètes
 
-2. **PNG + WAV + MP4** (`robot_extractor`)
-   - Extraction frame par frame en PNG
+2. **MOV ProRes 4444 RGBA** - **🆕 Nouveau !**
+   - Export composite avec **canal alpha** (transparence)
+   - Codec : ProRes 4444 (quasi-lossless)
+   - Format : RGBA 4:4:4:4 10-bit
+   - Audio : PCM 16-bit lossless
+   - Idéal pour : Post-production, compositing, archivage
+
+3. **PNG + WAV** (`robot_extractor`)
+   - Extraction frame par frame en PNG RGBA
    - Audio WAV stéréo 22050 Hz
-   - Vidéo MP4 H.264 standard
+   - Frames individuelles avec transparence
 
 ## 📦 Installation
 
@@ -81,16 +88,16 @@ output/
 ├── 91/
 │   ├── 91_video.mkv        # MKV 4 pistes + audio
 │   ├── 91_audio.wav        # Audio natif 22050 Hz
-│   ├── 91_composite.mp4    # Vidéo composite H.264 + AAC
+│   ├── 91_composite.mov    # 🆕 ProRes 4444 RGBA + transparence
 │   ├── 91_metadata.txt     # Métadonnées complètes
-│   └── 91_frames/          # Frames PNG individuelles
+│   └── 91_frames/          # Frames PNG RGBA individuelles
 │       ├── frame_0000.png
 │       ├── frame_0001.png
 │       └── ...
 ├── 170/
 │   ├── 170_video.mkv
 │   ├── 170_audio.wav
-│   ├── 170_composite.mp4
+│   ├── 170_composite.mov   # 🆕 ProRes 4444 avec canal alpha
 │   ├── 170_metadata.txt
 │   └── 170_frames/
 └── ...

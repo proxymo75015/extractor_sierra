@@ -5,7 +5,7 @@
  * Les résultats sont placés dans output/<rbt_name>/ avec:
  *   - <rbt>_video.mkv (MKV 4 pistes + audio)
  *   - <rbt>_audio.wav (PCM 22 kHz natif)
- *   - <rbt>_composite.mp4 (vidéo composite H.264 + audio)
+ *   - <rbt>_composite.mov (vidéo composite ProRes 4444 RGBA + audio)
  *   - <rbt>_metadata.txt (métadonnées)
  *   - <rbt>_frames/ (frames PNG individuelles)
  * 
@@ -110,7 +110,7 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
     // Chemins de sortie
     std::string mkvPath = outputDir + "/" + inputFilename + "_video";
     std::string wavPath = outputDir + "/" + inputFilename + "_audio.wav";
-    std::string mp4Path = outputDir + "/" + inputFilename + "_composite.mp4";
+    std::string movPath = outputDir + "/" + inputFilename + "_composite.mov";
     std::string metadataPath = outputDir + "/" + inputFilename + "_metadata.txt";
     std::string framesDir = outputDir + "/" + inputFilename + "_frames";
     
@@ -160,50 +160,20 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
             continue;
         }
         
-        // Sauvegarder la frame composite en PNG
-        char framePath[512];
-        snprintf(framePath, sizeof(framePath), "%s/frame_%04zu.png", framesDir.c_str(), i);
-        
-        // Créer image composite RGBA avec transparence
-        std::vector<uint8_t> rgbaImage;
-        try {
-            rgbaImage.resize((size_t)width * (size_t)height * 4);
-        } catch (const std::bad_alloc& e) {
-            fprintf(stderr, "Warning: Cannot allocate RGBA buffer for frame %zu, skipping PNG export\n", i);
-            continue;
-        }
-        
-        for (int y = 0; y < height; ++y) {
-            for (int x = 0; x < width; ++x) {
-                size_t pixelIdx = y * width + x;
-                uint8_t paletteIndex = pixelIndices[pixelIdx];
-                
-                if (paletteIndex == 255) {
-                    // Pixel transparent (skip) = transparent
-                    rgbaImage[pixelIdx * 4 + 0] = 0;
-                    rgbaImage[pixelIdx * 4 + 1] = 0;
-                    rgbaImage[pixelIdx * 4 + 2] = 0;
-                    rgbaImage[pixelIdx * 4 + 3] = 0;  // Alpha = 0 (transparent)
-                } else {
-                    // Couleur depuis la palette (opaque)
-                    rgbaImage[pixelIdx * 4 + 0] = globalPalette[paletteIndex * 3 + 0];
-                    rgbaImage[pixelIdx * 4 + 1] = globalPalette[paletteIndex * 3 + 1];
-                    rgbaImage[pixelIdx * 4 + 2] = globalPalette[paletteIndex * 3 + 2];
-                    rgbaImage[pixelIdx * 4 + 3] = 255;  // Alpha = 255 (opaque)
-                }
-            }
-        }
-        
-        if (!stbi_write_png(framePath, width, height, 4, rgbaImage.data(), width * 4)) {
-            fprintf(stderr, "Warning: Failed to write frame %zu to %s\n", i, framePath);
-        }
-        
         if ((i + 1) % 10 == 0 || i == numFrames - 1) {
-            fprintf(stderr, "\r  Frame %zu/%zu...", i + 1, numFrames);
+            fprintf(stderr, "\r  Extracting frame %zu/%zu...", i + 1, numFrames);
             fflush(stderr);
         }
     }
     fprintf(stderr, "\n");
+    
+    // Calculer dimensions maximales pour export MOV (FFmpeg requiert dimensions fixes)
+    int maxWidth = 0, maxHeight = 0;
+    for (const auto& layer : allLayers) {
+        if (layer.width > maxWidth) maxWidth = layer.width;
+        if (layer.height > maxHeight) maxHeight = layer.height;
+    }
+    fprintf(stderr, "Max Resolution: %dx%d\n", maxWidth, maxHeight);
     
     // Extraire l'audio
     if (hasAudio) {
@@ -223,23 +193,101 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
     }
     fprintf(stderr, "  ✓ MKV: %s.mkv\n", mkvPath.c_str());
     
-    // Générer vidéo composite MP4
-    fprintf(stderr, "Generating composite MP4...\n");
-    std::string ffmpegCmd = "ffmpeg -loglevel error -y -i \"" + mkvPath + ".mkv\" -map 0:0 ";
-    if (hasAudio) {
-        ffmpegCmd += "-map 0:4 ";  // Piste audio (track 4)
-    }
-    ffmpegCmd += "-c:v libx264 -preset medium -crf 18 ";
-    if (hasAudio) {
-        ffmpegCmd += "-c:a aac -b:a 192k ";
-    }
-    ffmpegCmd += "\"" + mp4Path + "\" 2>&1";
+    // Regénérer les frames RGBA composites pour l'export MOV
+    fprintf(stderr, "Regenerating RGBA composite frames for MOV (centered in %dx%d canvas)...\n", 
+            maxWidth, maxHeight);
     
+    for (size_t i = 0; i < allLayers.size(); ++i) {
+        const RobotLayerFrame& layer = allLayers[i];
+        const int w = layer.width;
+        const int h = layer.height;
+        
+        // Calculer offset pour centrer l'image
+        const int offsetX = (maxWidth - w) / 2;
+        const int offsetY = (maxHeight - h) / 2;
+        
+        // IMPORTANT: Utiliser maxWidth/maxHeight pour dimensions fixes (requis FFmpeg)
+        const size_t paddedPixelCount = (size_t)maxWidth * (size_t)maxHeight;
+        std::vector<uint8_t> rgbaImage(paddedPixelCount * 4, 0);  // Init noir transparent
+        
+        // Copier les pixels réels (CENTRÉS dans le canvas)
+        for (int y = 0; y < h; ++y) {
+            for (int x = 0; x < w; ++x) {
+                const size_t srcIdx = y * w + x;
+                const int dstX = offsetX + x;
+                const int dstY = offsetY + y;
+                const size_t dstIdx = dstY * maxWidth + dstX;
+                
+                // Composer l'image finale avec transparence
+                if (layer.alpha[srcIdx] == 0) {
+                    // Pixel transparent (skip) - déjà à 0 par défaut
+                    rgbaImage[dstIdx * 4 + 0] = 0;
+                    rgbaImage[dstIdx * 4 + 1] = 0;
+                    rgbaImage[dstIdx * 4 + 2] = 0;
+                    rgbaImage[dstIdx * 4 + 3] = 0;
+                } else if (layer.remap_mask[srcIdx] == 255) {
+                    // Pixel remap (opaque avec couleur recolorée)
+                    rgbaImage[dstIdx * 4 + 0] = layer.remap_color_r[srcIdx];
+                    rgbaImage[dstIdx * 4 + 1] = layer.remap_color_g[srcIdx];
+                    rgbaImage[dstIdx * 4 + 2] = layer.remap_color_b[srcIdx];
+                    rgbaImage[dstIdx * 4 + 3] = 255;
+                } else {
+                    // Pixel base (opaque avec couleur fixe palette)
+                    rgbaImage[dstIdx * 4 + 0] = layer.base_r[srcIdx];
+                    rgbaImage[dstIdx * 4 + 1] = layer.base_g[srcIdx];
+                    rgbaImage[dstIdx * 4 + 2] = layer.base_b[srcIdx];
+                    rgbaImage[dstIdx * 4 + 3] = 255;
+                }
+            }
+        }
+        
+        // Sauvegarder en PNG RGBA avec dimensions fixes
+        char framePath[512];
+        snprintf(framePath, sizeof(framePath), "%s/frame_%04zu.png", framesDir.c_str(), i);
+        if (!stbi_write_png(framePath, maxWidth, maxHeight, 4, rgbaImage.data(), maxWidth * 4)) {
+            fprintf(stderr, "Warning: Failed to write composite frame %zu\n", i);
+        }
+        
+        if ((i + 1) % 10 == 0 || i == allLayers.size() - 1) {
+            fprintf(stderr, "\r  Composite frame %zu/%zu...", i + 1, allLayers.size());
+            fflush(stderr);
+        }
+    }
+    fprintf(stderr, "\n");
+    
+    // Vérifier que les frames ont été générées
+    char firstFrame[512];
+    snprintf(firstFrame, sizeof(firstFrame), "%s/frame_0000.png", framesDir.c_str());
+    FILE* checkFrame = fopen(firstFrame, "rb");
+    if (!checkFrame) {
+        fprintf(stderr, "ERROR: First frame not found: %s\n", firstFrame);
+        fprintf(stderr, "Cannot generate MOV without frames!\n");
+    } else {
+        fclose(checkFrame);
+        fprintf(stderr, "✓ Frames verified in: %s\n", framesDir.c_str());
+    }
+    
+    // Générer vidéo composite MOV avec ProRes 4444 (support transparence)
+    fprintf(stderr, "Generating composite MOV (ProRes 4444 with alpha)...\n");
+    std::string ffmpegCmd = "ffmpeg -y -v verbose";
+    ffmpegCmd += " -start_number 0 -framerate " + std::to_string(frameRate);
+    ffmpegCmd += " -i \"" + framesDir + "/frame_%04d.png\"";
+    if (hasAudio) {
+        ffmpegCmd += " -i \"" + wavPath + "\"";
+    }
+    // ProRes 4444 : support natif RGBA avec transparence
+    ffmpegCmd += " -c:v prores_ks -profile:v 4444 -pix_fmt yuva444p10le";
+    if (hasAudio) {
+        ffmpegCmd += " -c:a pcm_s16le";  // Audio PCM lossless dans MOV
+    }
+    ffmpegCmd += " \"" + movPath + "\"";
+    
+    fprintf(stderr, "\nFFmpeg command:\n%s\n\n", ffmpegCmd.c_str());
     int ret = system(ffmpegCmd.c_str());
     if (ret == 0) {
-        fprintf(stderr, "  ✓ MP4: %s\n", mp4Path.c_str());
+        fprintf(stderr, "  ✓ MOV: %s (ProRes 4444 RGBA)\n", movPath.c_str());
     } else {
-        fprintf(stderr, "  ⚠ Warning: MP4 generation failed\n");
+        fprintf(stderr, "  ⚠ Warning: MOV generation failed (check FFmpeg ProRes support)\n");
     }
     
     // Générer le fichier de métadonnées
@@ -281,7 +329,7 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
         fprintf(metaFile, "  Type 2 (Remap): Indices 236-254 (recolorable zones)\n");
         fprintf(metaFile, "  Type 3 (Skip): Index 255 (transparent)\n\n");
         
-        fprintf(metaFile, "Output Files:\n");
+        fprintf(metaFile, "\nOutput Files:\n");
         fprintf(metaFile, "  %s_video.mkv - Matroska with 4 video tracks + audio\n", inputFilename.c_str());
         fprintf(metaFile, "    * Track 0: BASE layer (pixels 0-235, RGB)\n");
         fprintf(metaFile, "    * Track 1: REMAP layer (pixels 236-254, RGB)\n");
@@ -289,7 +337,7 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
         fprintf(metaFile, "    * Track 3: LUMINANCE (grayscale Y)\n");
         fprintf(metaFile, "    * Audio: PCM 48 kHz mono\n");
         fprintf(metaFile, "  %s_audio.wav - PCM WAV 22 kHz (native quality)\n", inputFilename.c_str());
-        fprintf(metaFile, "  %s_composite.mp4 - H.264 composite video + AAC audio\n", inputFilename.c_str());
+        fprintf(metaFile, "  %s_composite.mov - ProRes 4444 RGBA with alpha + PCM audio\n", inputFilename.c_str());
         fprintf(metaFile, "  %s_metadata.txt - This file\n\n", inputFilename.c_str());
         
         time_t now = time(nullptr);
@@ -320,7 +368,7 @@ int main(int argc, char* argv[]) {
     }
     
     fprintf(stderr, "\n=== Robot Video Batch Export ===\n");
-    fprintf(stderr, "Version: 2.3.2 (2024-12-04) - Variable Resolution Support\n");
+    fprintf(stderr, "Version: 2.4.0 (2024-12-04) - ProRes 4444 with Alpha\n");
     fprintf(stderr, "Codec: %s\n", codecStr);
     fprintf(stderr, "Resolution: Adaptive with padding\n");
     

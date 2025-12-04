@@ -1,0 +1,96 @@
+================================================================================
+PROBLÈME: "Pas d'image dans le MOV"
+================================================================================
+
+ÉTAPE 1: EXÉCUTEZ LE SCRIPT DE DIAGNOSTIC
+--------------------------------------------------------------------------------
+Double-cliquez sur:
+    verify_mov.bat
+
+Ce script va extraire 3 frames PNG du MOV et les afficher.
+
+➤ Si les PNG montrent une IMAGE:
+  ✓ Le MOV contient bien les données
+  ✗ Votre lecteur vidéo ne supporte pas ProRes 4444
+
+  SOLUTION: Utilisez un lecteur professionnel
+    • DaVinci Resolve (GRATUIT) - recommandé
+    • QuickTime Player (Windows/Mac)
+    • VLC (support limité du canal alpha)
+
+➤ Si les PNG sont NOIRS:
+  Passez à l'Étape 2 ci-dessous
+
+================================================================================
+ÉTAPE 2: VÉRIFIEZ LES FRAMES SOURCES
+--------------------------------------------------------------------------------
+Allez dans le dossier:
+    output\<NOM_FICHIER>\<NOM_FICHIER>_frames\
+
+Ouvrez frame_0010.png dans un viewer d'images.
+
+➤ Si cette frame montre une IMAGE:
+  ✓ Frames sources correctes
+  ✗ Problème d'encodage ProRes
+
+  SOLUTION: Vérifiez votre FFmpeg (Étape 3)
+
+➤ Si cette frame est NOIRE:
+  ✗ Problème de génération de frames
+  
+  ACTION: Contactez le support avec la sortie console complète
+
+================================================================================
+ÉTAPE 3: VÉRIFIEZ FFMPEG FULL BUILD
+================================================================================
+Ouvrez l'invite de commande et tapez:
+    ffmpeg -encoders | findstr prores
+
+Vous DEVEZ voir:
+    V..... prores_ks         Apple ProRes (iCodec Pro)
+
+➤ Si "prores_ks" est absent:
+  ✗ Votre FFmpeg ne supporte pas ProRes 4444
+
+  SOLUTION: Installez FFmpeg FULL
+    1. Téléchargez: https://www.gyan.dev/ffmpeg/builds/
+       → Choisir "ffmpeg-release-full.7z" (PAS essentials)
+    2. Extraire dans C:\ffmpeg\
+    3. Ajouter C:\ffmpeg\bin\ au PATH système
+    4. Relancer l'extraction
+
+================================================================================
+POURQUOI PRORES 4444 ?
+================================================================================
+ProRes 4444 est le seul format qui préserve:
+  • La transparence native des vidéos ROBOT
+  • La qualité quasi-lossless pour post-production
+  • La compatibilité avec After Effects, Premiere, DaVinci
+
+H.264/MP4 ne supporte PAS la transparence.
+
+================================================================================
+LECTEURS COMPATIBLES PRORES 4444
+================================================================================
+✓ FONCTIONNE:
+  • DaVinci Resolve (gratuit, excellent)
+  • QuickTime Player
+  • Adobe After Effects
+  • Adobe Premiere Pro
+  • Final Cut Pro (Mac)
+
+✗ NE FONCTIONNE PAS (ou mal):
+  • VLC (affiche parfois noir avec alpha)
+  • Windows Media Player (ne supporte pas ProRes)
+  • Movies & TV (Windows 10/11)
+
+================================================================================
+BESOIN D'AIDE ?
+================================================================================
+Si le problème persiste, fournissez:
+  1. Sortie de verify_mov.bat (complète)
+  2. Résultat de: ffmpeg -version
+  3. Taille du fichier MOV généré
+  4. Screenshot d'une frame PNG extraite
+
+================================================================================
