@@ -80,29 +80,36 @@ bool RobotMKVExporter::exportMultiTrack(
         return false;
     }
     
-    const int w = layers[0].width;
-    const int h = layers[0].height;
     const size_t numFrames = layers.size();
     
-    // Vérifier que toutes les frames ont la même résolution
-    bool sameResolution = true;
-    for (size_t i = 1; i < numFrames; ++i) {
+    // Trouver la résolution maximale parmi toutes les frames
+    int maxWidth = 0;
+    int maxHeight = 0;
+    for (size_t i = 0; i < numFrames; ++i) {
+        if (layers[i].width > maxWidth) maxWidth = layers[i].width;
+        if (layers[i].height > maxHeight) maxHeight = layers[i].height;
+    }
+    
+    const int w = maxWidth;
+    const int h = maxHeight;
+    
+    // Vérifier si des frames ont des résolutions différentes
+    bool hasVariableResolution = false;
+    for (size_t i = 0; i < numFrames; ++i) {
         if (layers[i].width != w || layers[i].height != h) {
-            fprintf(stderr, "Warning: Frame %zu has different resolution (%dx%d vs %dx%d)\n", 
+            hasVariableResolution = true;
+            fprintf(stderr, "Info: Frame %zu has resolution %dx%d (max is %dx%d)\n", 
                     i, layers[i].width, layers[i].height, w, h);
-            sameResolution = false;
         }
     }
     
-    if (!sameResolution) {
-        fprintf(stderr, "Error: Mixed resolutions not supported in current implementation\n");
-        fprintf(stderr, "       All frames must have the same resolution for MKV export\n");
-        return false;
+    if (hasVariableResolution) {
+        fprintf(stderr, "Info: Video has variable frame sizes - will pad to max resolution %dx%d\n", w, h);
     }
     
     fprintf(stderr, "\n=== Exporting Multi-Track MKV ===\n");
     fprintf(stderr, "Frames: %zu\n", numFrames);
-    fprintf(stderr, "Resolution: %dx%d\n", w, h);
+    fprintf(stderr, "Max Resolution: %dx%d\n", w, h);
     fprintf(stderr, "Output: %s.mkv\n\n", outputPath.c_str());
     
     // Créer 4 dossiers temporaires pour les 4 couches
@@ -132,85 +139,85 @@ bool RobotMKVExporter::exportMultiTrack(
     for (size_t frameIdx = 0; frameIdx < numFrames; ++frameIdx) {
         const RobotLayerFrame& layer = layers[frameIdx];
         
-        // Utiliser la résolution de CETTE frame, pas de la frame 0
+        // Utiliser la résolution de CETTE frame
         const int frameWidth = layer.width;
         const int frameHeight = layer.height;
-        const size_t pixelCount = (size_t)frameWidth * (size_t)frameHeight;
+        const size_t framePixelCount = (size_t)frameWidth * (size_t)frameHeight;
+        
+        // Créer des buffers à la résolution MAXIMALE (avec padding si nécessaire)
+        const size_t maxPixelCount = (size_t)w * (size_t)h;
         
         // Couche BASE: RGB complet des pixels 0-235
-        std::vector<uint8_t> baseRGB(pixelCount * 3);
+        std::vector<uint8_t> baseRGB(maxPixelCount * 3, 0);  // Noir par défaut
         // Couche REMAP: RGB complet des pixels 236-254
-        std::vector<uint8_t> remapRGB(pixelCount * 3);
+        std::vector<uint8_t> remapRGB(maxPixelCount * 3, 0);  // Noir par défaut
         // Couche ALPHA: Masque de transparence (pixel 255)
-        std::vector<uint8_t> alphaGray(pixelCount);
-        // Couche LUMINANCE: Image finale en niveau de gris (RGB identiques pour compatibilité)
-        std::vector<uint8_t> luminanceRGB(pixelCount * 3);
+        std::vector<uint8_t> alphaGray(maxPixelCount, 255);  // Transparent par défaut
+        // Couche LUMINANCE: Image finale en niveau de gris
+        std::vector<uint8_t> luminanceRGB(maxPixelCount * 3, 0);  // Noir par défaut
         
-        for (size_t i = 0; i < pixelCount; ++i) {
-            // BASE: Pixels opaques non-remap (RGB complet)
-            if (layer.remap_mask[i] == 0 && layer.alpha[i] == 255) {
-                baseRGB[i * 3 + 0] = layer.base_r[i];
-                baseRGB[i * 3 + 1] = layer.base_g[i];
-                baseRGB[i * 3 + 2] = layer.base_b[i];
-            } else {
-                baseRGB[i * 3 + 0] = 0;
-                baseRGB[i * 3 + 1] = 0;
-                baseRGB[i * 3 + 2] = 0;
+        // Copier les données de la frame (qui peut être plus petite) dans les buffers
+        for (int y = 0; y < frameHeight; ++y) {
+            for (int x = 0; x < frameWidth; ++x) {
+                const size_t srcIdx = y * frameWidth + x;
+                const size_t dstIdx = y * w + x;  // Position dans le buffer max
+                
+                // BASE: Pixels opaques non-remap (RGB complet)
+                if (layer.remap_mask[srcIdx] == 0 && layer.alpha[srcIdx] == 255) {
+                    baseRGB[dstIdx * 3 + 0] = layer.base_r[srcIdx];
+                    baseRGB[dstIdx * 3 + 1] = layer.base_g[srcIdx];
+                    baseRGB[dstIdx * 3 + 2] = layer.base_b[srcIdx];
+                }
+                
+                // REMAP: Pixels de recoloration (RGB complet)
+                if (layer.remap_mask[srcIdx] == 255 && layer.alpha[srcIdx] == 255) {
+                    remapRGB[dstIdx * 3 + 0] = layer.remap_color_r[srcIdx];
+                    remapRGB[dstIdx * 3 + 1] = layer.remap_color_g[srcIdx];
+                    remapRGB[dstIdx * 3 + 2] = layer.remap_color_b[srcIdx];
+                }
+                
+                // ALPHA: Transparence (255 = skip, 0 = opaque)
+                alphaGray[dstIdx] = (layer.alpha[srcIdx] == 0) ? 255 : 0;
+                
+                // LUMINANCE: Conversion RGB → Y (ITU-R BT.601)
+                uint8_t finalR, finalG, finalB;
+                if (layer.alpha[srcIdx] == 0) {
+                    // Pixel skip = noir
+                    finalR = finalG = finalB = 0;
+                } else if (layer.remap_mask[srcIdx] == 255) {
+                    // Pixel remap
+                    finalR = layer.remap_color_r[srcIdx];
+                    finalG = layer.remap_color_g[srcIdx];
+                    finalB = layer.remap_color_b[srcIdx];
+                } else {
+                    // Pixel base
+                    finalR = layer.base_r[srcIdx];
+                    finalG = layer.base_g[srcIdx];
+                    finalB = layer.base_b[srcIdx];
+                }
+                
+                // Formule de luminance standard (BT.601)
+                uint8_t Y = (uint8_t)(0.299f * finalR + 0.587f * finalG + 0.114f * finalB);
+                luminanceRGB[dstIdx * 3 + 0] = Y;
+                luminanceRGB[dstIdx * 3 + 1] = Y;
+                luminanceRGB[dstIdx * 3 + 2] = Y;
             }
-            
-            // REMAP: Pixels de recoloration (RGB complet)
-            if (layer.remap_mask[i] == 255 && layer.alpha[i] == 255) {
-                remapRGB[i * 3 + 0] = layer.remap_color_r[i];
-                remapRGB[i * 3 + 1] = layer.remap_color_g[i];
-                remapRGB[i * 3 + 2] = layer.remap_color_b[i];
-            } else {
-                remapRGB[i * 3 + 0] = 0;
-                remapRGB[i * 3 + 1] = 0;
-                remapRGB[i * 3 + 2] = 0;
-            }
-            
-            // ALPHA: Transparence (255 = skip, 0 = opaque)
-            alphaGray[i] = (layer.alpha[i] == 0) ? 255 : 0;
-            
-            // LUMINANCE: Conversion RGB → Y (ITU-R BT.601)
-            // Y = 0.299*R + 0.587*G + 0.114*B
-            uint8_t finalR, finalG, finalB;
-            if (layer.alpha[i] == 0) {
-                // Pixel skip = noir
-                finalR = finalG = finalB = 0;
-            } else if (layer.remap_mask[i] == 255) {
-                // Pixel remap
-                finalR = layer.remap_color_r[i];
-                finalG = layer.remap_color_g[i];
-                finalB = layer.remap_color_b[i];
-            } else {
-                // Pixel base
-                finalR = layer.base_r[i];
-                finalG = layer.base_g[i];
-                finalB = layer.base_b[i];
-            }
-            
-            // Formule de luminance standard (BT.601)
-            uint8_t Y = (uint8_t)(0.299f * finalR + 0.587f * finalG + 0.114f * finalB);
-            luminanceRGB[i * 3 + 0] = Y;
-            luminanceRGB[i * 3 + 1] = Y;
-            luminanceRGB[i * 3 + 2] = Y;
         }
         
-        // Écrire les 4 PNG avec vérification
+        // Écrire les 4 PNG à la résolution MAXIMALE (avec padding si nécessaire)
         char filename[512];
         
         snprintf(filename, sizeof(filename), "%s/frame_%04zu.png", tempDirBase.c_str(), frameIdx);
-        int result = stbi_write_png(filename, frameWidth, frameHeight, 3, baseRGB.data(), frameWidth * 3);
+        int result = stbi_write_png(filename, w, h, 3, baseRGB.data(), w * 3);
         if (!result) {
             fprintf(stderr, "\nError: stbi_write_png failed for base layer (frame %zu)\n", frameIdx);
             fprintf(stderr, "       File: %s\n", filename);
-            fprintf(stderr, "       Resolution: %dx%d, Size: %zu bytes\n", frameWidth, frameHeight, baseRGB.size());
+            fprintf(stderr, "       Max Resolution: %dx%d, Frame Resolution: %dx%d\n", w, h, frameWidth, frameHeight);
             return false;
         }
         
         snprintf(filename, sizeof(filename), "%s/frame_%04zu.png", tempDirRemap.c_str(), frameIdx);
-        result = stbi_write_png(filename, frameWidth, frameHeight, 3, remapRGB.data(), frameWidth * 3);
+        result = stbi_write_png(filename, w, h, 3, remapRGB.data(), w * 3);
         if (!result) {
             fprintf(stderr, "\nError: stbi_write_png failed for remap layer (frame %zu)\n", frameIdx);
             fprintf(stderr, "       File: %s\n", filename);
@@ -218,7 +225,7 @@ bool RobotMKVExporter::exportMultiTrack(
         }
         
         snprintf(filename, sizeof(filename), "%s/frame_%04zu.png", tempDirAlpha.c_str(), frameIdx);
-        result = stbi_write_png(filename, frameWidth, frameHeight, 1, alphaGray.data(), frameWidth);
+        result = stbi_write_png(filename, w, h, 1, alphaGray.data(), w);
         if (!result) {
             fprintf(stderr, "\nError: stbi_write_png failed for alpha layer (frame %zu)\n", frameIdx);
             fprintf(stderr, "       File: %s\n", filename);
@@ -226,7 +233,7 @@ bool RobotMKVExporter::exportMultiTrack(
         }
         
         snprintf(filename, sizeof(filename), "%s/frame_%04zu.png", tempDirComposite.c_str(), frameIdx);
-        result = stbi_write_png(filename, frameWidth, frameHeight, 3, luminanceRGB.data(), frameWidth * 3);
+        result = stbi_write_png(filename, w, h, 3, luminanceRGB.data(), w * 3);
         if (!result) {
             fprintf(stderr, "\nError: stbi_write_png failed for luminance layer (frame %zu)\n", frameIdx);
             fprintf(stderr, "       File: %s\n", filename);

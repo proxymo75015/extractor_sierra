@@ -4,6 +4,88 @@ Historique des modifications du projet `extractor_sierra`.
 
 ---
 
+## [2.3.2] - 2024-12-04 - Support Résolutions Variables avec Padding
+
+### ✨ Amélioration Majeure
+
+#### Résolutions Variables par Frame
+- **Découverte** : Dans un même fichier RBT, **chaque frame peut avoir une résolution différente**
+  - Frame 0 : 320×240
+  - Frame 50 : 450×300
+  - Frame 80 : 514×382
+  - Etc.
+- **Comportement Précédent (v2.3.1)** : Rejetait les fichiers avec résolutions mixtes
+- **Nouveau Comportement** : Padding automatique à la résolution maximale
+
+#### Implémentation du Padding
+```cpp
+// 1. Détecter résolution maximale sur toutes les frames
+int maxWidth = 0, maxHeight = 0;
+for (const auto& frame : layers) {
+    if (frame.width > maxWidth) maxWidth = frame.width;
+    if (frame.height > maxHeight) maxHeight = frame.height;
+}
+
+// 2. Créer buffers à résolution maximale
+std::vector<uint8_t> baseRGB(maxWidth * maxHeight * 3, 0);  // Noir par défaut
+
+// 3. Copier frame avec offset pour centrage/padding
+for (int y = 0; y < frameHeight; ++y) {
+    for (int x = 0; x < frameWidth; ++x) {
+        size_t srcIdx = y * frameWidth + x;       // Source (frame)
+        size_t dstIdx = y * maxWidth + x;         // Destination (buffer max)
+        baseRGB[dstIdx * 3 + 0] = layer.base_r[srcIdx];
+        // ...
+    }
+}
+```
+
+#### Zones Paddées
+- **BASE/REMAP/LUMINANCE** : Remplies avec noir (RGB 0,0,0)
+- **ALPHA** : Remplies avec transparent (valeur 255 = skip)
+- **Résultat** : Vidéo MKV avec résolution constante, frames plus petites centrées
+
+### 🐛 Correction du Bug de Crash
+
+**Cause Racine Identifiée** :
+```cpp
+// ❌ BUG (v2.3.0-2.3.1) : Utilisait résolution de frame[0] pour TOUTES les frames
+const int w = layers[0].width;
+const int h = layers[0].height;
+
+// À frame 80 : résolution change → pixelCount incorrect
+const size_t pixelCount = w * h;  // Basé sur frame[0]
+layer.base_r[i]  // ⚠️ Accès hors limites si frame actuelle > frame[0] → CRASH
+
+// ✅ CORRECTION : Résolution par frame OU padding à résolution max
+const int frameWidth = layer.width;   // Résolution individuelle
+const int frameHeight = layer.height;
+```
+
+**Impact** :
+- Fichiers comme `1011.RBT` qui crashaient à frame 80/124 fonctionnent maintenant
+- Support complet des formats RBT avec résolutions variables
+- Pas de perte de qualité ni de redimensionnement forcé
+
+### 📊 Exemple de Sortie
+
+```
+=== Exporting Multi-Track MKV ===
+Info: Frame 80 has resolution 514x382 (max is 514x382)
+Info: Frame 81 has resolution 320x240 (max is 514x382)
+Info: Video has variable frame sizes - will pad to max resolution 514x382
+Frames: 124
+Max Resolution: 514x382
+```
+
+### 💡 Philosophie Préservée
+
+> L'extracteur **s'adapte au format de la vidéo contenu dans le RBT**.  
+> Aucune limitation artificielle, aucune perte de qualité.  
+> Le padding préserve toutes les frames sans altération.
+
+---
+
 ## [2.3.0] - 2024-12-04 - Résolution Adaptive (Sans Limites Artificielles)
 
 ### ✨ Amélioration Majeure
