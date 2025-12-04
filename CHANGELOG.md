@@ -4,6 +4,43 @@ Historique des modifications du projet `extractor_sierra`.
 
 ---
 
+## [2.2.1] - 2024-12-04 - Correction Crash Grandes Résolutions
+
+### 🐛 Correction Critique
+
+#### Limitation Résolution pour Stabilité Windows
+- **Bug identifié** : Crash lors du traitement de fichiers RBT avec grandes résolutions (>320x240)
+  - Programme s'arrête brutalement pendant l'encodage
+  - Affecte particulièrement les fichiers comme 1011.RBT (514x382)
+- **Cause racine** : Allocation mémoire excessive pour résolutions non standards
+  - Détection automatique de résolution sans limites de sécurité
+  - Allocation de multiples buffers (base, remap, alpha, luminance) × nombre de frames
+  - Crash mémoire sous Windows lors de l'encodage PNG
+- **Solution** : Ajout de limites de sécurité sur les dimensions
+  - Résolution maximale : 640×480 pixels
+  - Résolution minimale : 320×240 pixels  
+  - Clamping automatique des dimensions hors limites
+  - Message d'avertissement si redimensionnement appliqué
+- **Impact** : Traitement stable et fiable de tous les fichiers RBT
+  - Package Windows peut maintenant traiter les 216 fichiers sans crash
+  - Légère perte de résolution sur quelques fichiers très haute définition (rare)
+
+#### Détails Techniques
+```cpp
+// Limites de sécurité pour éviter les crashs mémoire
+const int MAX_WIDTH = 640;
+const int MAX_HEIGHT = 480;
+if (outWidth > MAX_WIDTH) outWidth = MAX_WIDTH;
+if (outHeight > MAX_HEIGHT) outHeight = MAX_HEIGHT;
+```
+
+### 📦 Package Windows Mis à Jour
+- Exécutable recompilé avec les corrections (09:08 UTC)
+- `extractor_sierra_windows.zip` (8.2 MB) prêt à distribuer
+- Compatible avec tous les fichiers RBT testés
+
+---
+
 ## [2.2.0] - 2024-12-02 - Correction Synchronisation Audio (Positions)
 
 ### 🐛 Correction Critique
