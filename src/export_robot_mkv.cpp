@@ -320,9 +320,9 @@ int main(int argc, char* argv[]) {
     }
     
     fprintf(stderr, "\n=== Robot Video Batch Export ===\n");
-    fprintf(stderr, "Version: 2.3.0 (2024-12-04) - Adaptive Resolution\n");
+    fprintf(stderr, "Version: 2.3.1 (2024-12-04) - Critical Bugfix\n");
     fprintf(stderr, "Codec: %s\n", codecStr);
-    fprintf(stderr, "Max Resolution: Adaptive (up to Full HD)\n", codecStr);
+    fprintf(stderr, "Max Resolution: Adaptive (up to Full HD)\n");
     
     // Vérifier si FFmpeg est disponible
     fprintf(stderr, "\nChecking FFmpeg availability...\n");

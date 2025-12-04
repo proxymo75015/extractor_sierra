@@ -84,6 +84,22 @@ bool RobotMKVExporter::exportMultiTrack(
     const int h = layers[0].height;
     const size_t numFrames = layers.size();
     
+    // Vérifier que toutes les frames ont la même résolution
+    bool sameResolution = true;
+    for (size_t i = 1; i < numFrames; ++i) {
+        if (layers[i].width != w || layers[i].height != h) {
+            fprintf(stderr, "Warning: Frame %zu has different resolution (%dx%d vs %dx%d)\n", 
+                    i, layers[i].width, layers[i].height, w, h);
+            sameResolution = false;
+        }
+    }
+    
+    if (!sameResolution) {
+        fprintf(stderr, "Error: Mixed resolutions not supported in current implementation\n");
+        fprintf(stderr, "       All frames must have the same resolution for MKV export\n");
+        return false;
+    }
+    
     fprintf(stderr, "\n=== Exporting Multi-Track MKV ===\n");
     fprintf(stderr, "Frames: %zu\n", numFrames);
     fprintf(stderr, "Resolution: %dx%d\n", w, h);
@@ -115,7 +131,11 @@ bool RobotMKVExporter::exportMultiTrack(
     
     for (size_t frameIdx = 0; frameIdx < numFrames; ++frameIdx) {
         const RobotLayerFrame& layer = layers[frameIdx];
-        const size_t pixelCount = w * h;
+        
+        // Utiliser la résolution de CETTE frame, pas de la frame 0
+        const int frameWidth = layer.width;
+        const int frameHeight = layer.height;
+        const size_t pixelCount = (size_t)frameWidth * (size_t)frameHeight;
         
         // Couche BASE: RGB complet des pixels 0-235
         std::vector<uint8_t> baseRGB(pixelCount * 3);
@@ -177,32 +197,51 @@ bool RobotMKVExporter::exportMultiTrack(
             luminanceRGB[i * 3 + 2] = Y;
         }
         
-        // Écrire les 4 PNG
+        // Écrire les 4 PNG avec vérification
         char filename[512];
         
         snprintf(filename, sizeof(filename), "%s/frame_%04zu.png", tempDirBase.c_str(), frameIdx);
-        if (!stbi_write_png(filename, w, h, 3, baseRGB.data(), w * 3)) {
-            fprintf(stderr, "Error: failed to write base layer %s\n", filename);
+        int result = stbi_write_png(filename, frameWidth, frameHeight, 3, baseRGB.data(), frameWidth * 3);
+        if (!result) {
+            fprintf(stderr, "\nError: stbi_write_png failed for base layer (frame %zu)\n", frameIdx);
+            fprintf(stderr, "       File: %s\n", filename);
+            fprintf(stderr, "       Resolution: %dx%d, Size: %zu bytes\n", frameWidth, frameHeight, baseRGB.size());
             return false;
         }
         
         snprintf(filename, sizeof(filename), "%s/frame_%04zu.png", tempDirRemap.c_str(), frameIdx);
-        if (!stbi_write_png(filename, w, h, 3, remapRGB.data(), w * 3)) {
-            fprintf(stderr, "Error: failed to write remap layer %s\n", filename);
+        result = stbi_write_png(filename, frameWidth, frameHeight, 3, remapRGB.data(), frameWidth * 3);
+        if (!result) {
+            fprintf(stderr, "\nError: stbi_write_png failed for remap layer (frame %zu)\n", frameIdx);
+            fprintf(stderr, "       File: %s\n", filename);
             return false;
         }
         
         snprintf(filename, sizeof(filename), "%s/frame_%04zu.png", tempDirAlpha.c_str(), frameIdx);
-        if (!stbi_write_png(filename, w, h, 1, alphaGray.data(), w)) {
-            fprintf(stderr, "Error: failed to write alpha layer %s\n", filename);
+        result = stbi_write_png(filename, frameWidth, frameHeight, 1, alphaGray.data(), frameWidth);
+        if (!result) {
+            fprintf(stderr, "\nError: stbi_write_png failed for alpha layer (frame %zu)\n", frameIdx);
+            fprintf(stderr, "       File: %s\n", filename);
             return false;
         }
         
         snprintf(filename, sizeof(filename), "%s/frame_%04zu.png", tempDirComposite.c_str(), frameIdx);
-        if (!stbi_write_png(filename, w, h, 3, luminanceRGB.data(), w * 3)) {
-            fprintf(stderr, "Error: failed to write luminance layer %s\n", filename);
+        result = stbi_write_png(filename, frameWidth, frameHeight, 3, luminanceRGB.data(), frameWidth * 3);
+        if (!result) {
+            fprintf(stderr, "\nError: stbi_write_png failed for luminance layer (frame %zu)\n", frameIdx);
+            fprintf(stderr, "       File: %s\n", filename);
             return false;
         }
+        
+        // Libérer explicitement la mémoire des buffers temporaires
+        baseRGB.clear();
+        baseRGB.shrink_to_fit();
+        remapRGB.clear();
+        remapRGB.shrink_to_fit();
+        alphaGray.clear();
+        alphaGray.shrink_to_fit();
+        luminanceRGB.clear();
+        luminanceRGB.shrink_to_fit();
         
         if ((frameIdx + 1) % 10 == 0 || frameIdx == numFrames - 1) {
             fprintf(stderr, "\r  Writing frame %zu/%zu...", frameIdx + 1, numFrames);
