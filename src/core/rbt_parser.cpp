@@ -1080,6 +1080,23 @@ bool RbtParser::extractFramePixels(size_t frameIndex, std::vector<uint8_t>& outP
         }
     }
     
+    // Limites de sécurité pour éviter les crashs mémoire
+    const int MAX_WIDTH = 640;
+    const int MAX_HEIGHT = 480;
+    if (outWidth > MAX_WIDTH) outWidth = MAX_WIDTH;
+    if (outHeight > MAX_HEIGHT) outHeight = MAX_HEIGHT;
+    if (outWidth < 320) outWidth = 320;
+    if (outHeight < 240) outHeight = 240;
+    
+    // Vérifier que l'allocation est raisonnable
+    const size_t pixelCount = (size_t)outWidth * (size_t)outHeight;
+    if (pixelCount > MAX_WIDTH * MAX_HEIGHT) {
+        fprintf(stderr, "Warning: Resolution %dx%d too large, clamping to %dx%d\n", 
+                outWidth, outHeight, MAX_WIDTH, MAX_HEIGHT);
+        outWidth = MAX_WIDTH;
+        outHeight = MAX_HEIGHT;
+    }
+    
     outPixels.assign(outWidth * outHeight, 255);  // Fond transparent (skip=255)
     
     // Lire les données brutes de la frame
