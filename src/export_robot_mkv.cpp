@@ -146,16 +146,33 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
             continue;
         }
         
-        // Décomposer en couches
-        RobotLayerFrame layer = decomposeRobotFrame(pixelIndices, globalPalette, width, height);
-        allLayers.push_back(std::move(layer));
+        // Décomposer en couches (avec gestion d'erreur pour allocations)
+        try {
+            RobotLayerFrame layer = decomposeRobotFrame(pixelIndices, globalPalette, width, height);
+            allLayers.push_back(std::move(layer));
+        } catch (const std::bad_alloc& e) {
+            fprintf(stderr, "Error: Memory allocation failed for frame %zu (%dx%d)\n", i, width, height);
+            fprintf(stderr, "       Try processing a smaller subset of frames or reduce resolution\n");
+            fclose(f);
+            return false;
+        } catch (const std::exception& e) {
+            fprintf(stderr, "Error: Exception while processing frame %zu: %s\n", i, e.what());
+            continue;
+        }
         
         // Sauvegarder la frame composite en PNG
         char framePath[512];
         snprintf(framePath, sizeof(framePath), "%s/frame_%04zu.png", framesDir.c_str(), i);
         
         // Créer image composite RGBA avec transparence
-        std::vector<uint8_t> rgbaImage(width * height * 4);
+        std::vector<uint8_t> rgbaImage;
+        try {
+            rgbaImage.resize((size_t)width * (size_t)height * 4);
+        } catch (const std::bad_alloc& e) {
+            fprintf(stderr, "Warning: Cannot allocate RGBA buffer for frame %zu, skipping PNG export\n", i);
+            continue;
+        }
+        
         for (int y = 0; y < height; ++y) {
             for (int x = 0; x < width; ++x) {
                 size_t pixelIdx = y * width + x;
@@ -303,9 +320,9 @@ int main(int argc, char* argv[]) {
     }
     
     fprintf(stderr, "\n=== Robot Video Batch Export ===\n");
-    fprintf(stderr, "Version: 2.2.1 (2024-12-04)\n");
+    fprintf(stderr, "Version: 2.3.0 (2024-12-04) - Adaptive Resolution\n");
     fprintf(stderr, "Codec: %s\n", codecStr);
-    fprintf(stderr, "Max Resolution: 640x480\n", codecStr);
+    fprintf(stderr, "Max Resolution: Adaptive (up to Full HD)\n", codecStr);
     
     // Vérifier si FFmpeg est disponible
     fprintf(stderr, "\nChecking FFmpeg availability...\n");

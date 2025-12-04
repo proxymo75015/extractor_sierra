@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <cstdio>
 
 namespace RobotExtractor {
 
@@ -27,15 +28,26 @@ struct RobotLayerFrame {
     std::vector<uint8_t> alpha;  // 255 = opaque, 0 = transparent (skip)
     
     RobotLayerFrame(int w, int h) : width(w), height(h) {
-        size_t size = w * h;
-        base_r.resize(size, 0);
-        base_g.resize(size, 0);
-        base_b.resize(size, 0);
-        remap_mask.resize(size, 0);
-        remap_color_r.resize(size, 0);
-        remap_color_g.resize(size, 0);
-        remap_color_b.resize(size, 0);
-        alpha.resize(size, 255);  // Par défaut opaque
+        size_t size = (size_t)w * (size_t)h;
+        
+        // Protection contre allocations trop grandes
+        if (size > 1920 * 1080) {  // > Full HD
+            fprintf(stderr, "Warning: Large frame allocation %dx%d (%zu pixels)\n", w, h, size);
+        }
+        
+        try {
+            base_r.resize(size, 0);
+            base_g.resize(size, 0);
+            base_b.resize(size, 0);
+            remap_mask.resize(size, 0);
+            remap_color_r.resize(size, 0);
+            remap_color_g.resize(size, 0);
+            remap_color_b.resize(size, 0);
+            alpha.resize(size, 255);  // Par défaut opaque
+        } catch (const std::bad_alloc& e) {
+            fprintf(stderr, "Error: Failed to allocate RobotLayerFrame for %dx%d\n", w, h);
+            throw;  // Re-throw pour que l'appelant puisse gérer
+        }
     }
 };
 

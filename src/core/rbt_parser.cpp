@@ -1080,24 +1080,27 @@ bool RbtParser::extractFramePixels(size_t frameIndex, std::vector<uint8_t>& outP
         }
     }
     
-    // Limites de sécurité pour éviter les crashs mémoire
-    const int MAX_WIDTH = 640;
-    const int MAX_HEIGHT = 480;
-    if (outWidth > MAX_WIDTH) outWidth = MAX_WIDTH;
-    if (outHeight > MAX_HEIGHT) outHeight = MAX_HEIGHT;
-    if (outWidth < 320) outWidth = 320;
-    if (outHeight < 240) outHeight = 240;
+    // S'assurer que les dimensions sont valides
+    if (outWidth < 1) outWidth = 320;
+    if (outHeight < 1) outHeight = 240;
     
-    // Vérifier que l'allocation est raisonnable
+    // Vérifier que l'allocation mémoire est raisonnable (éviter les valeurs aberrantes)
     const size_t pixelCount = (size_t)outWidth * (size_t)outHeight;
-    if (pixelCount > MAX_WIDTH * MAX_HEIGHT) {
-        fprintf(stderr, "Warning: Resolution %dx%d too large, clamping to %dx%d\n", 
-                outWidth, outHeight, MAX_WIDTH, MAX_HEIGHT);
-        outWidth = MAX_WIDTH;
-        outHeight = MAX_HEIGHT;
+    const size_t MAX_PIXELS = 1920 * 1080;  // Full HD comme limite max raisonnable
+    if (pixelCount > MAX_PIXELS) {
+        fprintf(stderr, "Warning: Resolution %dx%d seems unreasonable (>Full HD), possible corrupted data\n", 
+                outWidth, outHeight);
+        return false;  // Éviter de crasher, mais signaler l'erreur
     }
     
-    outPixels.assign(outWidth * outHeight, 255);  // Fond transparent (skip=255)
+    // Allouer le buffer de sortie
+    try {
+        outPixels.assign(outWidth * outHeight, 255);  // Fond transparent (skip=255)
+    } catch (const std::bad_alloc& e) {
+        fprintf(stderr, "Error: Failed to allocate memory for %dx%d frame (%zu bytes)\n", 
+                outWidth, outHeight, pixelCount);
+        return false;
+    }
     
     // Lire les données brutes de la frame
     std::vector<uint8_t> rawVideoData(_videoSizes[frameIndex]);
