@@ -74,7 +74,7 @@ cp /chemin/vers/vos/fichiers/*.RBT RBT/
 
 **Lancement** :
 ```bash
-./export_robot_mkv [codec]
+./export_robot_mkv [codec] [--canvas WIDTHxHEIGHT]
 ```
 
 **Codecs disponibles** :
@@ -83,9 +83,18 @@ cp /chemin/vers/vos/fichiers/*.RBT RBT/
 - `vp9` - Open source, excellente qualité
 - `ffv1` - Lossless, archivage
 
-**Exemple** :
+**Options canvas** :
+- `--canvas WIDTHxHEIGHT` - Forcer taille du canvas (ex: `--canvas 640x480`)
+- Si non spécifié : **Auto-détection** des résolutions standard (640×480, 640×400, 320×240, 320×200)
+
+**Exemples** :
 ```bash
+# Auto-détection (recommandé)
 ./export_robot_mkv h264
+
+# Canvas personnalisé
+./export_robot_mkv h264 --canvas 640x480
+./export_robot_mkv vp9 --canvas 800x600
 ```
 
 **Résultats** :

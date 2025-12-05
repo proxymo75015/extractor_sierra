@@ -4,6 +4,58 @@ Historique des modifications du projet `extractor_sierra`.
 
 ---
 
+## [2.5.0] - 2024-12-04 - Canvas Auto-Detect et Positions ScummVM
+
+### ✨ Nouvelles fonctionnalités
+
+#### Option `--canvas` avec auto-détection
+- **Ligne de commande** : `export_robot_mkv [codec] [--canvas WIDTHxHEIGHT]`
+- **Auto-détection** : Si `--canvas` non spécifié, détection automatique des résolutions standard
+  - 640×480 (VGA)
+  - 640×400 (VGA)
+  - 320×240 (QVGA)
+  - 320×200 (CGA)
+- **Choix intelligent** : Sélectionne automatiquement la plus petite résolution standard englobant le contenu
+
+#### Compatibilité ScummVM rétablie
+- **Positions absolues** : `celX`, `celY` du format RBT préservées (pas de recentrage)
+- **Canvas normalisé** : Dimensions fixes pour FFmpeg tout en respectant les coordonnées ScummVM
+- **Exemple** : Contenu 390×461 → Canvas auto-détecté 640×480 → Position (248, 136) préservée
+
+### 🔧 Corrections critiques
+
+#### Suppression du recentrage artificiel
+- **Bug** : Les frames étaient centrées dans le canvas → Positions incorrectes pour ScummVM
+- **Correctif** : Padding transparent à droite/bas uniquement, positions top-left préservées
+- **Impact** : Videos MOV maintenant compatibles avec positions ScummVM originales
+
+#### Amélioration messages console
+```
+Content Resolution: 390x461
+Auto-detected canvas: VGA (640x480) (content fits in 390x461)
+Canvas (forced): 800x600  # Si --canvas utilisé
+```
+
+### 📦 Exemples d'utilisation
+
+```bash
+# Auto-détection (recommandé)
+./export_robot_mkv h264
+
+# Canvas forcé
+./export_robot_mkv h264 --canvas 640x480
+./export_robot_mkv vp9 --canvas 800x600
+```
+
+### 🧪 Tests de validation
+
+- ✅ 230.RBT : Contenu 390×461 → Canvas 640×480 → Position (248, 136)
+- ✅ Canvas forcé 800×600 → Position identique (248, 136)
+- ✅ Transparence alpha préservée (89.9% pixels transparents)
+- ✅ Compatibilité FFmpeg (dimensions fixes requises)
+
+---
+
 ## [2.4.1] - 2024-12-04 - Normalisation Dimensions MOV ProRes
 
 ### 🔧 Corrections Critiques

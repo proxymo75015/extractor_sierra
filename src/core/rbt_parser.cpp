@@ -572,8 +572,8 @@ uint32_t RbtParser::createCel5(const uint8_t *rawVideoData, const int16_t screen
 
     const uint8_t *p = rawVideoData + 22; // kCelHeaderSize
 
-    std::fprintf(stderr, "    cel %d: w=%u h=%u dataSize=%u chunks=%d\n", 
-                 screenItemIndex, celWidth, celHeight, dataSize, numDataChunks);
+    std::fprintf(stderr, "    cel %d: pos=(%u,%u) w=%u h=%u dataSize=%u chunks=%d\n", 
+                 screenItemIndex, celX, celY, celWidth, celHeight, dataSize, numDataChunks);
 
     const uint64_t area = (uint64_t)celWidth * (uint64_t)celHeight;
     if (area > 20000000) {
@@ -660,29 +660,52 @@ uint32_t RbtParser::createCel5(const uint8_t *rawVideoData, const int16_t screen
     // write PPM (RGB) avec palette
     char name[512];
     
+    // IMPORTANT: Padder les dimensions à un multiple de 2 pour H.264/YUV420p
+    int paddedWidth = celWidth;
+    int paddedHeight = celHeight;
+    if (paddedWidth % 2 != 0) paddedWidth++;
+    if (paddedHeight % 2 != 0) paddedHeight++;
+    
     if (!_paletteData.empty() && _paletteSize >= 768) {
         snprintf(name, sizeof(name), "%s/frame_%04zu_cel_%02d.ppm", outDir, frameIndex, screenItemIndex);
         std::ofstream img(name, std::ios::binary);
-        img << "P6\n" << celWidth << " " << celHeight << "\n255\n";
+        img << "P6\n" << paddedWidth << " " << paddedHeight << "\n255\n";
         
-        for (size_t i = 0; i < finalPixels.size(); ++i) {
-            uint8_t idx = finalPixels[i];
-            size_t palOffset = idx * 3;
-            
-            if (palOffset + 2 < _paletteData.size()) {
-                img.put(_paletteData[palOffset]);
-                img.put(_paletteData[palOffset + 1]);
-                img.put(_paletteData[palOffset + 2]);
-            } else {
-                img.put(0); img.put(0); img.put(0);
+        for (int y = 0; y < paddedHeight; ++y) {
+            for (int x = 0; x < paddedWidth; ++x) {
+                // Si on est dans la zone paddée, écrire du noir
+                if (x >= celWidth || y >= celHeight) {
+                    img.put(0); img.put(0); img.put(0);
+                } else {
+                    size_t i = y * celWidth + x;
+                    uint8_t idx = finalPixels[i];
+                    size_t palOffset = idx * 3;
+                    
+                    if (palOffset + 2 < _paletteData.size()) {
+                        img.put(_paletteData[palOffset]);
+                        img.put(_paletteData[palOffset + 1]);
+                        img.put(_paletteData[palOffset + 2]);
+                    } else {
+                        img.put(0); img.put(0); img.put(0);
+                    }
+                }
             }
         }
         img.close();
     } else {
         snprintf(name, sizeof(name), "%s/frame_%04zu_cel_%02d.pgm", outDir, frameIndex, screenItemIndex);
         std::ofstream img(name, std::ios::binary);
-        img << "P5\n" << celWidth << " " << celHeight << "\n255\n";
-        if (!finalPixels.empty()) img.write((const char*)finalPixels.data(), finalPixels.size());
+        img << "P5\n" << paddedWidth << " " << paddedHeight << "\n255\n";
+        for (int y = 0; y < paddedHeight; ++y) {
+            for (int x = 0; x < paddedWidth; ++x) {
+                if (x >= celWidth || y >= celHeight) {
+                    img.put(0);
+                } else {
+                    size_t i = y * celWidth + x;
+                    img.put(finalPixels[i]);
+                }
+            }
+        }
         img.close();
     }
 
@@ -1052,8 +1075,9 @@ bool RbtParser::extractFramePixels(size_t frameIndex, std::vector<uint8_t>& outP
     
     // Pour Robot, résolution dépend des cels eux-mêmes
     // On scanne tous les cels pour trouver les dimensions maximales
-    outWidth = 320;   // Minimum par défaut
-    outHeight = 240;
+    // IMPORTANT: On part de 0x0 puis on prend le MAX avec 630x450 (résolution Phantasmagoria)
+    int minWidth = 0;   
+    int minHeight = 0;
     
     // Lire les données brutes de la frame pour trouver les dimensions réelles
     if (frameIndex < _videoSizes.size()) {
@@ -1072,17 +1096,23 @@ bool RbtParser::extractFramePixels(size_t frameIndex, std::vector<uint8_t>& outP
                 
                 int maxX = cx + cw;
                 int maxY = cy + ch;
-                if (maxX > outWidth) outWidth = maxX;
-                if (maxY > outHeight) outHeight = maxY;
+                if (maxX > minWidth) minWidth = maxX;
+                if (maxY > minHeight) minHeight = maxY;
                 
                 tp += 22 + dsz;
             }
         }
     }
     
-    // S'assurer que les dimensions sont valides
-    if (outWidth < 1) outWidth = 320;
-    if (outHeight < 1) outHeight = 240;
+    // S'assurer d'avoir au minimum 630x450 (résolution Phantasmagoria selon ScummVM)
+    // Cela garantit que le canvas est assez grand pour le positionnement correct
+    outWidth = (minWidth > 630) ? minWidth : 630;
+    outHeight = (minHeight > 450) ? minHeight : 450;
+    
+    // IMPORTANT: Arrondir les dimensions à un multiple de 2 pour H.264/YUV420p
+    // (H.264 préfère même des multiples de 16, mais 2 est le minimum strict)
+    if (outWidth % 2 != 0) outWidth++;
+    if (outHeight % 2 != 0) outHeight++;
     
     // Vérifier que l'allocation mémoire est raisonnable (éviter les valeurs aberrantes)
     const size_t pixelCount = (size_t)outWidth * (size_t)outHeight;
@@ -1196,11 +1226,22 @@ bool RbtParser::extractFramePixels(size_t frameIndex, std::vector<uint8_t>& outP
         }
         
         // Composer le cel dans le buffer final
-        for (int y = 0; y < (int)celHeight && (celY + y) < (int)outHeight; ++y) {
-            for (int x = 0; x < (int)celWidth && (celX + x) < (int)outWidth; ++x) {
+        // NOTE: Les coordonnées celX/celY dans le fichier RBT sont relatives
+        // ScummVM ajoute un _position global (fourni par le script du jeu) :
+        // highResY = celPosition.y + _position.y + celHeight - 1
+        // Comme nous n'avons pas accès à _position, on utilise celX/celY directement
+        // comme coordonnées TOP-LEFT du cel
+        for (int y = 0; y < (int)celHeight; ++y) {
+            const int screenY = celY + y;
+            if (screenY < 0 || screenY >= (int)outHeight) continue;
+            
+            for (int x = 0; x < (int)celWidth; ++x) {
+                const int screenX = celX + x;
+                if (screenX < 0 || screenX >= (int)outWidth) continue;
+                
                 uint8_t pixelIdx = finalCelPixels[y * celWidth + x];
                 // Écrire TOUS les pixels (y compris skip=255)
-                outPixels[(celY + y) * outWidth + (celX + x)] = pixelIdx;
+                outPixels[screenY * outWidth + screenX] = pixelIdx;
             }
         }
     }

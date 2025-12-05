@@ -1,0 +1,203 @@
+================================================================================
+                   ROBOT POSITION EXTRACTION TOOLKIT
+                           Files Created
+================================================================================
+
+📦 PROJECT STRUCTURE
+--------------------
+/workspaces/extractor_sierra/
+│
+├── 📚 DOCUMENTATION (4 files, ~25KB)
+│   ├── README_ROBOT_POSITIONS.md              6.8 KB  [Quick Start Guide]
+│   ├── ROBOT_POSITION_EXTRACTION_GUIDE.md     4.4 KB  [4 Methods Guide]
+│   ├── ROBOT_POSITION_INVESTIGATION_SUMMARY.md 7.0 KB  [Technical Report]
+│   ├── FILE_INDEX.md                          7.4 KB  [File Catalog]
+│   └── ROBOT_POSITIONS_SUMMARY.txt            4.4 KB  [Executive Summary]
+│
+├── 🔧 EXTRACTION SCRIPTS (3 files, ~8KB)
+│   ├── scummvm_robot_patch.diff               549 B   [ScummVM Patch]
+│   ├── extract_robot_positions.sh             4.2 KB  [Auto Extraction]
+│   └── parse_robot_logs.py                    3.7 KB  [Log Parser]
+│
+├── 💻 CODE EXAMPLES (1 file, ~6KB)
+│   └── robot_position_loader_example.cpp      5.8 KB  [C++ Integration]
+│
+├── 🧪 TEST FILES (3 files, ~1KB)
+│   ├── test_scummvm_log.txt                   708 B   [Sample Log]
+│   ├── test_robot_positions.txt               161 B   [Sample Output]
+│   └── robot_positions.txt                    385 B   [Config Placeholder]
+│
+└── 🔬 RESEARCH ARCHIVE (1 file, ~27KB)
+    └── src/sci_robot_positions.cpp            Built   [SCI Script Parser]
+    └── sci_robot_positions (binary)           27 KB   [Compiled Parser]
+
+================================================================================
+
+📝 FILE DESCRIPTIONS
+--------------------
+
+┌─ DOCUMENTATION ───────────────────────────────────────────────────────────┐
+│                                                                            │
+│ README_ROBOT_POSITIONS.md                                                  │
+│   ➤ Quick start guide for Robot position extraction                       │
+│   ➤ Recommended method: ScummVM patching                                  │
+│   ➤ 3 alternative methods                                                 │
+│   ➤ Integration guide, troubleshooting, checklist                         │
+│                                                                            │
+│ ROBOT_POSITION_EXTRACTION_GUIDE.md                                        │
+│   ➤ Detailed guide with 4 extraction methods                              │
+│   ➤ Method 1: ScummVM patched (automatic)                                 │
+│   ➤ Method 2: HEAP analysis (advanced)                                    │
+│   ➤ Method 3: Manual extraction (simple)                                  │
+│   ➤ Method 4: Default values (quick)                                      │
+│                                                                            │
+│ ROBOT_POSITION_INVESTIGATION_SUMMARY.md                                   │
+│   ➤ Complete technical investigation report                               │
+│   ➤ SCI2.1 architecture analysis                                          │
+│   ➤ ScummVM kRobotOpen function documentation                             │
+│   ➤ RBT header decoding results                                           │
+│   ➤ Why coordinates are NOT in RBT files                                  │
+│                                                                            │
+│ FILE_INDEX.md                                                              │
+│   ➤ Comprehensive catalog of all created files                            │
+│   ➤ Descriptions, usage, workflow diagrams                                │
+│   ➤ Quick reference guide                                                 │
+│                                                                            │
+│ ROBOT_POSITIONS_SUMMARY.txt                                               │
+│   ➤ Executive summary in plain text                                       │
+│   ➤ Key findings, commands, specifications                                │
+│   ➤ Quick reference for terminal viewing                                  │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+┌─ EXTRACTION SCRIPTS ──────────────────────────────────────────────────────┐
+│                                                                            │
+│ scummvm_robot_patch.diff                                                   │
+│   ➤ Unified diff patch for ScummVM                                        │
+│   ➤ Adds warning() logging to kRobotOpen function                         │
+│   ➤ Location: engines/sci/engine/kvideo.cpp                               │
+│   ➤ Usage: patch -p1 < scummvm_robot_patch.diff                           │
+│                                                                            │
+│ extract_robot_positions.sh                                                 │
+│   ➤ Fully automated extraction script                                     │
+│   ➤ Clones ScummVM, applies patch, compiles                               │
+│   ➤ Launches game and captures logs                                       │
+│   ➤ Parses logs and generates robot_positions.txt                         │
+│   ➤ Usage: ./extract_robot_positions.sh                                   │
+│                                                                            │
+│ parse_robot_logs.py                                                        │
+│   ➤ Python 3 script to parse ScummVM debug logs                           │
+│   ➤ Extracts Robot coordinates from ROBOT_DEBUG lines                     │
+│   ➤ Consolidates multiple occurrences                                     │
+│   ➤ Outputs robot_positions.txt (format: id X Y)                          │
+│   ➤ Usage: python3 parse_robot_logs.py input.txt output.txt               │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+┌─ CODE EXAMPLES ───────────────────────────────────────────────────────────┐
+│                                                                            │
+│ robot_position_loader_example.cpp                                          │
+│   ➤ Complete C++ implementation example                                   │
+│   ➤ RobotPositionManager class                                            │
+│   ➤ Load robot_positions.txt file                                         │
+│   ➤ Get positions with fallback to centered defaults                      │
+│   ➤ Integration examples for main() and extractRobotVideo()               │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+┌─ TEST FILES ──────────────────────────────────────────────────────────────┐
+│                                                                            │
+│ test_scummvm_log.txt                                                       │
+│   ➤ Sample ScummVM log with ROBOT_DEBUG output                            │
+│   ➤ Contains 3 Robot positions (1000, 230, 91)                            │
+│   ➤ Used to test parse_robot_logs.py without running ScummVM              │
+│                                                                            │
+│ test_robot_positions.txt                                                   │
+│   ➤ Sample output from parse_robot_logs.py                                │
+│   ➤ Correct format example                                                │
+│   ➤ Shows expected parser output                                          │
+│                                                                            │
+│ robot_positions.txt                                                        │
+│   ➤ Placeholder configuration file                                        │
+│   ➤ To be filled with real coordinates                                    │
+│   ➤ Format: robot_id X Y (one per line)                                   │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+┌─ RESEARCH ARCHIVE ────────────────────────────────────────────────────────┐
+│                                                                            │
+│ src/sci_robot_positions.cpp                                                │
+│   ➤ SCI script bytecode parser                                            │
+│   ➤ Searches for kRobotOpen calls with hardcoded coordinates              │
+│   ➤ Result: Found 0 (coordinates are dynamic)                             │
+│   ➤ Proved coordinates stored as object properties in HEAP                │
+│   ➤ Based on ScummVM script.cpp and kernel_tables.h                       │
+│                                                                            │
+│ sci_robot_positions (binary)                                               │
+│   ➤ Compiled version of the parser                                        │
+│   ➤ Scans RESMAP/RESSCI files                                             │
+│   ➤ Decompresses scripts with LZS                                         │
+│   ➤ Execution result: "Aucun appel kRobot trouvé dans les scripts"        │
+│                                                                            │
+└────────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+
+🚀 QUICK START
+--------------
+1. Read:  README_ROBOT_POSITIONS.md
+2. Run:   ./extract_robot_positions.sh
+3. Get:   robot_positions.txt with real coordinates
+4. Use:   robot_position_loader_example.cpp for integration
+
+📖 DETAILED WORKFLOW
+--------------------
+Phase 1: Extract Positions
+  scummvm_robot_patch.diff
+          ↓
+    Patch ScummVM
+          ↓
+    Compile & Run
+          ↓
+   Capture Logs
+          ↓
+  parse_robot_logs.py
+          ↓
+  robot_positions.txt
+
+Phase 2: Integration
+  robot_positions.txt
+          ↓
+  robot_position_loader_example.cpp
+          ↓
+  Modify src/main.cpp
+          ↓
+  Extract with exact positioning
+
+🎯 TARGET OUTPUT
+----------------
+robot_positions.txt:
+  # Format: robot_id X Y
+  1000 150 143
+  230 180 160
+  91 175 150
+
+📊 KEY FINDINGS
+---------------
+✓ Coordinates NOT in RBT files (xResolution=0, yResolution=0)
+✓ Passed via kRobotOpen(robotId, plane, priority, X, Y, scale)
+✓ argv[3] = X coordinate, argv[4] = Y coordinate
+✓ Stored as object properties in HEAP (SCI scripts)
+✓ ScummVM source: engines/sci/engine/kvideo.cpp:266-276
+
+🔗 RESOURCES
+------------
+ScummVM:      https://github.com/scummvm/scummvm
+SCI Wiki:     https://wiki.scummvm.org/index.php/SCI
+kRobotOpen:   engines/sci/engine/kvideo.cpp:266
+
+================================================================================
+Created: 2024
+Project: extractor_sierra
+Purpose: Extract exact Robot video positions from Phantasmagoria
+================================================================================

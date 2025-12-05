@@ -1,19 +1,19 @@
 ================================================================================
-  SIERRA ROBOT VIDEO EXTRACTOR - Windows v2.4.1
+  SIERRA ROBOT VIDEO EXTRACTOR - Windows v2.5.0
 ================================================================================
 
-IMPORTANT: INSTALLATION DE FFMPEG COMPLET (OBLIGATOIRE)
---------------------------------------------------------
+IMPORTANT: INSTALLATION DE FFMPEG (OBLIGATOIRE)
+------------------------------------------------
 
-Ce programme NECESSITE FFmpeg COMPLET avec support ProRes pour fonctionner.
+Ce programme NECESSITE FFmpeg pour fonctionner. Sans FFmpeg, seuls les
+fichiers WAV seront generes (pas de MOV ni MP4).
 
 INSTALLATION FFMPEG SUR WINDOWS:
 
-1. Telecharger FFmpeg COMPLET (pas Essentials):
-   https://www.gyan.dev/ffmpeg/builds/
-   > Choisir "ffmpeg-release-full.7z" (200-300 MB)
+1. Telecharger FFmpeg FULL BUILD (support ProRes):
+   https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.7z
 
-2. Extraire le fichier avec 7-Zip dans C:\ffmpeg\
+2. Extraire le fichier dans C:\ffmpeg\
 
 3. Ajouter au PATH Windows:
    - Clic droit sur "Ce PC" > Proprietes
@@ -25,8 +25,7 @@ INSTALLATION FFMPEG SUR WINDOWS:
 4. Verifier l'installation:
    - Ouvrir un NOUVEAU terminal (cmd)
    - Taper: ffmpeg -version
-   - Taper: ffmpeg -codecs | findstr prores
-   - Vous devez voir "DEV.L. prores" pour que l'export MOV fonctionne
+   - Si vous voyez la version de FFmpeg, c'est OK!
 
 UTILISATION
 -----------
@@ -34,80 +33,55 @@ UTILISATION
 1. Placer vos fichiers .RBT dans le dossier RBT/
 
 2. Double-cliquer sur "run.bat" OU ouvrir un terminal et executer :
-   export_robot_mkv.exe [codec]
+   export_robot_mkv.exe [codec] [--canvas WIDTHxHEIGHT]
 
    Codecs disponibles :
    - h264  (defaut, recommande)
    - h265  (meilleure compression)
    - vp9   (open source)
    - ffv1  (lossless)
+   - prores (ProRes 4444 avec transparence, QuickTime MOV)
+
+   Options :
+   - --canvas WIDTHxHEIGHT : Force la resolution du canvas (ex: --canvas 640x480)
+     Si omis, detecte automatiquement la resolution appropriee (VGA, etc.)
 
 3. Les resultats seront dans le dossier output/
+
+EXEMPLES D'UTILISATION
+---------------------
+
+# Detection automatique du canvas (recommande)
+export_robot_mkv.exe h264
+
+# Forcer le canvas a 640x480 (VGA Sierra SCI32)
+export_robot_mkv.exe h264 --canvas 640x480
+
+# Export ProRes 4444 avec transparence (QuickTime MOV)
+export_robot_mkv.exe prores
+
+# Export ProRes avec canvas force
+export_robot_mkv.exe prores --canvas 800x600
 
 STRUCTURE DE SORTIE
 -------------------
 
 output/
-├── 230/
-│   ├── 230_composite.mov    # NOUVEAU: ProRes 4444 RGBA avec transparence
-│   ├── 230_video.mkv        # MKV multi-couches (BASE/REMAP/ALPHA/LUMINANCE)
-│   ├── 230_audio.wav        # Audio PCM 22050 Hz mono
-│   ├── 230_metadata.txt     # Metadonnees completes
-│   └── 230_frames/          # Frames PNG RGBA individuelles
-│       ├── frame_0000.png
-│       └── ...
+├── 91/
+│   ├── 91_video.mov        # MOV ProRes 4444 RGBA + audio
+│   ├── 91_audio.wav        # Audio PCM 22 kHz
+│   ├── 91_composite.mp4    # Video composite H.264
+│   └── 91_metadata.txt     # Metadonnees
 └── ...
 
-FICHIERS GENERES
------------------
+FORMAT MOV PRORES 4444
+----------------------
 
-1. *_composite.mov (ProRes 4444 RGBA) - RECOMMANDE
-   - Canal alpha natif (transparence)
-   - Qualite professionnelle quasi-lossless
-   - Compatible: DaVinci Resolve, Premiere Pro, After Effects, Final Cut
-   - Taille: ~10 MB pour 10 secondes
-
-2. *_video.mkv (Multi-couches) - FORMAT TECHNIQUE
-   - 4 pistes video separees (BASE, REMAP, ALPHA, LUMINANCE)
-   - Acces aux couches separees pour analyse/edition avancee
-   - Taille: ~2-5 MB pour 10 secondes (selon codec)
-
-PROBLEME: "PAS D'IMAGE DANS LE MOV" ?
---------------------------------------
-
-Executez verify_mov.bat pour diagnostic automatique.
-
-Ce script va :
-1. Trouver automatiquement le premier fichier MOV
-2. Afficher les proprietes du codec
-3. Extraire 3 frames PNG de test
-4. Vous guider selon le resultat
-
-LECTEURS VIDEO COMPATIBLES MOV PRORES 4444:
-
-   COMPATIBLES (avec transparence alpha):
-   - DaVinci Resolve (GRATUIT, recommande)
-     https://www.blackmagicdesign.com/products/davinciresolve
-   - Adobe Premiere Pro
-   - Adobe After Effects
-   - MPV avec --vo=gpu
-
-   INCOMPATIBLES (pas de support alpha ProRes):
-   - VLC Media Player
-   - Windows Media Player
-   - Lecteur Films et TV (Windows)
-
-Pour plus de details, consultez PAS_DIMAGE.txt
-
-FORMAT MKV
-----------
-
-Le fichier MKV contient 4 pistes video :
-- Track 0 : BASE (pixels RGB fixes 0-235)
-- Track 1 : REMAP (pixels recoloriables 236-254)
-- Track 2 : ALPHA (masque transparence 255)
-- Track 3 : LUMINANCE (niveaux de gris)
-- Audio : PCM 48 kHz mono
+Le fichier MOV contient :
+- Video : ProRes 4444 (ap4h) RGBA 10-bit
+- Audio : PCM S16LE 22050 Hz mono
+- Transparence : Canal alpha preserve (pixels transparents = noir alpha 0)
+- Positions : ScummVM compatibles (celX, celY preserves)
 
 DEPANNAGE
 ---------
@@ -120,6 +94,9 @@ SOLUTION: FFmpeg n'est pas correctement installe. Refaire l'installation.
 
 PROBLEME: "No .RBT files found"
 SOLUTION: Placer vos fichiers .RBT dans le dossier RBT/
+
+PROBLEME: "Unknown encoder 'prores_ks'"
+SOLUTION: Installer FFmpeg FULL BUILD (pas Essentials). Voir installation ci-dessus.
 
 SUPPORT
 -------

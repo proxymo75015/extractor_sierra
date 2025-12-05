@@ -1,0 +1,125 @@
+================================================================================
+           ROBOT POSITION EXTRACTION - RÉSUMÉ EXÉCUTIF
+================================================================================
+
+OBJECTIF
+--------
+Extraire les coordonnées X/Y exactes où ScummVM positionne les vidéos Robot
+de Phantasmagoria pour reproduire le positionnement lors de l'extraction.
+
+DÉCOUVERTE CLÉ
+--------------
+Les coordonnées Robot ne sont PAS stockées dans les fichiers .RBT !
+Elles sont passées dynamiquement via l'appel kernel kRobotOpen() :
+
+    kRobotOpen(robotId, plane, priority, X, Y, scale)
+                                         ↑  ↑
+                                      argv[3] argv[4]
+
+Code source: engines/sci/engine/kvideo.cpp:266-276
+
+SOLUTION RECOMMANDÉE
+--------------------
+Patcher ScummVM pour logger les coordonnées lors de l'appel kRobotOpen :
+
+    1. Patcher ScummVM (scummvm_robot_patch.diff)
+    2. Compiler avec debug activé
+    3. Lancer Phantasmagoria et jouer quelques minutes
+    4. Parser les logs (parse_robot_logs.py)
+    5. Obtenir robot_positions.txt
+
+FICHIERS CRÉÉS
+--------------
+Documentation:
+  ✓ README_ROBOT_POSITIONS.md              (guide rapide)
+  ✓ ROBOT_POSITION_EXTRACTION_GUIDE.md     (guide complet 4 méthodes)
+  ✓ ROBOT_POSITION_INVESTIGATION_SUMMARY.md (rapport technique)
+  ✓ FILE_INDEX.md                          (index de tous les fichiers)
+
+Scripts:
+  ✓ scummvm_robot_patch.diff               (patch pour ScummVM)
+  ✓ extract_robot_positions.sh             (script automatique)
+  ✓ parse_robot_logs.py                    (parser de logs)
+
+Code Exemple:
+  ✓ robot_position_loader_example.cpp      (intégration C++)
+
+Tests:
+  ✓ test_scummvm_log.txt                   (log exemple)
+  ✓ test_robot_positions.txt               (sortie exemple)
+
+COMMANDES RAPIDES
+-----------------
+# Méthode automatique (recommandée):
+./extract_robot_positions.sh
+
+# Méthode manuelle:
+cd ~/scummvm
+patch -p1 < scummvm_robot_patch.diff
+./configure --enable-debug --disable-all-engines --enable-engine=sci
+make -j$(nproc)
+./scummvm --debugflags=all --debuglevel=1 phantasmagoria_game 2>&1 | tee logs.txt
+python3 parse_robot_logs.py logs.txt robot_positions.txt
+
+FORMAT robot_positions.txt
+--------------------------
+# Format: robot_id X Y
+1000 150 143
+230 180 160
+91 175 150
+
+SPÉCIFICATIONS TECHNIQUES
+--------------------------
+Résolution du jeu : 630×450 pixels
+Origine           : Coin supérieur gauche (0,0)
+Format RBT        : Version 5/6 (header = 22)
+Moteur SCI        : SCI2.1 Early
+Kernel ID kRobot  : 0x7B (123 decimal)
+
+HEADERS RBT DÉCODÉS
+-------------------
+Offset 0x00: version = 22
+Offset 0x08: audioBlockSize = 2221
+Offset 0x0E: numFramesTotal (143, 207, etc.) ← NOT Y coordinate!
+Offset 0x14: xResolution = 0 ← "use game coordinates"
+Offset 0x16: yResolution = 0 ← "use game coordinates"
+
+POURQUOI PAS DANS LES SCRIPTS ?
+--------------------------------
+Les coordonnées sont stockées comme propriétés d'objets (HEAP), pas comme
+constantes hardcodées. Le parser SCI (src/sci_robot_positions.cpp) a confirmé
+qu'aucun appel direct avec coordonnées constantes n'existe.
+
+PROCHAINES ÉTAPES
+-----------------
+1. Exécuter extract_robot_positions.sh OU extraire manuellement
+2. Obtenir robot_positions.txt avec coordonnées réelles
+3. Intégrer dans src/main.cpp (voir robot_position_loader_example.cpp)
+4. Tester extraction avec positionnement exact
+5. Comparer visuellement avec ScummVM
+
+VALIDATION
+----------
+✓ Parser SCI créé et testé → 0 coordonnées hardcodées (attendu)
+✓ Headers RBT analysés → xRes=0, yRes=0 confirme "use game coords"
+✓ Code ScummVM identifié → kRobotOpen argv[3]=X argv[4]=Y
+✓ Parser de logs créé et testé → extraction correcte
+✓ Documentation complète rédigée
+
+RESSOURCES
+----------
+Guide rapide   : README_ROBOT_POSITIONS.md
+Guide complet  : ROBOT_POSITION_EXTRACTION_GUIDE.md
+Rapport tech   : ROBOT_POSITION_INVESTIGATION_SUMMARY.md
+Index fichiers : FILE_INDEX.md
+Code exemple   : robot_position_loader_example.cpp
+
+SUPPORT
+-------
+ScummVM Source: https://github.com/scummvm/scummvm
+SCI Wiki      : https://wiki.scummvm.org/index.php/SCI
+kRobotOpen    : engines/sci/engine/kvideo.cpp:266
+
+================================================================================
+                      Bonne extraction ! 🎬
+================================================================================

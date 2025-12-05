@@ -1,0 +1,11 @@
+--- a/engines/sci/engine/kvideo.cpp
++++ b/engines/sci/engine/kvideo.cpp
+@@ -266,6 +266,8 @@ reg_t kRobotOpen(EngineState *s, int argc, reg_t *argv) {
+ 	const int16 x = argv[3].toSint16();
+ 	const int16 y = argv[4].toSint16();
+ 	const int16 scale = argc > 5 ? argv[5].toSint16() : 128;
++	// LOG ROBOT COORDINATES FOR EXTRACTION
++	warning("ROBOT_DEBUG: Robot %d at position X=%d Y=%d (priority=%d scale=%d)", robotId, x, y, priority, scale);
+ 	g_sci->_video32->getRobotPlayer().open(robotId, plane, priority, x, y, scale);
+ 	return make_reg(0, 0);
+ }

@@ -6,18 +6,21 @@ Extracteur et convertisseur pour fichiers vidéo Robot (`.RBT`) de Sierra SCI ut
 
 ### Formats de sortie supportés
 
-1. **MKV Multi-couches** (`export_robot_mkv`) - **Recommandé**
+1. **MOV ProRes 4444 RGBA** - **Standard professionnel**
+   - Export composite avec **canal alpha natif** (transparence)
+   - Codec : ProRes 4444 (quasi-lossless, 10-12 bit)
+   - Format : RGBA 4:4:4:4 avec alpha haute résolution
+   - Audio : PCM 16-bit lossless 22050 Hz mono
+   - **Normalisation dimensions** : Frames centrées dans canvas unifié
+   - Compatible : Adobe Premiere, DaVinci Resolve, Final Cut Pro, After Effects
+   - **Idéal pour** : Post-production, compositing, archivage qualité maximale
+
+2. **MKV Multi-couches** - **Format technique**
    - 4 pistes vidéo séparées (BASE, REMAP, ALPHA, LUMINANCE)
    - Audio PCM 48 kHz mono
    - Codecs : H.264, H.265, VP9, FFV1
    - Métadonnées complètes
-
-2. **MOV ProRes 4444 RGBA** - **🆕 Nouveau !**
-   - Export composite avec **canal alpha** (transparence)
-   - Codec : ProRes 4444 (quasi-lossless)
-   - Format : RGBA 4:4:4:4 10-bit
-   - Audio : PCM 16-bit lossless
-   - Idéal pour : Post-production, compositing, archivage
+   - **Idéal pour** : Analyse technique, réédition par couches
 
 3. **PNG + WAV** (`robot_extractor`)
    - Extraction frame par frame en PNG RGBA
@@ -30,7 +33,10 @@ Extracteur et convertisseur pour fichiers vidéo Robot (`.RBT`) de Sierra SCI ut
 
 - **Compilateur C++11** (GCC 7+, Clang 5+, MSVC 2017+)
 - **CMake 3.10+**
-- **FFmpeg** (pour l'export MKV/MP4)
+- **FFmpeg avec support ProRes** (prores_ks encoder)
+  - Linux : `ffmpeg -encoders | grep prores`
+  - Windows : Utiliser build FULL depuis [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)
+  - Vérifier : `ffmpeg -codecs | grep prores`
 
 ### Dev Container (VS Code)
 
@@ -68,7 +74,7 @@ cp /chemin/vers/vos/fichiers/*.RBT RBT/
 
 **Lancement** :
 ```bash
-./export_robot_mkv [codec]
+./export_robot_mkv [codec] [--canvas WIDTHxHEIGHT]
 ```
 
 **Codecs disponibles** :
@@ -77,38 +83,78 @@ cp /chemin/vers/vos/fichiers/*.RBT RBT/
 - `vp9` - Open source, excellente qualité
 - `ffv1` - Lossless, archivage
 
-**Exemple** :
+**Options canvas** :
+- `--canvas WIDTHxHEIGHT` - Forcer taille du canvas (ex: `--canvas 640x480`)
+- Si non spécifié : **Auto-détection** des résolutions standard (640×480, 640×400, 320×240, 320×200)
+
+**Exemples** :
 ```bash
+# Auto-détection (recommandé)
 ./export_robot_mkv h264
+
+# Canvas personnalisé
+./export_robot_mkv h264 --canvas 640x480
+./export_robot_mkv vp9 --canvas 800x600
 ```
 
 **Résultats** :
 ```
 output/
-├── 91/
-│   ├── 91_video.mkv        # MKV 4 pistes + audio
-│   ├── 91_audio.wav        # Audio natif 22050 Hz
-│   ├── 91_composite.mov    # 🆕 ProRes 4444 RGBA + transparence
-│   ├── 91_metadata.txt     # Métadonnées complètes
-│   └── 91_frames/          # Frames PNG RGBA individuelles
-│       ├── frame_0000.png
-│       ├── frame_0001.png
+├── 230/
+│   ├── 230_composite.mov    # ProRes 4444 RGBA (transparence native)
+│   ├── 230_video.mkv        # MKV multi-couches (BASE/REMAP/ALPHA/LUMINANCE)
+│   ├── 230_audio.wav        # Audio natif 22050 Hz mono
+│   ├── 230_metadata.txt     # Métadonnées complètes
+│   └── 230_frames/          # Frames PNG RGBA individuelles
+│       ├── frame_0000.png   # Dimensions normalisées (maxWidth×maxHeight)
+│       ├── frame_0001.png   # Images centrées dans canvas
 │       └── ...
-├── 170/
-│   ├── 170_video.mkv
-│   ├── 170_audio.wav
-│   ├── 170_composite.mov   # 🆕 ProRes 4444 avec canal alpha
-│   ├── 170_metadata.txt
-│   └── 170_frames/
+├── 1014/
+│   ├── 1014_composite.mov   # ProRes 4444 (format pro)
+│   ├── 1014_video.mkv       # MKV technique
+│   └── ...
 └── ...
 ```
 
-**Structure du MKV** :
-- **Track 0 (BASE)** : Pixels RGB fixes (indices 0-235)
-- **Track 1 (REMAP)** : Zones recoloriables (indices 236-254)
-- **Track 2 (ALPHA)** : Masque de transparence (index 255)
-- **Track 3 (LUMINANCE)** : Niveaux de gris Y (aperçu)
-- **Track 4 (AUDIO)** : PCM 16-bit 48 kHz mono
+**Fichiers générés** :
+
+1. **`*_composite.mov`** (ProRes 4444 RGBA)
+   - Transparence native (canal alpha 10-12 bit)
+   - Frames normalisées et centrées
+   - Compatible tous logiciels pro
+   - Taille : ~10 MB pour 10 secondes
+
+2. **`*_video.mkv`** (Multi-couches)
+   - Track 0 (BASE) : Pixels fixes RGB (0-235)
+   - Track 1 (REMAP) : Zones recoloriables (236-254)
+   - Track 2 (ALPHA) : Masque transparence (255)
+   - Track 3 (LUMINANCE) : Aperçu niveaux de gris
+   - Track 4 (AUDIO) : PCM 48 kHz mono
+
+3. **`*_frames/`** (PNG individuelles)
+   - Format RGBA avec alpha
+   - Dimensions fixes (alignées sur max du RBT)
+   - Images centrées dans canvas
+
+### Lecture des fichiers MOV ProRes
+
+**Lecteurs compatibles** :
+- ✅ **DaVinci Resolve** (gratuit, recommandé)
+- ✅ **Adobe Premiere Pro / After Effects**
+- ✅ **Final Cut Pro** (macOS)
+- ✅ **QuickTime Player** (macOS)
+- ✅ **MPV** avec `--vo=gpu`
+- ❌ VLC (pas de support alpha ProRes 4444)
+- ❌ Windows Media Player (incompatible)
+
+**Vérification rapide** :
+```bash
+# Voir les propriétés du MOV
+ffprobe output/230/230_composite.mov
+
+# Extraire une frame pour tester
+ffmpeg -i output/230/230_composite.mov -vf "select=eq(n\,10)" -vframes 1 test_frame.png
+```
 
 ### Export PNG/WAV/MP4 Classique
 

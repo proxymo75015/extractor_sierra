@@ -34,6 +34,8 @@ echo Traitement des fichiers RBT...
 echo.
 
 REM Lancer l'extraction (codec h264 par defaut)
+REM Pour forcer le canvas: export_robot_mkv.exe h264 --canvas 640x480
+REM Pour ProRes 4444: export_robot_mkv.exe prores
 export_robot_mkv.exe h264
 
 echo.

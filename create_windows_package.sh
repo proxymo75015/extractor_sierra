@@ -19,7 +19,7 @@ if [ ! -f "export_robot_mkv_windows.exe" ]; then
     exit 1
 fi
 
-cp export_robot_mkv_windows.exe "$PACKAGE_DIR/export_robot_mkv.exe"
+cp build_windows/export_robot_mkv.exe "$PACKAGE_DIR/export_robot_mkv.exe"
 
 # Créer le répertoire RBT
 mkdir -p "$PACKAGE_DIR/RBT"
@@ -44,21 +44,21 @@ cp "$MINGW_PTHREAD/libwinpthread-1.dll" "$PACKAGE_DIR/"
 # Créer README Windows
 cat > "$PACKAGE_DIR/README_WINDOWS.txt" << 'EOF'
 ================================================================================
-  SIERRA ROBOT VIDEO EXTRACTOR - Windows
+  SIERRA ROBOT VIDEO EXTRACTOR - Windows v2.5.0
 ================================================================================
 
 IMPORTANT: INSTALLATION DE FFMPEG (OBLIGATOIRE)
 ------------------------------------------------
 
 Ce programme NECESSITE FFmpeg pour fonctionner. Sans FFmpeg, seuls les
-fichiers WAV seront generes (pas de MKV ni MP4).
+fichiers WAV seront generes (pas de MOV ni MP4).
 
 INSTALLATION FFMPEG SUR WINDOWS:
 
-1. Telecharger FFmpeg:
-   https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+1. Telecharger FFmpeg FULL BUILD (support ProRes):
+   https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-full.7z
 
-2. Extraire le fichier ZIP dans C:\ffmpeg\
+2. Extraire le fichier dans C:\ffmpeg\
 
 3. Ajouter au PATH Windows:
    - Clic droit sur "Ce PC" > Proprietes
@@ -78,36 +78,55 @@ UTILISATION
 1. Placer vos fichiers .RBT dans le dossier RBT/
 
 2. Double-cliquer sur "run.bat" OU ouvrir un terminal et executer :
-   export_robot_mkv.exe [codec]
+   export_robot_mkv.exe [codec] [--canvas WIDTHxHEIGHT]
 
    Codecs disponibles :
    - h264  (defaut, recommande)
    - h265  (meilleure compression)
    - vp9   (open source)
    - ffv1  (lossless)
+   - prores (ProRes 4444 avec transparence, QuickTime MOV)
+
+   Options :
+   - --canvas WIDTHxHEIGHT : Force la resolution du canvas (ex: --canvas 640x480)
+     Si omis, detecte automatiquement la resolution appropriee (VGA, etc.)
 
 3. Les resultats seront dans le dossier output/
+
+EXEMPLES D'UTILISATION
+---------------------
+
+# Detection automatique du canvas (recommande)
+export_robot_mkv.exe h264
+
+# Forcer le canvas a 640x480 (VGA Sierra SCI32)
+export_robot_mkv.exe h264 --canvas 640x480
+
+# Export ProRes 4444 avec transparence (QuickTime MOV)
+export_robot_mkv.exe prores
+
+# Export ProRes avec canvas force
+export_robot_mkv.exe prores --canvas 800x600
 
 STRUCTURE DE SORTIE
 -------------------
 
 output/
 ├── 91/
-│   ├── 91_video.mkv        # MKV 4 pistes + audio
+│   ├── 91_video.mov        # MOV ProRes 4444 RGBA + audio
 │   ├── 91_audio.wav        # Audio PCM 22 kHz
 │   ├── 91_composite.mp4    # Video composite H.264
 │   └── 91_metadata.txt     # Metadonnees
 └── ...
 
-FORMAT MKV
-----------
+FORMAT MOV PRORES 4444
+----------------------
 
-Le fichier MKV contient 4 pistes video :
-- Track 0 : BASE (pixels RGB fixes 0-235)
-- Track 1 : REMAP (pixels recoloriables 236-254)
-- Track 2 : ALPHA (masque transparence 255)
-- Track 3 : LUMINANCE (niveaux de gris)
-- Audio : PCM 48 kHz mono
+Le fichier MOV contient :
+- Video : ProRes 4444 (ap4h) RGBA 10-bit
+- Audio : PCM S16LE 22050 Hz mono
+- Transparence : Canal alpha preserve (pixels transparents = noir alpha 0)
+- Positions : ScummVM compatibles (celX, celY preserves)
 
 DEPANNAGE
 ---------
@@ -120,6 +139,9 @@ SOLUTION: FFmpeg n'est pas correctement installe. Refaire l'installation.
 
 PROBLEME: "No .RBT files found"
 SOLUTION: Placer vos fichiers .RBT dans le dossier RBT/
+
+PROBLEME: "Unknown encoder 'prores_ks'"
+SOLUTION: Installer FFmpeg FULL BUILD (pas Essentials). Voir installation ci-dessus.
 
 SUPPORT
 -------
@@ -168,6 +190,8 @@ echo Traitement des fichiers RBT...
 echo.
 
 REM Lancer l'extraction (codec h264 par defaut)
+REM Pour forcer le canvas: export_robot_mkv.exe h264 --canvas 640x480
+REM Pour ProRes 4444: export_robot_mkv.exe prores
 export_robot_mkv.exe h264
 
 echo.

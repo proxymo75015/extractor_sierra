@@ -10,13 +10,17 @@
  *   - <rbt>_frames/ (frames PNG individuelles)
  * 
  * Usage:
- *   export_robot_mkv [codec]
+ *   export_robot_mkv [codec] [--canvas WIDTHxHEIGHT]
  * 
  * Codecs supportés:
  *   h264  - x264 (défaut, universel)
  *   h265  - x265 (meilleure compression)
  *   vp9   - VP9 (open source, excellente qualité)
  *   ffv1  - FFV1 (lossless, archivage)
+ * 
+ * Options:
+ *   --canvas WIDTHxHEIGHT  - Forcer taille du canvas (ex: 640x480)
+ *                            Si non spécifié, détection automatique
  */
 
 #include "core/rbt_parser.h"
@@ -63,9 +67,44 @@ std::vector<std::string> findRbtFiles(const std::string& directory) {
     return rbtFiles;
 }
 
+// Fonction pour détecter automatiquement la résolution du jeu
+void detectCanvasSize(int contentWidth, int contentHeight, int& canvasWidth, int& canvasHeight) {
+    // Résolutions standard des jeux Sierra SCI32
+    struct Resolution {
+        int width, height;
+        const char* name;
+    };
+    
+    const Resolution standards[] = {
+        {630, 450, "Phantasmagoria (630x450)"},
+        {640, 480, "VGA (640x480)"},
+        {640, 400, "VGA (640x400)"},
+        {320, 240, "QVGA (320x240)"},
+        {320, 200, "CGA (320x200)"},
+    };
+    
+    // Choisir la plus petite résolution standard qui englobe le contenu
+    for (const auto& res : standards) {
+        if (contentWidth <= res.width && contentHeight <= res.height) {
+            canvasWidth = res.width;
+            canvasHeight = res.height;
+            fprintf(stderr, "Auto-detected canvas: %s (content fits in %dx%d)\n", 
+                    res.name, contentWidth, contentHeight);
+            return;
+        }
+    }
+    
+    // Si aucune résolution standard ne convient, utiliser le contenu exact
+    canvasWidth = contentWidth;
+    canvasHeight = contentHeight;
+    fprintf(stderr, "Canvas: %dx%d (exact content size, no standard resolution detected)\n",
+            canvasWidth, canvasHeight);
+}
+
 // Fonction pour traiter un seul fichier RBT
 bool processRbtFile(const std::string& inputPath, const std::string& outputDir, 
-                    const char* codecName, MKVExportConfig::Codec codec) {
+                    const char* codecName, MKVExportConfig::Codec codec,
+                    int forceCanvasWidth = 0, int forceCanvasHeight = 0) {
     
     // Ouvrir le fichier Robot
     FILE* f = fopen(inputPath.c_str(), "rb");
@@ -167,13 +206,33 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
     }
     fprintf(stderr, "\n");
     
-    // Calculer dimensions maximales pour export MOV (FFmpeg requiert dimensions fixes)
-    int maxWidth = 0, maxHeight = 0;
+    // Calculer dimensions du contenu (max des frames)
+    int contentWidth = 0, contentHeight = 0;
     for (const auto& layer : allLayers) {
-        if (layer.width > maxWidth) maxWidth = layer.width;
-        if (layer.height > maxHeight) maxHeight = layer.height;
+        if (layer.width > contentWidth) contentWidth = layer.width;
+        if (layer.height > contentHeight) contentHeight = layer.height;
     }
-    fprintf(stderr, "Max Resolution: %dx%d\n", maxWidth, maxHeight);
+    fprintf(stderr, "Content Resolution: %dx%d\n", contentWidth, contentHeight);
+    
+    // Déterminer taille finale du canvas
+    int canvasWidth, canvasHeight;
+    if (forceCanvasWidth > 0 && forceCanvasHeight > 0) {
+        // Utiliser la taille forcée en ligne de commande
+        canvasWidth = forceCanvasWidth;
+        canvasHeight = forceCanvasHeight;
+        fprintf(stderr, "Canvas (forced): %dx%d\n", canvasWidth, canvasHeight);
+        
+        if (contentWidth > canvasWidth || contentHeight > canvasHeight) {
+            fprintf(stderr, "Warning: Content (%dx%d) exceeds canvas (%dx%d), will be clipped!\n",
+                    contentWidth, contentHeight, canvasWidth, canvasHeight);
+        }
+    } else {
+        // Détection automatique
+        detectCanvasSize(contentWidth, contentHeight, canvasWidth, canvasHeight);
+    }
+    
+    const int maxWidth = canvasWidth;
+    const int maxHeight = canvasHeight;
     
     // Extraire l'audio
     if (hasAudio) {
@@ -193,8 +252,8 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
     }
     fprintf(stderr, "  ✓ MKV: %s.mkv\n", mkvPath.c_str());
     
-    // Regénérer les frames RGBA composites pour l'export MOV
-    fprintf(stderr, "Regenerating RGBA composite frames for MOV (centered in %dx%d canvas)...\n", 
+    // Regénérer les frames RGBA composites pour l'export MOV avec dimensions fixes
+    fprintf(stderr, "Normalizing frames to %dx%d canvas (ScummVM-compatible positioning)...\n", 
             maxWidth, maxHeight);
     
     for (size_t i = 0; i < allLayers.size(); ++i) {
@@ -202,21 +261,18 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
         const int w = layer.width;
         const int h = layer.height;
         
-        // Calculer offset pour centrer l'image
-        const int offsetX = (maxWidth - w) / 2;
-        const int offsetY = (maxHeight - h) / 2;
-        
-        // IMPORTANT: Utiliser maxWidth/maxHeight pour dimensions fixes (requis FFmpeg)
+        // IMPORTANT: Les pixels dans layer sont déjà positionnés correctement par extractFramePixels
+        // Le buffer layer contient un canvas complet avec padding (positions celX/celY respectées).
+        // Si maxWidth/maxHeight sont identiques à w/h, simple copie 1:1
+        // Si maxWidth/maxHeight sont plus grands, on copie le canvas source tel quel (préserve positions)
         const size_t paddedPixelCount = (size_t)maxWidth * (size_t)maxHeight;
         std::vector<uint8_t> rgbaImage(paddedPixelCount * 4, 0);  // Init noir transparent
         
-        // Copier les pixels réels (CENTRÉS dans le canvas)
-        for (int y = 0; y < h; ++y) {
-            for (int x = 0; x < w; ++x) {
+        // Copier le canvas source vers le canvas final (copie 1:1 préservant toutes les positions)
+        for (int y = 0; y < h && y < maxHeight; ++y) {
+            for (int x = 0; x < w && x < maxWidth; ++x) {
                 const size_t srcIdx = y * w + x;
-                const int dstX = offsetX + x;
-                const int dstY = offsetY + y;
-                const size_t dstIdx = dstY * maxWidth + dstX;
+                const size_t dstIdx = y * maxWidth + x;
                 
                 // Composer l'image finale avec transparence
                 if (layer.alpha[srcIdx] == 0) {
@@ -303,9 +359,10 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
         fprintf(metaFile, "  Frames: %zu\n", numFrames);
         fprintf(metaFile, "  Frame Rate: %d fps\n", frameRate);
         fprintf(metaFile, "  Duration: %.2f seconds\n", (double)numFrames / frameRate);
+        fprintf(metaFile, "  Canvas Resolution: %dx%d\n", canvasWidth, canvasHeight);
         
         if (!allLayers.empty()) {
-            fprintf(metaFile, "  Resolution: %dx%d\n", allLayers[0].width, allLayers[0].height);
+            fprintf(metaFile, "  Content Resolution: %dx%d\n", contentWidth, contentHeight);
         }
         
         fprintf(metaFile, "  Codec: %s\n\n", codecName);
@@ -352,7 +409,26 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
 }
 
 int main(int argc, char* argv[]) {
-    const char* codecStr = (argc >= 2) ? argv[1] : "h264";
+    const char* codecStr = "h264";
+    int forceCanvasWidth = 0;
+    int forceCanvasHeight = 0;
+    
+    // Parser les arguments
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "--canvas") == 0 && i + 1 < argc) {
+            // Parser WIDTHxHEIGHT
+            if (sscanf(argv[i + 1], "%dx%d", &forceCanvasWidth, &forceCanvasHeight) == 2) {
+                fprintf(stderr, "Canvas size override: %dx%d\n", forceCanvasWidth, forceCanvasHeight);
+                i++; // Skip le prochain argument
+            } else {
+                fprintf(stderr, "Error: Invalid canvas format '%s'. Use WIDTHxHEIGHT (e.g., 640x480)\n", argv[i + 1]);
+                return 1;
+            }
+        } else if (argv[i][0] != '-') {
+            // Codec name
+            codecStr = argv[i];
+        }
+    }
     
     // Déterminer le codec
     MKVExportConfig::Codec codec;
@@ -368,9 +444,14 @@ int main(int argc, char* argv[]) {
     }
     
     fprintf(stderr, "\n=== Robot Video Batch Export ===\n");
-    fprintf(stderr, "Version: 2.4.0 (2024-12-04) - ProRes 4444 with Alpha\n");
+    fprintf(stderr, "Version: 2.5.0 (2024-12-04) - ScummVM Canvas Auto-Detect\n");
     fprintf(stderr, "Codec: %s\n", codecStr);
-    fprintf(stderr, "Resolution: Adaptive with padding\n");
+    if (forceCanvasWidth > 0 && forceCanvasHeight > 0) {
+        fprintf(stderr, "Canvas: %dx%d (forced)\n", forceCanvasWidth, forceCanvasHeight);
+    } else {
+        fprintf(stderr, "Canvas: Auto-detect (standard game resolutions)\n");
+    }
+    fprintf(stderr, "\n");
     
     // Vérifier si FFmpeg est disponible
     fprintf(stderr, "\nChecking FFmpeg availability...\n");
@@ -465,7 +546,7 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "========================================\n");
         
         // Traiter le fichier
-        if (processRbtFile(inputPath, fileOutputDir, codecStr, codec)) {
+        if (processRbtFile(inputPath, fileOutputDir, codecStr, codec, forceCanvasWidth, forceCanvasHeight)) {
             successCount++;
             fprintf(stderr, "✓ SUCCESS: %s\n", filename.c_str());
         } else {
