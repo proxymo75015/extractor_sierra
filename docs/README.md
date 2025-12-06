@@ -1,297 +1,170 @@
-# Documentation Technique - Extracteur Sierra
+# Documentation - Extractor Sierra
 
-Documentation complète des formats de fichiers Sierra (SCI/SCI32) et des outils d'extraction vidéo Robot.
-
----
-
-## 📚 Index des Documents
-
-### Outils & Usage
-
-| Document | Description | Statut |
-|----------|-------------|--------|
-| [../README.md](../README.md) | Guide d'utilisation principal | ✅ Complet |
-| [../src/README.md](../src/README.md) | Documentation du code source | ✅ Complet |
-| [MKV_FORMAT.md](MKV_FORMAT.md) | Spécifications MKV multi-couches | ✅ Complet |
-| [QUICK_REFERENCE.md](QUICK_REFERENCE.md) | Référence rapide des APIs | ✅ Complet |
-
-### Formats de Fichiers
-
-| Document | Description | Pages | Statut |
-|----------|-------------|-------|--------|
-| [reference/FORMAT_RBT_DOCUMENTATION.md](reference/FORMAT_RBT_DOCUMENTATION.md) | Format vidéo Robot (.RBT) complet | ~30 | ✅ Complet |
-| [reference/SOL_FILE_FORMAT_DOCUMENTATION.md](reference/SOL_FILE_FORMAT_DOCUMENTATION.md) | Format audio SOL Sierra | ~25 | ✅ Complet |
-
-### Algorithmes de Décompression
-
-| Document | Description | Pages | Statut |
-|----------|-------------|-------|--------|
-| [reference/LZS_DECODER_DOCUMENTATION.md](reference/LZS_DECODER_DOCUMENTATION.md) | Décodeur LZS/STACpack | ~35 | ✅ Complet |
-| [reference/DPCM16_DECODER_DOCUMENTATION.md](reference/DPCM16_DECODER_DOCUMENTATION.md) | Décodeur DPCM16 audio | ~30 | ✅ Complet |
-
-### Guides Pratiques
-
-| Document | Description | Pages | Statut |
-|----------|-------------|-------|--------|
-| [AUDIO_EXTRACTION_NOTES.md](AUDIO_EXTRACTION_NOTES.md) | Guide extraction audio RBT | ~10 | ✅ Complet |
-| [VERIFICATION_REPORT.md](VERIFICATION_REPORT.md) | Rapport validation extraction | ~15 | ✅ Complet |
-
-### Systèmes Graphiques (Référence ScummVM)
-
-| Document | Description | Statut |
-|----------|-------------|--------|
-| [reference/GFXPALETTE32_SYSTEM.md](reference/GFXPALETTE32_SYSTEM.md) | Système palette SCI32 | ✅ Complet |
-| [reference/ROBOT_PALETTE_DECODING.md](reference/ROBOT_PALETTE_DECODING.md) | Décodage palette Robot | ✅ Complet |
-| [reference/ROBOT_PALETTE_REMAPPING.md](reference/ROBOT_PALETTE_REMAPPING.md) | Remapping palette Robot | ✅ Complet |
-| [reference/GFXREMAP_SCI16.md](reference/GFXREMAP_SCI16.md) | Système remap SCI16 | ✅ Complet |
-| [reference/ROBOT_VIRTUAL_BACKGROUND.md](reference/ROBOT_VIRTUAL_BACKGROUND.md) | Virtual background Robot | ✅ Complet |
-
-### Export & Post-Production
-
-| Document | Description | Statut |
-|----------|-------------|--------|
-| [reference/OPENEXR_EXPORT.md](reference/OPENEXR_EXPORT.md) | Export OpenEXR (référence) | ⚠️ Expérimental |
-
-| Document | Description | Pages | Statut |
-|----------|-------------|-------|--------|
-| [VERIFICATION_REPORT.md](VERIFICATION_REPORT.md) | Conformité avec ScummVM | ~15 | ✅ Complet |
+Documentation complète du projet **robot_extractor** - Extracteur vidéo unifié pour fichiers Robot (.RBT) de Sierra SCI32.
 
 ---
 
-## 🎯 Guide de Lecture Recommandé
+## 📋 Vue d'ensemble
 
-### Pour Comprendre le Format RBT
+**robot_extractor** génère automatiquement :
+- **MKV multicouche** (4 pistes : BASE, REMAP, ALPHA, LUMINANCE)
+- **MOV ProRes 4444** avec alpha 10-bit (yuva444p10le)
+- **PNG RGBA** préservant transparence complète
+- **Audio WAV** 22050 Hz mono (décodage DPCM)
 
-1. **[FORMAT_RBT_DOCUMENTATION.md](FORMAT_RBT_DOCUMENTATION.md)** - Structure complète
-   - Vue d'ensemble du format
-   - En-tête et sections
-   - Organisation des frames
-   - Format vidéo (cels)
-   - Format audio (DPCM16)
-
-2. **[LZS_DECODER_DOCUMENTATION.md](LZS_DECODER_DOCUMENTATION.md)** - Compression vidéo
-   - Principe LZS/LZSS
-   - Format des jetons
-   - Algorithme de décompression
-   - Encodage de longueur
-   - Fenêtre glissante
-
-3. **[DPCM16_DECODER_DOCUMENTATION.md](DPCM16_DECODER_DOCUMENTATION.md)** - Compression audio
-   - Principe DPCM
-   - Table de deltas
-   - Format des octets
-   - Overflow x86
-   - Variantes DPCM8/DPCM16
-
-### Pour Extraire l'Audio
-
-1. **[AUDIO_EXTRACTION_NOTES.md](AUDIO_EXTRACTION_NOTES.md)** - Guide pratique
-   - Architecture audio Robot
-   - Canaux EVEN/ODD
-   - DPCM Runway
-   - Processus d'extraction
-   - Interpolation
-
-2. **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - Exemples de code
-   - Utilisation basique
-   - Exemples complets
-   - Debugging
-
-### Pour Vérifier la Conformité
-
-1. **[VERIFICATION_REPORT.md](VERIFICATION_REPORT.md)** - Rapport détaillé
-   - Comparaison avec ScummVM
-   - Tests de conformité
-   - Différences mineures
-   - Validation complète
+### Modes intelligents
+- **Canvas 630×450** si coordonnées RESSCI trouvées
+- **Tight crop automatique** sinon (réduction ~69% taille)
 
 ---
 
-## 📖 Par Sujet
+## 📚 Documentation de référence
 
-### Audio
+### Formats Sierra SCI32
 
-- **Format SOL** : [SOL_FILE_FORMAT_DOCUMENTATION.md](SOL_FILE_FORMAT_DOCUMENTATION.md)
-- **Audio Robot** : [FORMAT_RBT_DOCUMENTATION.md](FORMAT_RBT_DOCUMENTATION.md#format-audio)
-- **DPCM16** : [DPCM16_DECODER_DOCUMENTATION.md](DPCM16_DECODER_DOCUMENTATION.md)
-- **Extraction** : [AUDIO_EXTRACTION_NOTES.md](AUDIO_EXTRACTION_NOTES.md)
-
-### Vidéo
-
-- **Format Robot** : [FORMAT_RBT_DOCUMENTATION.md](FORMAT_RBT_DOCUMENTATION.md)
-- **Cels** : [FORMAT_RBT_DOCUMENTATION.md](FORMAT_RBT_DOCUMENTATION.md#format-vidéo)
-- **LZS** : [LZS_DECODER_DOCUMENTATION.md](LZS_DECODER_DOCUMENTATION.md)
-
-### Implémentation
-
-- **API Reference** : [QUICK_REFERENCE.md](QUICK_REFERENCE.md)
-- **Code Verification** : [VERIFICATION_REPORT.md](VERIFICATION_REPORT.md)
-- **Exemples** : [AUDIO_EXTRACTION_NOTES.md](AUDIO_EXTRACTION_NOTES.md#exemple-dutilisation)
-
----
-
-## 🔍 Recherche Rapide
-
-### Structures de Données
-
-| Structure | Document | Section |
-|-----------|----------|---------|
-| En-tête RBT (60 bytes) | FORMAT_RBT_DOCUMENTATION.md | § En-tête principal |
-| En-tête SOL (11 bytes) | SOL_FILE_FORMAT_DOCUMENTATION.md | § Structure du header |
-| Cel header (18 bytes) | FORMAT_RBT_DOCUMENTATION.md | § Format vidéo |
-| Audio header (8 bytes) | FORMAT_RBT_DOCUMENTATION.md | § Format audio |
-
-### Algorithmes
-
-| Algorithme | Document | Fonction |
-|------------|----------|----------|
-| DPCM16 décompression | DPCM16_DECODER_DOCUMENTATION.md | `deDPCM16Mono()` |
-| LZS décompression | LZS_DECODER_DOCUMENTATION.md | `LZSDecompress()` |
-| Encodage longueur LZS | LZS_DECODER_DOCUMENTATION.md | `getCompLen()` |
-| Interpolation audio | AUDIO_EXTRACTION_NOTES.md | § Étape 3 |
-
-### Tables
-
-| Table | Document | Valeurs |
-|-------|----------|---------|
-| tableDPCM16[128] | DPCM16_DECODER_DOCUMENTATION.md | 0x0000 à 0x4000 |
-| Encodage longueur | LZS_DECODER_DOCUMENTATION.md | 2-7 puis extensible |
-| Cue times/values | FORMAT_RBT_DOCUMENTATION.md | 256 entrées |
-
----
-
-## 💡 FAQ Rapide
-
-### Comment extraire l'audio d'un RBT ?
-
-```cpp
-RbtParser parser(file);
-parser.parseHeader();
-parser.extractAudio("output/");
-```
-
-Voir [QUICK_REFERENCE.md](QUICK_REFERENCE.md#exemple-complet--extraction-audio-rbt)
-
-### Quelle est la différence entre LZS et LZSS ?
-
-LZS est une variante de LZSS avec :
-- Offsets variables (7 ou 11 bits)
-- Encodage de longueur optimisé
-- Format MSB-first
-
-Voir [LZS_DECODER_DOCUMENTATION.md](LZS_DECODER_DOCUMENTATION.md#différence-avec-lzss-standard)
-
-### Qu'est-ce que le DPCM runway ?
-
-Le runway est une séquence de 8 bytes au début de chaque paquet audio Robot qui :
-- Initialise le décodeur DPCM
-- Amène le signal à la bonne amplitude
-- Est décompressé mais jamais écrit dans le flux final
-
-Voir [AUDIO_EXTRACTION_NOTES.md](AUDIO_EXTRACTION_NOTES.md#dpcm-runway)
-
-### Comment les canaux EVEN/ODD fonctionnent ?
-
-Les canaux sont déterminés par `audioAbsolutePosition % 4` :
-- EVEN (0) : positions 0, 2, 4, 6... du buffer final
-- ODD (1) : positions 1, 3, 5, 7... du buffer final
-- Résultat : 22050 Hz mono après entrelacement
-
-Voir [AUDIO_EXTRACTION_NOTES.md](AUDIO_EXTRACTION_NOTES.md#canaux-even-et-odd)
-
-### Le code est-il conforme à ScummVM ?
-
-Oui, 100% conforme :
-- DPCM16 : strictement identique
-- LZS : logique équivalente avec vérifications améliorées
-
-Voir [VERIFICATION_REPORT.md](VERIFICATION_REPORT.md)
-
----
-
-## 🛠️ Fichiers Source
+| Document | Description |
+|----------|-------------|
+| [FORMAT_RBT_DOCUMENTATION.md](reference/FORMAT_RBT_DOCUMENTATION.md) | Format vidéo Robot (.RBT) complet |
+| [SOL_FILE_FORMAT_DOCUMENTATION.md](reference/SOL_FILE_FORMAT_DOCUMENTATION.md) | Format audio SOL Sierra |
 
 ### Décodeurs
 
-| Fichier | Description |
-|---------|-------------|
-| `src/formats/dpcm.{h,cpp}` | Décodeur DPCM16 |
-| `src/formats/lzs.{h,cpp}` | Décodeur LZS |
-| `src/formats/decompressor_lzs.{h,cpp}` | Wrapper LZS |
+| Document | Description |
+|----------|-------------|
+| [LZS_DECODER_DOCUMENTATION.md](reference/LZS_DECODER_DOCUMENTATION.md) | Décompression LZS/STACpack |
+| [DPCM16_DECODER_DOCUMENTATION.md](reference/DPCM16_DECODER_DOCUMENTATION.md) | Décodage audio DPCM16 |
 
-### Parseurs
+### Systèmes graphiques (ScummVM)
 
-| Fichier | Description |
-|---------|-------------|
-| `src/core/rbt_parser.{h,cpp}` | Parseur RBT complet |
+| Document | Description |
+|----------|-------------|
+| [GFXPALETTE32_SYSTEM.md](reference/GFXPALETTE32_SYSTEM.md) | Système palette SCI32 |
+| [ROBOT_PALETTE_DECODING.md](reference/ROBOT_PALETTE_DECODING.md) | Décodage palette Robot |
+| [ROBOT_PALETTE_REMAPPING.md](reference/ROBOT_PALETTE_REMAPPING.md) | Remapping palette Robot |
+| [GFXREMAP_SCI16.md](reference/GFXREMAP_SCI16.md) | Système remap SCI16 |
+| [ROBOT_VIRTUAL_BACKGROUND.md](reference/ROBOT_VIRTUAL_BACKGROUND.md) | Virtual background Robot |
 
-### Utilitaires
+### Export & formats
 
-| Fichier | Description |
-|---------|-------------|
-| `src/utils/sci_util.{h,cpp}` | Helpers SCI (endianness, etc.) |
-| `src/utils/memstream.h` | Stream mémoire |
+| Document | Description |
+|----------|-------------|
+| [OPENEXR_EXPORT.md](reference/OPENEXR_EXPORT.md) | Export format OpenEXR |
+
+
+## 🚀 Démarrage rapide
+
+### Installation et compilation
+
+```bash
+git clone https://github.com/proxymo75015/extractor_sierra.git
+cd extractor_sierra
+mkdir -p build && cd build
+cmake ..
+make -j$(nproc)
+```
+
+### Extraction batch
+
+```bash
+./build/robot_extractor RBT/ Resource/ output/
+```
+
+Génère pour chaque `{ID}.RBT` :
+- `{ID}_video.mkv` - MKV 4 pistes
+- `{ID}_video_composite.mov` - MOV ProRes 4444 RGBA
+- `{ID}_audio.wav` - Audio WAV 22050 Hz
+- `{ID}_frames/` - PNG RGBA
+- `metadata.txt` - Métadonnées
+
+### Modes automatiques
+
+**Canvas 630×450** si coordonnées RESSCI trouvées :
+```
+Robot 1000: position (270, 150) → canvas 630×450
+```
+
+**Tight crop** sinon :
+```
+Robot 1180: 133×296 (réduction 69% vs crop simple)
+Robot 230: 170×342 (réduction 68% vs crop simple)
+```
 
 ---
 
-## 📊 Statistiques
+## 🔍 Architecture technique
 
-| Métrique | Valeur |
-|----------|--------|
-| **Documentation totale** | ~150 pages |
-| **Mots** | ~120,000 |
-| **Exemples de code** | 50+ |
-| **Tables de référence** | 30+ |
-| **Diagrammes** | 15+ |
-| **Couverture** | 100% des formats |
+### MKV 4 pistes
+- **Piste 0 (BASE)** : RGB pixels 0-235
+- **Piste 1 (REMAP)** : RGB pixels 236-254
+- **Piste 2 (ALPHA)** : Masque binaire (255 = transparent)
+- **Piste 3 (LUMINANCE)** : Grayscale Y
+- **Audio** : PCM 16-bit 48 kHz mono
+
+### MOV ProRes 4444
+- **Codec** : Apple ProRes 4444 profile 4
+- **Format** : yuva444p10le (YUV 4:4:4 + alpha 10-bit)
+- **Transparence** : Canal alpha complet
+
+### Tight Crop Algorithm
+```cpp
+// 1. Calcul bounding box globale
+for (frame : frames) {
+    for (pixel : frame if alpha > 0) {
+        globalMinX = min(globalMinX, x);
+        globalMaxX = max(globalMaxX, x);
+        globalMinY = min(globalMinY, y);
+        globalMaxY = max(globalMaxY, y);
+    }
+}
+
+// 2. Dimensions finales
+width = globalMaxX - globalMinX + 1;
+height = globalMaxY - globalMinY + 1;
+
+// 3. Application crop
+for (pixel : frame) {
+    croppedX = x - globalMinX;
+    croppedY = y - globalMinY;
+}
+```
 
 ---
 
-## 🔗 Références Externes
+## 📖 Structure projet
 
-### ScummVM
-
-- **Robot Decoder** : `_scummvm_tmp/engines/sci/video/robot_decoder.{h,cpp}`
-- **SOL Decoder** : `_scummvm_tmp/engines/sci/sound/decoders/sol.{h,cpp}`
-- **LZS Decompressor** : `_scummvm_tmp/engines/sci/resource/decompressor.{h,cpp}`
-
-### Ressources Originales
-
-- **André Beck - STACpack/LZS** : https://web.archive.org/web/20070817214826/http://micky.ibh.de/~beck/stuff/lzs4i4l/
-- **ScummVM GitHub** : https://github.com/scummvm/scummvm
-
----
-
-## ✅ Validation
-
-Tous les documents ont été :
-- ✅ Vérifiés contre le code source ScummVM
-- ✅ Testés avec des fichiers réels
-- ✅ Validés par compilation du code
-- ✅ Relus pour cohérence et exactitude
-
----
-
-## 📝 Contribution
-
-Cette documentation est basée sur :
-- Code source ScummVM (référence)
-- Reverse engineering Sierra formats
-- Tests avec fichiers RBT réels
-- Analyse du code d'implémentation
-
-**Langue** : Français  
-**Version** : 1.0  
-**Date** : Novembre 2024  
-**Auteur** : Documentation extraite du code ScummVM avec commentaires explicatifs
+```
+extractor_sierra/
+├── build/
+│   └── robot_extractor           # Programme unifié
+├── src/
+│   ├── main.cpp                  # robot_extractor
+│   ├── core/
+│   │   ├── rbt_parser.cpp        # Parser Robot
+│   │   └── ressci_parser.cpp     # Parser RESSCI
+│   ├── formats/
+│   │   ├── robot_mkv_exporter.cpp # Export MKV/MOV
+│   │   ├── lzs.cpp               # Décompression LZS
+│   │   └── dpcm.cpp              # Décodage DPCM
+│   └── utils/
+├── docs/
+│   └── reference/                # Documentation formats
+├── RBT/                          # Fichiers .RBT input
+├── Resource/                     # Fichiers RESSCI (coordonnées)
+└── output/                       # Fichiers générés
+```
 
 ---
 
 ## 🏆 Crédits
 
-- **ScummVM Team** : Code source de référence
-- **André Beck** : Documentation originale LZS/STACpack
-- **Sierra On-Line** : Formats de fichiers originaux
+- **ScummVM Team** : Documentation formats SCI32
+- **André Beck** : Documentation LZS/STACpack
+- **Sierra On-Line** : Formats originaux
+
+---
+
+**Version 3.0.0** - Documentation mise à jour pour extracteur unifié
+
 
 ---
 

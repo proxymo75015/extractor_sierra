@@ -169,6 +169,10 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
         return false;
     }
     
+    // Calculer les dimensions maximales pour mode crop cohérent
+    fprintf(stderr, "Computing maximum dimensions...\n");
+    parser.computeMaxDimensions();
+    
     // Extraire toutes les frames et les décomposer en couches
     fprintf(stderr, "Extracting %zu frames...\n", numFrames);
     
@@ -206,29 +210,34 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
     }
     fprintf(stderr, "\n");
     
-    // Calculer dimensions du contenu (max des frames)
-    int contentWidth = 0, contentHeight = 0;
-    for (const auto& layer : allLayers) {
-        if (layer.width > contentWidth) contentWidth = layer.width;
-        if (layer.height > contentHeight) contentHeight = layer.height;
-    }
-    fprintf(stderr, "Content Resolution: %dx%d\n", contentWidth, contentHeight);
-    
-    // Déterminer taille finale du canvas
+    // Utiliser les dimensions maximales calculées si disponibles
+    uint16_t computedMaxWidth, computedMaxHeight;
     int canvasWidth, canvasHeight;
-    if (forceCanvasWidth > 0 && forceCanvasHeight > 0) {
-        // Utiliser la taille forcée en ligne de commande
-        canvasWidth = forceCanvasWidth;
-        canvasHeight = forceCanvasHeight;
-        fprintf(stderr, "Canvas (forced): %dx%d\n", canvasWidth, canvasHeight);
-        
-        if (contentWidth > canvasWidth || contentHeight > canvasHeight) {
-            fprintf(stderr, "Warning: Content (%dx%d) exceeds canvas (%dx%d), will be clipped!\n",
-                    contentWidth, contentHeight, canvasWidth, canvasHeight);
-        }
+    int contentWidth = 0, contentHeight = 0;  // Déclaration en dehors du if pour le scope
+    
+    if (parser.getMaxDimensions(computedMaxWidth, computedMaxHeight)) {
+        // Utiliser dimensions max calculées (mode crop cohérent)
+        canvasWidth = computedMaxWidth;
+        canvasHeight = computedMaxHeight;
+        contentWidth = computedMaxWidth;   // Pour metadata
+        contentHeight = computedMaxHeight;
+        fprintf(stderr, "Using computed max dimensions: %dx%d\n", canvasWidth, canvasHeight);
     } else {
-        // Détection automatique
-        detectCanvasSize(contentWidth, contentHeight, canvasWidth, canvasHeight);
+        // Fallback: calculer depuis les layers extraits
+        for (const auto& layer : allLayers) {
+            if (layer.width > contentWidth) contentWidth = layer.width;
+            if (layer.height > contentHeight) contentHeight = layer.height;
+        }
+        fprintf(stderr, "Content Resolution: %dx%d\n", contentWidth, contentHeight);
+        
+        // Appliquer canvas forcé ou auto-détection
+        if (forceCanvasWidth > 0 && forceCanvasHeight > 0) {
+            canvasWidth = forceCanvasWidth;
+            canvasHeight = forceCanvasHeight;
+            fprintf(stderr, "Canvas (forced): %dx%d\n", canvasWidth, canvasHeight);
+        } else {
+            detectCanvasSize(contentWidth, contentHeight, canvasWidth, canvasHeight);
+        }
     }
     
     const int maxWidth = canvasWidth;

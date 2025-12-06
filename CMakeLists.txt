@@ -11,10 +11,12 @@ option(BUILD_TESTS "Construire les tests unitaires" ON)
 add_executable(robot_extractor
     src/main.cpp
     src/core/rbt_parser.cpp
+    src/formats/robot_mkv_exporter.cpp
     src/formats/decompressor_lzs.cpp
     src/formats/lzs.cpp
     src/formats/dpcm.cpp
     src/utils/sci_util.cpp
+    src/utils/stb_impl.cpp
 )
 target_include_directories(robot_extractor PRIVATE 
     ${CMAKE_SOURCE_DIR} 
@@ -34,6 +36,19 @@ add_executable(export_robot_mkv
     src/utils/stb_impl.cpp
 )
 target_include_directories(export_robot_mkv PRIVATE 
+    ${CMAKE_SOURCE_DIR} 
+    ${CMAKE_SOURCE_DIR}/include 
+    ${CMAKE_SOURCE_DIR}/src
+)
+
+# Add RESSCI coordinate extractor
+add_executable(extract_coordinates
+    src/extract_coordinates.cpp
+    src/core/ressci_parser.cpp
+    src/formats/lzs.cpp
+    src/formats/decompressor_lzs.cpp
+)
+target_include_directories(extract_coordinates PRIVATE 
     ${CMAKE_SOURCE_DIR} 
     ${CMAKE_SOURCE_DIR}/include 
     ${CMAKE_SOURCE_DIR}/src

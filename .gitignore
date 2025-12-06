@@ -1,109 +1,39 @@
-# ═══════════════════════════════════════════════════════════════════════
-# Fichiers de build et compilation
-# ═══════════════════════════════════════════════════════════════════════
-
-# Dossiers de build CMake
+# Binaires
 build/
-cmake-build-*/
-out/
-bin/
-lib/
-
-# Fichiers générés par CMake
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-install_manifest.txt
-Testing/
-CTestTestfile.cmake
-compile_commands.json
-*.cmake
-
-# Fichiers objets et bibliothèques
+*.exe
 *.o
-*.obj
 *.a
-*.lib
 *.so
 *.dylib
-*.dll
-*.exe
 
-# ═══════════════════════════════════════════════════════════════════════
-# Environnements et IDE
-# ═══════════════════════════════════════════════════════════════════════
+# Sorties
+output/
+*.mp4
+*.mkv
+*.mov
+*.wav
+*.png
+*.ppm
 
-# Visual Studio Code
+# Données jeu
+RBT/
+Resource/
+phantasmagoria_game/
+ROBOT_CD*/
+
+# Fichiers temporaires
+*.log
+*.bin
+robot_positions.txt
+robot_positions_test.txt
+
+# IDE
 .vscode/
-*.code-workspace
-
-# JetBrains (CLion, etc.)
 .idea/
-cmake-build-*/
-
-# Visual Studio
-.vs/
-*.user
-*.suo
-*.sln
-*.vcxproj
-*.vcxproj.filters
-
-# Xcode
-*.xcodeproj/
-*.xcworkspace/
-
-# ═══════════════════════════════════════════════════════════════════════
-# Fichiers temporaires et système
-# ═══════════════════════════════════════════════════════════════════════
-
-# Éditeurs
 *.swp
 *.swo
 *~
-.*.swp
 
-# Logs
-*.log
-
-# Système d'exploitation
+# OS
 .DS_Store
 Thumbs.db
-Desktop.ini
-
-# Fichiers temporaires
-*.tmp
-*.temp
-*.bak
-*.backup
-
-# ═══════════════════════════════════════════════════════════════════════
-# Dépendances et packages
-# ═══════════════════════════════════════════════════════════════════════
-
-# vcpkg
-vcpkg_installed/
-.vcpkg/
-
-# Conan
-conan.lock
-conanbuildinfo.*
-conaninfo.txt
-
-# ═══════════════════════════════════════════════════════════════════════
-# Fichiers de test et sortie
-# ═══════════════════════════════════════════════════════════════════════
-
-# Fichiers de sortie de l'extracteur
-output/
-extracted/
-*.png
-*.wav
-metadata.json
-
-# Coverage et profiling
-*.gcda
-*.gcno
-*.gcov
-coverage/
-*.profdata

@@ -3,6 +3,7 @@
 #include <sstream>
 #include <cstdlib>
 #include <cstring>
+#include <climits>
 #include <sys/stat.h>
 #include <ctime>
 
@@ -73,7 +74,9 @@ RobotLayerFrame decomposeRobotFrame(
 bool RobotMKVExporter::exportMultiTrack(
     const std::vector<RobotLayerFrame>& layers,
     const std::string& outputPath,
-    const std::string& audioPath
+    const std::string& audioPath,
+    int canvasWidth,
+    int canvasHeight
 ) {
     if (layers.empty()) {
         fprintf(stderr, "Error: no layers to export\n");
@@ -82,12 +85,56 @@ bool RobotMKVExporter::exportMultiTrack(
     
     const size_t numFrames = layers.size();
     
-    // Trouver la résolution maximale parmi toutes les frames
-    int maxWidth = 0;
-    int maxHeight = 0;
-    for (size_t i = 0; i < numFrames; ++i) {
-        if (layers[i].width > maxWidth) maxWidth = layers[i].width;
-        if (layers[i].height > maxHeight) maxHeight = layers[i].height;
+    // Utiliser canvas forcé si fourni, sinon calculer bbox globale réelle
+    int maxWidth = canvasWidth;
+    int maxHeight = canvasHeight;
+    int cropOffsetX = 0, cropOffsetY = 0;  // Offset à retirer
+    int globalMinX = 0, globalMinY = 0, globalMaxX = 0, globalMaxY = 0;
+    
+    if (maxWidth == 0 || maxHeight == 0) {
+        // Calculer la bounding box globale de tous les pixels visibles
+        globalMinX = INT_MAX;
+        globalMinY = INT_MAX;
+        globalMaxX = 0;
+        globalMaxY = 0;
+        
+        for (size_t i = 0; i < numFrames; ++i) {
+            const RobotLayerFrame& layer = layers[i];
+            
+            // Trouver bbox de cette frame
+            int minX = layer.width, minY = layer.height;
+            int maxX = -1, maxY = -1;
+            
+            for (int y = 0; y < layer.height; ++y) {
+                for (int x = 0; x < layer.width; ++x) {
+                    size_t idx = y * layer.width + x;
+                    if (layer.alpha[idx] > 0) {  // Pixel visible
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
+                    }
+                }
+            }
+            
+            // Mettre à jour bbox globale
+            if (maxX >= 0) {  // Si frame non vide
+                if (minX < globalMinX) globalMinX = minX;
+                if (minY < globalMinY) globalMinY = minY;
+                if (maxX > globalMaxX) globalMaxX = maxX;
+                if (maxY > globalMaxY) globalMaxY = maxY;
+            }
+        }
+        
+        cropOffsetX = globalMinX;
+        cropOffsetY = globalMinY;
+        maxWidth = globalMaxX - globalMinX + 1;
+        maxHeight = globalMaxY - globalMinY + 1;
+        
+        fprintf(stderr, "Tight crop bounding box: %dx%d (removing offset %d,%d)\n", 
+                maxWidth, maxHeight, cropOffsetX, cropOffsetY);
+    } else {
+        fprintf(stderr, "Using forced canvas: %dx%d\n", maxWidth, maxHeight);
     }
     
     const int w = maxWidth;
@@ -156,11 +203,20 @@ bool RobotMKVExporter::exportMultiTrack(
         // Couche LUMINANCE: Image finale en niveau de gris
         std::vector<uint8_t> luminanceRGB(maxPixelCount * 3, 0);  // Noir par défaut
         
-        // Copier les données de la frame (qui peut être plus petite) dans les buffers
+        // Copier les données de la frame en appliquant le crop offset
         for (int y = 0; y < frameHeight; ++y) {
             for (int x = 0; x < frameWidth; ++x) {
                 const size_t srcIdx = y * frameWidth + x;
-                const size_t dstIdx = y * w + x;  // Position dans le buffer max
+                
+                // Appliquer le crop: vérifier si ce pixel est dans la bbox
+                int croppedX = x - cropOffsetX;
+                int croppedY = y - cropOffsetY;
+                
+                if (croppedX < 0 || croppedX >= w || croppedY < 0 || croppedY >= h) {
+                    continue;  // Pixel en dehors de la bbox, ignorer
+                }
+                
+                const size_t dstIdx = croppedY * w + croppedX;  // Position dans le buffer croppé
                 
                 // BASE: Pixels opaques non-remap (RGB complet)
                 if (layer.remap_mask[srcIdx] == 0 && layer.alpha[srcIdx] == 255) {
@@ -335,6 +391,107 @@ bool RobotMKVExporter::exportMultiTrack(
     }
     
     // ========================================================================
+    // ÉTAPE 2bis: Générer MOV ProRes 4444 RGBA (composite avec alpha)
+    // ========================================================================
+    fprintf(stderr, "\nStep 2bis/4: Generating ProRes 4444 MOV with alpha...\n");
+    
+    // Extraire le dossier de sortie depuis outputPath (ex: "output/1000/1000_video" -> "output/1000/1000_frames")
+    std::string outputDir = outputPath.substr(0, outputPath.find_last_of("/\\"));
+    size_t lastSlash = outputPath.find_last_of("/\\");
+    size_t videoPos = outputPath.rfind("_video");
+    std::string robotName = outputPath.substr(lastSlash + 1, videoPos - lastSlash - 1);
+    std::string framesDir = outputDir + "/" + robotName + "_frames";
+    
+    fprintf(stderr, "  Saving PNG RGBA frames to: %s\n", framesDir.c_str());
+    
+    // Créer le dossier frames s'il n'existe pas déjà
+#ifdef _WIN32
+    std::string mkdirCmd = "if not exist \"" + framesDir + "\" mkdir \"" + framesDir + "\"";
+    system(mkdirCmd.c_str());
+#else
+    mkdir(framesDir.c_str(), 0755);
+#endif
+    
+    for (size_t i = 0; i < numFrames; ++i) {
+        const RobotLayerFrame& layer = layers[i];
+        const int frameWidth = layer.width;
+        const int frameHeight = layer.height;
+        
+        // Créer image RGBA avec padding au canvas si nécessaire
+        const size_t canvasPixelCount = (size_t)w * (size_t)h;
+        std::vector<uint8_t> rgbaImage(canvasPixelCount * 4, 0);  // Noir transparent par défaut
+        
+        // Copier pixels de la frame vers le canvas croppé
+        for (int y = 0; y < frameHeight; ++y) {
+            for (int x = 0; x < frameWidth; ++x) {
+                const size_t srcIdx = y * frameWidth + x;
+                
+                // Appliquer le crop offset
+                int croppedX = x - cropOffsetX;
+                int croppedY = y - cropOffsetY;
+                
+                if (croppedX < 0 || croppedX >= w || croppedY < 0 || croppedY >= h) {
+                    continue;  // Pixel en dehors de la bbox
+                }
+                
+                const size_t dstIdx = croppedY * w + croppedX;
+                
+                if (layer.alpha[srcIdx] == 0) {
+                    // Transparent (skip pixel 255)
+                    rgbaImage[dstIdx * 4 + 0] = 0;
+                    rgbaImage[dstIdx * 4 + 1] = 0;
+                    rgbaImage[dstIdx * 4 + 2] = 0;
+                    rgbaImage[dstIdx * 4 + 3] = 0;
+                } else if (layer.remap_mask[srcIdx] == 255) {
+                    // Pixel remap (236-254)
+                    rgbaImage[dstIdx * 4 + 0] = layer.remap_color_r[srcIdx];
+                    rgbaImage[dstIdx * 4 + 1] = layer.remap_color_g[srcIdx];
+                    rgbaImage[dstIdx * 4 + 2] = layer.remap_color_b[srcIdx];
+                    rgbaImage[dstIdx * 4 + 3] = 255;
+                } else {
+                    // Pixel base (0-235)
+                    rgbaImage[dstIdx * 4 + 0] = layer.base_r[srcIdx];
+                    rgbaImage[dstIdx * 4 + 1] = layer.base_g[srcIdx];
+                    rgbaImage[dstIdx * 4 + 2] = layer.base_b[srcIdx];
+                    rgbaImage[dstIdx * 4 + 3] = 255;
+                }
+            }
+        }
+        
+        // Sauvegarder en PNG RGBA dans le dossier frames de sortie
+        char framePath[512];
+        snprintf(framePath, sizeof(framePath), "%s/frame_%04zu.png", framesDir.c_str(), i);
+        if (!stbi_write_png(framePath, w, h, 4, rgbaImage.data(), w * 4)) {
+            fprintf(stderr, "Warning: Failed to write PNG frame %zu\n", i);
+        }
+    }
+    
+    // Générer MOV ProRes 4444 avec canal alpha
+    std::string movFile = outputPath + "_composite.mov";
+    std::ostringstream movCmd;
+    movCmd << "ffmpeg -y -loglevel error -framerate " << config_.framerate
+           << " -start_number 0 -i " << framesDir << "/frame_%04d.png";
+    
+    if (!audioPath.empty()) {
+        movCmd << " -i \"" << audioPath << "\"";
+    }
+    
+    movCmd << " -c:v prores_ks -profile:v 4444 -pix_fmt yuva444p10le -vendor apl0";
+    
+    if (!audioPath.empty()) {
+        movCmd << " -c:a pcm_s16le -shortest";
+    }
+    
+    movCmd << " \"" << movFile << "\"";
+    
+    int movResult = system(movCmd.str().c_str());
+    if (movResult == 0) {
+        fprintf(stderr, "✓ MOV file: %s\n", movFile.c_str());
+    } else {
+        fprintf(stderr, "⚠ Warning: MOV generation failed\n");
+    }
+    
+    // ========================================================================
     // ÉTAPE 3: Nettoyer les dossiers temporaires
     // ========================================================================
     fprintf(stderr, "\nStep 3/4: Cleaning up temporary files...\n");
@@ -349,15 +506,27 @@ bool RobotMKVExporter::exportMultiTrack(
 #endif
     system(cleanupCmd.str().c_str());
     
-    fprintf(stderr, "\nStep 4/4: Export complete!\n");
-    fprintf(stderr, "✓ MKV file: %s\n", outputFile.c_str());
-    fprintf(stderr, "  - Track 0: BASE layer (RGB, pixels 0-235)\n");
-    fprintf(stderr, "  - Track 1: REMAP layer (RGB, pixels 236-254)\n");
-    fprintf(stderr, "  - Track 2: ALPHA layer (transparency mask)\n");
-    fprintf(stderr, "  - Track 3: LUMINANCE layer (grayscale Y)\n");
+    fprintf(stderr, "\n=========================================\n");
+    fprintf(stderr, "Step 4/4: Export complete! ✓\n");
+    fprintf(stderr, "=========================================\n");
+    fprintf(stderr, "Video Resolution: %d×%d\n", w, h);
+    fprintf(stderr, "Number of Frames: %zu\n", numFrames);
+    fprintf(stderr, "Frame Rate:       %d fps\n", config_.framerate);
+    fprintf(stderr, "Audio Track:      %s\n", audioPath.empty() ? "None" : "Included (PCM 16-bit)");
+    fprintf(stderr, "\nMKV Tracks:\n");
+    fprintf(stderr, "  • Track 0 (BASE):      RGB base layer (pixels 0-235)\n");
+    fprintf(stderr, "  • Track 1 (REMAP):     RGB remap layer (pixels 236-254)\n");
+    fprintf(stderr, "  • Track 2 (ALPHA):     Binary transparency mask (skip pixel 255)\n");
+    fprintf(stderr, "  • Track 3 (LUMINANCE): Grayscale Y layer\n");
     if (!audioPath.empty()) {
-        fprintf(stderr, "  - Audio: PCM 48 kHz mono\n");
+        fprintf(stderr, "  • Audio Track:     PCM 48 kHz mono\n");
     }
+    fprintf(stderr, "\nMOV ProRes 4444:\n");
+    fprintf(stderr, "  • File:     %s\n", movFile.c_str());
+    fprintf(stderr, "  • Codec:    Apple ProRes 4444 (profile 4)\n");
+    fprintf(stderr, "  • Alpha:    yuva444p10le (10-bit with transparency)\n");
+    fprintf(stderr, "  • Combined: RGB composite + alpha channel\n");
+    fprintf(stderr, "=========================================\n");
     
     return true;
 }

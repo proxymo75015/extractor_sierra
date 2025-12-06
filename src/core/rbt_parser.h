@@ -21,6 +21,39 @@ public:
     bool hasAudio() const { return _hasAudio; }
     
     /**
+     * Active le mode composition sur canvas avec coordonnées
+     * @param x Position X du Robot sur le canvas
+     * @param y Position Y du Robot sur le canvas
+     * @param canvasWidth Largeur du canvas (défaut: 630 pour Phantasmagoria)
+     * @param canvasHeight Hauteur du canvas (défaut: 450 pour Phantasmagoria)
+     */
+    void setCanvasMode(int16_t x, int16_t y, uint16_t canvasWidth = 630, uint16_t canvasHeight = 450);
+    
+    /**
+     * Désactive le mode canvas (retour au mode crop serré)
+     */
+    void disableCanvasMode();
+    
+    /**
+     * Calcule les dimensions maximales du Robot (scan toutes les frames)
+     * Utilisé en mode crop pour avoir un canvas cohérent
+     */
+    void computeMaxDimensions();
+    
+    /**
+     * Récupère les dimensions maximales calculées
+     * @return true si dimensions disponibles, sinon false
+     */
+    bool getMaxDimensions(uint16_t& width, uint16_t& height) const {
+        if (_maxDimensionsComputed && _maxCelWidth > 0 && _maxCelHeight > 0) {
+            width = _maxCelWidth;
+            height = _maxCelHeight;
+            return true;
+        }
+        return false;
+    }
+    
+    /**
      * Extrait les pixels indexés d'une frame (sans conversion RGB)
      * @return true si succès, pixels stockés dans outPixels (320x240)
      */
@@ -81,6 +114,18 @@ private:
     // For a raw, standalone `.rbt` file the resource is stored at the start
     // of the file, so the default `_fileOffset` should be 0.
     long _fileOffset = 0;
+    
+    // Mode canvas pour composition avec coordonnées
+    bool _useCanvasMode = false;
+    int16_t _canvasX = 0;
+    int16_t _canvasY = 0;
+    uint16_t _canvasWidth = 630;
+    uint16_t _canvasHeight = 450;
+    
+    // Dimensions maximales pour mode crop cohérent
+    uint16_t _maxCelWidth = 0;
+    uint16_t _maxCelHeight = 0;
+    bool _maxDimensionsComputed = false;
 
     // helpers
     uint16_t readUint16LE();

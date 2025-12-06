@@ -1,325 +1,231 @@
-# Sierra Robot Video Extractor
+# 🎬 Extractor Sierra
 
-Extracteur et convertisseur pour fichiers vidéo Robot (`.RBT`) de Sierra SCI utilisés dans les jeux d'aventure des années 90.
+> Extracteur vidéo professionnel pour fichiers Robot (.RBT) de Sierra SCI32  
+> Génère MKV multicouche + MOV ProRes 4444 RGBA avec transparence
 
-## 🎯 Fonctionnalités
+[![Version](https://img.shields.io/badge/version-3.0.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-### Formats de sortie supportés
+## 📋 Vue d'ensemble
 
-1. **MOV ProRes 4444 RGBA** - **Standard professionnel**
-   - Export composite avec **canal alpha natif** (transparence)
-   - Codec : ProRes 4444 (quasi-lossless, 10-12 bit)
-   - Format : RGBA 4:4:4:4 avec alpha haute résolution
-   - Audio : PCM 16-bit lossless 22050 Hz mono
-   - **Normalisation dimensions** : Frames centrées dans canvas unifié
-   - Compatible : Adobe Premiere, DaVinci Resolve, Final Cut Pro, After Effects
-   - **Idéal pour** : Post-production, compositing, archivage qualité maximale
+**robot_extractor** est un extracteur vidéo unifié pour les fichiers Robot (.RBT) des jeux Sierra SCI32 (Phantasmagoria). Il génère automatiquement :
+- **MKV multicouche** (4 pistes vidéo : BASE, REMAP, ALPHA, LUMINANCE)
+- **MOV ProRes 4444** avec canal alpha 10-bit (yuva444p10le)
+- **PNG RGBA** préservant la transparence complète
+- **Audio WAV** 22050 Hz mono (décodage DPCM)
 
-2. **MKV Multi-couches** - **Format technique**
-   - 4 pistes vidéo séparées (BASE, REMAP, ALPHA, LUMINANCE)
-   - Audio PCM 48 kHz mono
-   - Codecs : H.264, H.265, VP9, FFV1
-   - Métadonnées complètes
-   - **Idéal pour** : Analyse technique, réédition par couches
+### ✨ Fonctionnalités
 
-3. **PNG + WAV** (`robot_extractor`)
-   - Extraction frame par frame en PNG RGBA
-   - Audio WAV stéréo 22050 Hz
-   - Frames individuelles avec transparence
+- 🎥 **Extraction unifiée** : Un seul programme, tous les formats
+- 🎨 **Modes intelligents** : Canvas 630×450 (si coordonnées RESSCI) ou tight crop auto
+- 📦 **MKV 4 pistes** : Séparation complète des couches (base, remap, alpha, luminance)
+- 🎬 **MOV ProRes 4444** : Alpha 10-bit pour composition professionnelle
+- 🖼️ **PNG RGBA** : Frames transparentes conservées dans `{robot}_frames/`
+- 📍 **Intégration RESSCI** : Détection auto coordonnées + positionnement canvas
+- 🔊 **Audio DPCM** : Interpolation mono 22050 Hz vers WAV
 
-## 📦 Installation
+## 🚀 Installation
 
 ### Prérequis
 
-- **Compilateur C++11** (GCC 7+, Clang 5+, MSVC 2017+)
-- **CMake 3.10+**
-- **FFmpeg avec support ProRes** (prores_ks encoder)
-  - Linux : `ffmpeg -encoders | grep prores`
-  - Windows : Utiliser build FULL depuis [gyan.dev](https://www.gyan.dev/ffmpeg/builds/)
-  - Vérifier : `ffmpeg -codecs | grep prores`
-
-### Dev Container (VS Code)
-
-Le projet inclut une configuration Dev Container complète :
-
 ```bash
-# Ouvrir dans VS Code avec l'extension Dev Containers
-code .
-# Puis : "Reopen in Container"
+# Ubuntu/Debian
+sudo apt install build-essential cmake ffmpeg
+
+# macOS
+brew install cmake ffmpeg
 ```
 
 ### Compilation
 
 ```bash
-cmake .
-cmake --build .
+git clone https://github.com/proxymo75015/extractor_sierra.git
+cd extractor_sierra
+mkdir -p build && cd build
+cmake ..
+make -j$(nproc)
 ```
 
-**Binaires générés** :
-- `export_robot_mkv` - Export MKV multi-couches (recommandé)
-- `robot_extractor` - Export PNG/WAV/MP4 classique
+## 🎯 Usage
 
-## 🚀 Utilisation
+### Extraction simple
 
-### Export MKV Multi-couches (Recommandé)
-
-Le programme scanne automatiquement le répertoire `RBT/` et traite tous les fichiers `.RBT` qu'il contient.
-
-**Préparation** :
 ```bash
-# Créer le répertoire RBT et y placer vos fichiers
-mkdir RBT
-cp /chemin/vers/vos/fichiers/*.RBT RBT/
+./build/robot_extractor RBT/ Resource/ output/
 ```
 
-**Lancement** :
-```bash
-./export_robot_mkv [codec] [--canvas WIDTHxHEIGHT]
+**Arguments :**
+- `RBT/` : Répertoire contenant fichiers .RBT
+- `Resource/` : Répertoire RESSCI (RESMAP.*, RESSCI.*) pour coordonnées
+- `output/` : Répertoire de sortie
+
+### Fichiers générés
+
+Pour chaque robot `{ID}.RBT`, génère dans `output/{ID}/` :
+
 ```
-
-**Codecs disponibles** :
-- `h264` (défaut) - Universel, compatible partout
-- `h265` - Meilleure compression, +moderne
-- `vp9` - Open source, excellente qualité
-- `ffv1` - Lossless, archivage
-
-**Options canvas** :
-- `--canvas WIDTHxHEIGHT` - Forcer taille du canvas (ex: `--canvas 640x480`)
-- Si non spécifié : **Auto-détection** des résolutions standard (640×480, 640×400, 320×240, 320×200)
-
-**Exemples** :
-```bash
-# Auto-détection (recommandé)
-./export_robot_mkv h264
-
-# Canvas personnalisé
-./export_robot_mkv h264 --canvas 640x480
-./export_robot_mkv vp9 --canvas 800x600
-```
-
-**Résultats** :
-```
-output/
-├── 230/
-│   ├── 230_composite.mov    # ProRes 4444 RGBA (transparence native)
-│   ├── 230_video.mkv        # MKV multi-couches (BASE/REMAP/ALPHA/LUMINANCE)
-│   ├── 230_audio.wav        # Audio natif 22050 Hz mono
-│   ├── 230_metadata.txt     # Métadonnées complètes
-│   └── 230_frames/          # Frames PNG RGBA individuelles
-│       ├── frame_0000.png   # Dimensions normalisées (maxWidth×maxHeight)
-│       ├── frame_0001.png   # Images centrées dans canvas
-│       └── ...
-├── 1014/
-│   ├── 1014_composite.mov   # ProRes 4444 (format pro)
-│   ├── 1014_video.mkv       # MKV technique
+output/1000/
+├── 1000_video.mkv                # MKV 4 pistes (BASE+REMAP+ALPHA+LUMINANCE)
+├── 1000_video_composite.mov      # MOV ProRes 4444 RGBA alpha 10-bit
+├── 1000_audio.wav                # Audio WAV 22050 Hz mono
+├── 1000_frames/                  # PNG RGBA avec transparence
+│   ├── frame_0000.png
+│   ├── frame_0001.png
 │   └── ...
-└── ...
+└── metadata.txt                  # Métadonnées (ID, frames, FPS, position, etc.)
 ```
 
-**Fichiers générés** :
+## 📊 Modes de rendu
 
-1. **`*_composite.mov`** (ProRes 4444 RGBA)
-   - Transparence native (canal alpha 10-12 bit)
-   - Frames normalisées et centrées
-   - Compatible tous logiciels pro
-   - Taille : ~10 MB pour 10 secondes
+### Mode Canvas (630×450)
+- **Condition** : Coordonnées trouvées dans RESSCI ET position ≠ (0,0)
+- **Usage** : Robots positionnés sur fond virtuel du jeu
+- **Exemple** : Robot 1000 à position (270, 150)
 
-2. **`*_video.mkv`** (Multi-couches)
-   - Track 0 (BASE) : Pixels fixes RGB (0-235)
-   - Track 1 (REMAP) : Zones recoloriables (236-254)
-   - Track 2 (ALPHA) : Masque transparence (255)
-   - Track 3 (LUMINANCE) : Aperçu niveaux de gris
-   - Track 4 (AUDIO) : PCM 48 kHz mono
+### Mode Tight Crop
+- **Condition** : Pas de coordonnées OU position (0,0)
+- **Calcul** : Bounding box globale sur tous pixels visibles (alpha > 0)
+- **Réduction** : ~69% taille moyenne vs crop simple
+- **Exemple** : Robot 1180 → 133×296 au lieu de 426×394
 
-3. **`*_frames/`** (PNG individuelles)
-   - Format RGBA avec alpha
-   - Dimensions fixes (alignées sur max du RBT)
-   - Images centrées dans canvas
+## 📖 Documentation
 
-### Lecture des fichiers MOV ProRes
+### 📚 Documentation de référence
 
-**Lecteurs compatibles** :
-- ✅ **DaVinci Resolve** (gratuit, recommandé)
-- ✅ **Adobe Premiere Pro / After Effects**
-- ✅ **Final Cut Pro** (macOS)
-- ✅ **QuickTime Player** (macOS)
-- ✅ **MPV** avec `--vo=gpu`
-- ❌ VLC (pas de support alpha ProRes 4444)
-- ❌ Windows Media Player (incompatible)
+- [Format RBT](docs/reference/FORMAT_RBT_DOCUMENTATION.md) - Structure fichiers Robot
+- [Décodeur LZS](docs/reference/LZS_DECODER_DOCUMENTATION.md) - Compression LZS
+- [Décodeur DPCM](docs/reference/DPCM16_DECODER_DOCUMENTATION.md) - Audio DPCM
+- [Palette Robot](docs/reference/ROBOT_PALETTE_DECODING.md) - Système palette
+- [Remapping](docs/reference/ROBOT_PALETTE_REMAPPING.md) - Remapping couleurs
+- [Format SOL](docs/reference/SOL_FILE_FORMAT_DOCUMENTATION.md) - Fichiers SOL
+- [GfxPalette32](docs/reference/GFXPALETTE32_SYSTEM.md) - Système palette SCI32
+- [GfxRemap SCI16](docs/reference/GFXREMAP_SCI16.md) - Remapping SCI16
+- [Virtual Background](docs/reference/ROBOT_VIRTUAL_BACKGROUND.md) - Backgrounds virtuels
+- [Export OpenEXR](docs/reference/OPENEXR_EXPORT.md) - Export format EXR
 
-**Vérification rapide** :
-```bash
-# Voir les propriétés du MOV
-ffprobe output/230/230_composite.mov
+## 🔍 Détails techniques
 
-# Extraire une frame pour tester
-ffmpeg -i output/230/230_composite.mov -vf "select=eq(n\,10)" -vframes 1 test_frame.png
+### MKV 4 pistes
+- **Piste 0 (BASE)** : RGB pixels 0-235 (base layer)
+- **Piste 1 (REMAP)** : RGB pixels 236-254 (remap layer)
+- **Piste 2 (ALPHA)** : Masque binaire (255 = transparent)
+- **Piste 3 (LUMINANCE)** : Grayscale Y
+- **Audio** : PCM 16-bit 48 kHz mono
+
+### MOV ProRes 4444
+- **Codec** : Apple ProRes 4444 (profile 4)
+- **Format pixel** : yuva444p10le (YUV 4:4:4 + alpha 10-bit)
+- **Transparence** : Canal alpha complet pour composition
+
+### Tight Crop Algorithm
+1. Parcours tous pixels alpha > 0 de toutes les frames
+2. Calcul bounding box globale : `globalMinX/Y`, `globalMaxX/Y`
+3. Dimensions finales : `width = maxX - minX + 1`, `height = maxY - minY + 1`
+4. Application offset crop : `croppedX = x - cropOffsetX`
+
+## 🏗️ Architecture
+
+### Programme unifié
+`robot_extractor` intègre toutes les fonctionnalités :
+- Parsing RBT (format Robot)
+- Parsing RESSCI (coordonnées)
+- Décodage LZS (compression)
+- Décodage DPCM (audio)
+- Génération MKV multicouche
+- Génération MOV ProRes 4444
+- Export PNG RGBA
+- Calcul tight crop bbox
+
+### Fichiers sources principaux
+- `src/main.cpp` : Programme principal robot_extractor
+- `src/core/rbt_parser.cpp` : Parser format Robot
+- `src/core/ressci_parser.cpp` : Parser RESSCI (coordonnées)
+- `src/formats/robot_mkv_exporter.cpp` : Export MKV/MOV
+- `src/formats/lzs.cpp` : Décompression LZS
+- `src/formats/dpcm.cpp` : Décodage audio DPCM
+
+## 📊 Exemples de résultats
+
+### Robot 1000 (Canvas mode)
+```
+Dimensions: 630×450
+Frames: 143
+Position: (270, 150)
+MKV: 1.6 MB
+MOV: 5.6 MB
+PNG: 143 frames × 26 KB
 ```
 
-### Export PNG/WAV/MP4 Classique
-
-```bash
-./robot_extractor <fichier.rbt> <dossier_sortie> [nb_frames]
+### Robot 1180 (Tight crop)
+```
+Dimensions: 133×296 (vs 426×394 crop simple = -69%)
+Frames: 35
+Position: N/A
+MKV: 467 KB
+MOV: 1.8 MB
+PNG: 35 frames
 ```
 
-**Exemple** :
-```bash
-./robot_extractor ScummVM/rbt/91.RBT output_91
+### Robot 230 (Tight crop)
+```
+Dimensions: 170×342 (vs 390×462 crop simple = -68%)
+Frames: 207
+Position: N/A
+MKV: 2.5 MB
+MOV: 9.3 MB
+PNG: 207 frames
 ```
 
-**Fichiers générés** :
-```
-output_91/
-├── frames/              # PNG 320x240 RGB
-│   ├── frame_0000_cel_00.png
-│   ├── frame_0001_cel_00.png
-│   └── ...
-├── LEFT.wav             # Audio gauche 11025 Hz
-├── RIGHT.wav            # Audio droit 11025 Hz
-├── output.mp4           # Vidéo H.264 + AAC stéréo
-├── palette.bin          # Palette RGB brute
-└── metadata.txt         # Métadonnées
-```
+## 🤝 Contribution
 
-## 📊 Format Robot SCI
+Les contributions sont bienvenues ! Pour proposer des améliorations :
 
-### Structure du fichier
+1. Fork le projet
+2. Créer une branche (`git checkout -b feature/amelioration`)
+3. Commit les changements (`git commit -m 'Ajout fonctionnalité'`)
+4. Push la branche (`git push origin feature/amelioration`)
+5. Ouvrir une Pull Request
 
-```
-[PRIMER]        # Données audio initiales (EVEN/ODD)
-[PALETTE]       # Palette RGB 256 couleurs
-[FRAME 0]       # Vidéo + Audio entrelacés
-  ├── Video     # Cels compressés LZS
-  └── Audio     # DPCM16 compressé
-[FRAME 1]
-...
-[FRAME N]
-```
+## 📜 Licence
 
-### Classification des pixels
-
-| Type | Indices | Usage | Piste MKV |
-|------|---------|-------|-----------|
-| **BASE** | 0-235 | Couleurs fixes opaques | Track 0 (RGB) |
-| **REMAP** | 236-254 | Zones recoloriables | Track 1 (RGB) |
-| **SKIP** | 255 | Transparent | Track 2 (ALPHA) |
-
-### Compression
-
-- **Vidéo** : LZS (Lempel-Ziv-Storer)
-- **Audio** : DPCM16 (Delta Pulse Code Modulation)
-- **Fréquence audio** : 22050 Hz mono (2 canaux entrelacés)
-- **Framerate** : 10 fps (typique)
-
-## 🎮 Jeux supportés
-
-Testé avec :
-- Phantasmagoria (1995)
-- The Beast Within: A Gabriel Knight Mystery (1995)
-- King's Quest VII (1994)
-- Torin's Passage (1995)
-
-Tous les jeux Sierra SCI utilisant le format Robot v5/v6 devraient fonctionner.
-
-## 📁 Structure du projet
-
-```
-extractor_sierra/
-├── src/
-│   ├── core/                  # Parseur Robot
-│   │   └── rbt_parser.cpp
-│   ├── formats/               # Codecs
-│   │   ├── decompressor_lzs.cpp  # Décompression LZS
-│   │   ├── dpcm.cpp              # Décodeur DPCM16
-│   │   └── robot_mkv_exporter.cpp # Export MKV
-│   ├── utils/                 # Utilitaires
-│   ├── main.cpp               # robot_extractor
-│   └── export_robot_mkv.cpp   # export_robot_mkv
-├── ScummVM/rbt/               # Fichiers RBT de test
-├── examples/                  # Exemples de sortie
-├── docs/                      # Documentation
-├── CMakeLists.txt
-└── README.md
-```
-
-## 🔬 Technique
-
-### Décompression LZS
-
-Le format Robot utilise une variante de LZS avec :
-- Sliding window de 4096 bytes
-- Tokens de 12 bits (offset) + 4 bits (longueur)
-- Compression par blocs (chunks)
-
-### Audio DPCM16
-
-- **Encodage** : Codage différentiel 16-bit (Delta PCM)
-- **Architecture** : 2 canaux entrelacés (EVEN/ODD) formant un flux mono 22050 Hz
-- **Runway** : 8 samples de préparation au début de chaque bloc audio
-- **Interpolation** : Lissage des transitions entre canaux EVEN et ODD
-- **Synchronisation** : `audioAbsolutePosition` indique la position exacte dans le buffer entrelaçé final
-- **Format de sortie** : WAV 22050 Hz mono (natif) ou 48 kHz (resamplé pour MKV)
-
-**Note importante** : La synchronisation audio/vidéo est garantie par le respect strict de `audioAbsolutePosition` qui pointe directement dans le buffer final entrelaçé. L'interpolation est appliquée uniquement pour lisser les transitions entre les canaux EVEN (positions paires) et ODD (positions impaires).
-
-### Export MKV
-
-- 4 pistes vidéo parallèles encodées séparément
-- Format Matroska supportant les multi-tracks nativement
-- Métadonnées de piste pour identification
-- Resampling audio 22050 Hz → 48 kHz (SoXR)
-
-## 🐛 Dépannage
-
-### "No such file or directory"
-
-Vérifiez les chemins et assurez-vous que le fichier RBT existe :
-```bash
-ls -l ScummVM/rbt/*.RBT
-```
-
-### "FFmpeg not found"
-
-Installez FFmpeg :
-```bash
-# Ubuntu/Debian
-sudo apt-get install ffmpeg
-
-# macOS
-brew install ffmpeg
-
-# Windows
-# Télécharger depuis https://ffmpeg.org/download.html
-```
-
-### Pistes REMAP/ALPHA vides
-
-C'est normal ! La plupart des vidéos Robot n'utilisent pas :
-- **REMAP** : Fonctionnalité optionnelle pour la recoloration
-- **ALPHA** : Transparence variable (255 = fond transparent)
-
-Seule la piste **BASE** contient généralement toute l'image.
-
-### Problèmes de compilation
-
-```bash
-# Nettoyer et recompiler
-rm -rf CMakeCache.txt CMakeFiles/
-cmake .
-cmake --build . --clean-first
-```
-
-## 📖 Références
-
-- [ScummVM Robot Engine](https://github.com/scummvm/scummvm/tree/master/engines/sci/graphics)
-- [SCI Specifications](http://scummvm.org/docs/SCI_Specifications.pdf)
-- [LZS Compression](https://en.wikipedia.org/wiki/Lempel%E2%80%93Ziv%E2%80%93Storer%E2%80%93Szymanski)
-- [Matroska Format](https://www.matroska.org/technical/specs/index.html)
-
-## 📝 Licence
-
-MIT License - Voir fichier `LICENSE`
+MIT License - voir [LICENSE](LICENSE)
 
 ## 🙏 Crédits
 
-Basé sur l'implémentation ScummVM du moteur Robot SCI.
+- **Format SCI32** : Documentation ScummVM
+- **Décodeurs** : Inspirés de ScummVM (LGPL)
+- **FFmpeg** : Encodage vidéo et audio
+
+## 📞 Support
+
+- **Issues** : [GitHub Issues](https://github.com/proxymo75015/extractor_sierra/issues)
+- **Documentation** : [docs/README.md](docs/README.md)
+
+---
+
+**Version 3.0.0** - Extracteur unifié avec MKV multicouche + MOV ProRes 4444 RGBA
+
+
+Voir [CHANGELOG.md](CHANGELOG.md) pour l'historique complet des versions.
+
+### Version actuelle : 2.6.0
+
+**Nouveautés :**
+- ✨ Modes automatiques Crop/Canvas selon coordonnées
+- 🎯 Intégration RESSCI avec positionnement
+- 🎨 Rendu sur canvas 630x450 ou dimensions Robot
+- 📖 Documentation complète restructurée
+
+## 📜 Licence
+
+Ce projet est sous licence MIT. Voir [LICENSE](LICENSE) pour plus de détails.
+
+## 🙏 Remerciements
+
+- **ScummVM Team** : Reverse engineering SCI32
+- **Sierra On-Line** : Création du moteur SCI
+- **Communauté Phantasmagoria** : Tests et feedback
+
+---
+
+**Développé avec ❤️ pour la préservation des jeux classiques Sierra**

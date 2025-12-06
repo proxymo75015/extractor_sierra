@@ -1,8 +1,0 @@
-# Robot Positions for Phantasmagoria
-# Extracted from ScummVM debug logs
-# Format: robot_id X Y
-# Game resolution: 630x450
-#
-91 175 150
-230 180 160
-1000 150 143

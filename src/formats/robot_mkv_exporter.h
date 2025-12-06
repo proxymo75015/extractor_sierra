@@ -80,6 +80,8 @@ public:
      * @param layers        Vecteur de frames décomposées en couches
      * @param outputPath    Chemin du fichier MKV de sortie (sans extension)
      * @param audioPath     Chemin du fichier audio WAV (optionnel)
+     * @param canvasWidth   Largeur canvas forcée (0 = auto-detect depuis layers)
+     * @param canvasHeight  Hauteur canvas forcée (0 = auto-detect depuis layers)
      * @return true si succès
      * 
      * Structure du MKV:
@@ -91,7 +93,9 @@ public:
      */
     bool exportMultiTrack(const std::vector<RobotLayerFrame>& layers,
                           const std::string& outputPath,
-                          const std::string& audioPath = "");
+                          const std::string& audioPath = "",
+                          int canvasWidth = 0,
+                          int canvasHeight = 0);
     
 private:
     MKVExportConfig config_;

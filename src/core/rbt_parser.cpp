@@ -561,6 +561,90 @@ bool RbtParser::seekSet(size_t pos) {
     return fseek(_f, (long)pos, SEEK_SET) == 0;
 }
 
+void RbtParser::setCanvasMode(int16_t x, int16_t y, uint16_t canvasWidth, uint16_t canvasHeight) {
+    _useCanvasMode = true;
+    _canvasX = x;
+    _canvasY = y;
+    _canvasWidth = canvasWidth;
+    _canvasHeight = canvasHeight;
+    std::fprintf(stderr, "Mode canvas activé: position (%d, %d) sur canvas %ux%u\n", x, y, canvasWidth, canvasHeight);
+}
+
+void RbtParser::disableCanvasMode() {
+    _useCanvasMode = false;
+    std::fprintf(stderr, "Mode canvas désactivé: extraction en crop serré\n");
+}
+
+void RbtParser::computeMaxDimensions() {
+    if (_maxDimensionsComputed) return;
+    
+    std::fprintf(stderr, "Calcul des dimensions maximales du Robot...\n");
+    
+    _maxCelWidth = 0;
+    _maxCelHeight = 0;
+    
+    // Sauvegarder position actuelle
+    long savedPos = ftell(_f);
+    
+    // Scanner TOUTES les frames pour dimensions exactes
+    // (certains Robots ont des dimensions variables au cours de l'animation)
+    size_t framesToScan = _numFramesTotal;
+    int framesProcessed = 0;
+    
+    for (size_t frameIdx = 0; frameIdx < framesToScan && frameIdx < _recordPositions.size(); ++frameIdx) {
+        size_t framePos = _recordPositions[frameIdx] + _fileOffset;
+        if (!seekSet(framePos)) continue;
+        
+        // Lire données vidéo COMPLÈTES (incluant numCels dans les 2 premiers bytes)
+        size_t videoSize = (frameIdx < _videoSizes.size()) ? _videoSizes[frameIdx] : 0;
+        if (videoSize == 0 || videoSize > 1000000) continue;
+        
+        std::vector<uint8_t> rawVideo(videoSize);
+        if (fread(rawVideo.data(), 1, videoSize, _f) != videoSize) continue;
+        
+        // Lire numCels depuis le buffer
+        uint16_t numCels = SciHelpers::READ_SCI11ENDIAN_UINT16(rawVideo.data());
+        if (numCels <= 0 || numCels > 100) continue;
+        
+        // Parser chaque cel (commence après numCels à offset +2)
+        const uint8_t *p = rawVideo.data() + 2;
+        for (int c = 0; c < numCels; ++c) {
+            if ((size_t)(p - rawVideo.data()) + 22 > videoSize) break;
+            
+            // Lire dimensions et position du cel (format ScummVM)
+            uint16_t celWidth = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 2);
+            uint16_t celHeight = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 4);
+            uint16_t celX = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 10);
+            uint16_t celY = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 12);
+            uint16_t dataSize = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 14);
+            
+            // Calculer dimensions englobantes (comme ScummVM)
+            // Canvas doit contenir cel positionné à (celX, celY)
+            uint16_t requiredWidth = celX + celWidth;
+            uint16_t requiredHeight = celY + celHeight;
+            
+            if (requiredWidth > _maxCelWidth) _maxCelWidth = requiredWidth;
+            if (requiredHeight > _maxCelHeight) _maxCelHeight = requiredHeight;
+            
+            // Sauter au prochain cel
+            p += 22 + dataSize;
+        }
+        framesProcessed++;
+    }
+    
+    // Padder à multiple de 2 pour H.264
+    if (_maxCelWidth % 2 != 0) _maxCelWidth++;
+    if (_maxCelHeight % 2 != 0) _maxCelHeight++;
+    
+    std::fprintf(stderr, "✓ Dimensions maximales: %ux%u (analysé %d frames)\n", 
+                 _maxCelWidth, _maxCelHeight, framesProcessed);
+    
+    _maxDimensionsComputed = true;
+    
+    // Restaurer position
+    fseek(_f, savedPos, SEEK_SET);
+}
+
 uint32_t RbtParser::createCel5(const uint8_t *rawVideoData, const int16_t screenItemIndex, const char *outDir, size_t frameIndex) {
     const uint8_t verticalScale = rawVideoData[1];
     const uint16_t celWidth = SciHelpers::READ_SCI11ENDIAN_UINT16(rawVideoData + 2);
@@ -660,9 +744,37 @@ uint32_t RbtParser::createCel5(const uint8_t *rawVideoData, const int16_t screen
     // write PPM (RGB) avec palette
     char name[512];
     
+    // Déterminer les dimensions finales de l'image
+    int finalWidth, finalHeight;
+    int offsetX = 0, offsetY = 0;
+    
+    if (_useCanvasMode) {
+        // Mode canvas: dimensions fixes 630x450, Robot positionné selon coordonnées
+        finalWidth = _canvasWidth;
+        finalHeight = _canvasHeight;
+        offsetX = _canvasX + celX;  // Position absolue = coordonnées Robot + offset du cel
+        offsetY = _canvasY + celY;
+    } else {
+        // Mode crop serré: utiliser dimensions maximales du Robot pour cohérence
+        if (!_maxDimensionsComputed || _maxCelWidth == 0 || _maxCelHeight == 0) {
+            // Fallback: dimensions du cel si pas calculées
+            finalWidth = celWidth;
+            finalHeight = celHeight;
+            offsetX = 0;
+            offsetY = 0;
+        } else {
+            // Utiliser dimensions max et respecter offsets ScummVM (celX, celY)
+            finalWidth = _maxCelWidth;
+            finalHeight = _maxCelHeight;
+            // Utiliser les offsets du cel comme dans ScummVM
+            offsetX = celX;
+            offsetY = celY;
+        }
+    }
+    
     // IMPORTANT: Padder les dimensions à un multiple de 2 pour H.264/YUV420p
-    int paddedWidth = celWidth;
-    int paddedHeight = celHeight;
+    int paddedWidth = finalWidth;
+    int paddedHeight = finalHeight;
     if (paddedWidth % 2 != 0) paddedWidth++;
     if (paddedHeight % 2 != 0) paddedHeight++;
     
@@ -673,11 +785,18 @@ uint32_t RbtParser::createCel5(const uint8_t *rawVideoData, const int16_t screen
         
         for (int y = 0; y < paddedHeight; ++y) {
             for (int x = 0; x < paddedWidth; ++x) {
-                // Si on est dans la zone paddée, écrire du noir
-                if (x >= celWidth || y >= celHeight) {
+                // Calculer la position relative dans le cel
+                int celRelX = x - offsetX;
+                int celRelY = y - offsetY;
+                
+                // Vérifier si on est dans la zone du cel
+                bool inCel = (celRelX >= 0 && celRelX < celWidth && celRelY >= 0 && celRelY < celHeight);
+                
+                // Si on est dans la zone paddée ou hors du cel, écrire du noir
+                if (x >= finalWidth || y >= finalHeight || !inCel) {
                     img.put(0); img.put(0); img.put(0);
                 } else {
-                    size_t i = y * celWidth + x;
+                    size_t i = celRelY * celWidth + celRelX;
                     uint8_t idx = finalPixels[i];
                     size_t palOffset = idx * 3;
                     
@@ -698,10 +817,14 @@ uint32_t RbtParser::createCel5(const uint8_t *rawVideoData, const int16_t screen
         img << "P5\n" << paddedWidth << " " << paddedHeight << "\n255\n";
         for (int y = 0; y < paddedHeight; ++y) {
             for (int x = 0; x < paddedWidth; ++x) {
-                if (x >= celWidth || y >= celHeight) {
+                int celRelX = x - offsetX;
+                int celRelY = y - offsetY;
+                bool inCel = (celRelX >= 0 && celRelX < celWidth && celRelY >= 0 && celRelY < celHeight);
+                
+                if (x >= finalWidth || y >= finalHeight || !inCel) {
                     img.put(0);
                 } else {
-                    size_t i = y * celWidth + x;
+                    size_t i = celRelY * celWidth + celRelX;
                     img.put(finalPixels[i]);
                 }
             }
@@ -1073,46 +1196,20 @@ bool RbtParser::extractFramePixels(size_t frameIndex, std::vector<uint8_t>& outP
     uint16_t numCels = _bigEndian ? readUint16BE() : readUint16LE();
     if (numCels == 0 || numCels > 10) return false;
     
-    // Pour Robot, résolution dépend des cels eux-mêmes
-    // On scanne tous les cels pour trouver les dimensions maximales
-    // IMPORTANT: On part de 0x0 puis on prend le MAX avec 630x450 (résolution Phantasmagoria)
-    int minWidth = 0;   
-    int minHeight = 0;
-    
-    // Lire les données brutes de la frame pour trouver les dimensions réelles
-    if (frameIndex < _videoSizes.size()) {
-        std::vector<uint8_t> tempData(_videoSizes[frameIndex]);
-        seekSet(startPos);
-        if (fread(tempData.data(), 1, _videoSizes[frameIndex], _f) == _videoSizes[frameIndex]) {
-            const uint8_t *tp = tempData.data() + 2;  // Skip numCels
-            for (uint16_t c = 0; c < numCels; ++c) {
-                if ((size_t)(tp - tempData.data()) + 22 > tempData.size()) break;
-                
-                uint16_t cw = SciHelpers::READ_SCI11ENDIAN_UINT16(tp + 2);
-                uint16_t ch = SciHelpers::READ_SCI11ENDIAN_UINT16(tp + 4);
-                uint16_t cx = SciHelpers::READ_SCI11ENDIAN_UINT16(tp + 10);
-                uint16_t cy = SciHelpers::READ_SCI11ENDIAN_UINT16(tp + 12);
-                uint16_t dsz = SciHelpers::READ_SCI11ENDIAN_UINT16(tp + 14);
-                
-                int maxX = cx + cw;
-                int maxY = cy + ch;
-                if (maxX > minWidth) minWidth = maxX;
-                if (maxY > minHeight) minHeight = maxY;
-                
-                tp += 22 + dsz;
-            }
-        }
+    // Utiliser les dimensions maximales si déjà calculées, sinon utiliser canvas Phantasmagoria
+    if (_maxDimensionsComputed && _maxCelWidth > 0 && _maxCelHeight > 0) {
+        // Mode crop cohérent: utiliser dimensions max précalculées
+        outWidth = _maxCelWidth;
+        outHeight = _maxCelHeight;
+    } else if (_useCanvasMode) {
+        // Mode canvas: utiliser dimensions du canvas
+        outWidth = _canvasWidth;
+        outHeight = _canvasHeight;
+    } else {
+        // Fallback: résolution Phantasmagoria par défaut
+        outWidth = 630;
+        outHeight = 450;
     }
-    
-    // S'assurer d'avoir au minimum 630x450 (résolution Phantasmagoria selon ScummVM)
-    // Cela garantit que le canvas est assez grand pour le positionnement correct
-    outWidth = (minWidth > 630) ? minWidth : 630;
-    outHeight = (minHeight > 450) ? minHeight : 450;
-    
-    // IMPORTANT: Arrondir les dimensions à un multiple de 2 pour H.264/YUV420p
-    // (H.264 préfère même des multiples de 16, mais 2 est le minimum strict)
-    if (outWidth % 2 != 0) outWidth++;
-    if (outHeight % 2 != 0) outHeight++;
     
     // Vérifier que l'allocation mémoire est raisonnable (éviter les valeurs aberrantes)
     const size_t pixelCount = (size_t)outWidth * (size_t)outHeight;
