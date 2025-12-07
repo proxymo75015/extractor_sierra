@@ -1,0 +1,9 @@
+/workspaces/extractor_sierra/build_windows/CMakeFiles/robot_extractor.dir
+/workspaces/extractor_sierra/build_windows/CMakeFiles/export_robot_mkv.dir
+/workspaces/extractor_sierra/build_windows/CMakeFiles/extract_coordinates.dir
+/workspaces/extractor_sierra/build_windows/CMakeFiles/edit_cache.dir
+/workspaces/extractor_sierra/build_windows/CMakeFiles/rebuild_cache.dir
+/workspaces/extractor_sierra/build_windows/CMakeFiles/list_install_components.dir
+/workspaces/extractor_sierra/build_windows/CMakeFiles/install.dir
+/workspaces/extractor_sierra/build_windows/CMakeFiles/install/local.dir
+/workspaces/extractor_sierra/build_windows/CMakeFiles/install/strip.dir

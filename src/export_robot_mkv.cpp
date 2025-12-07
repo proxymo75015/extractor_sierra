@@ -24,6 +24,7 @@
  */
 
 #include "core/rbt_parser.h"
+#include "core/ressci_parser.h"
 #include "core/scummvm_robot_helpers.h"
 #include "formats/robot_mkv_exporter.h"
 #include "utils/sci_util.h"
@@ -39,6 +40,100 @@
 
 using namespace RobotExtractor;
 using namespace ScummVMRobot;
+
+// Fonction pour charger tous les volumes RESSCI disponibles
+std::vector<RobotPosition> loadRobotPositionsFromRESSCI(const std::string& resourceDir, const std::string& outputDir) {
+    std::vector<RobotPosition> allPositions;
+    
+    if (resourceDir.empty()) {
+        return allPositions;
+    }
+    
+    fprintf(stderr, "Scanning RESSCI files in: %s\n", resourceDir.c_str());
+    
+    SCI::RESSCIParser parser;
+    
+    // Charger TOUS les RESMAP disponibles (001-009)
+    int resmapsLoaded = 0;
+    for (int vol = 1; vol <= 9; vol++) {
+        char volStr[4];
+        snprintf(volStr, sizeof(volStr), "%03d", vol);
+        std::string resmapPath = resourceDir + "/RESMAP." + std::string(volStr);
+        
+        FILE* testResmap = fopen(resmapPath.c_str(), "rb");
+        if (testResmap) {
+            fclose(testResmap);
+            fprintf(stderr, "  Loading RESMAP.%s: %s\n", volStr, resmapPath.c_str());
+            if (parser.loadResMap(resmapPath)) {
+                resmapsLoaded++;
+            } else {
+                fprintf(stderr, "  Warning: Failed to load RESMAP.%s\n", volStr);
+            }
+        }
+    }
+    
+    if (resmapsLoaded == 0) {
+        fprintf(stderr, "  Warning: No RESMAP files found\n");
+        return allPositions;
+    }
+    
+    fprintf(stderr, "  Loaded %d RESMAP file(s)\n", resmapsLoaded);
+    
+    int volumesLoaded = 0;
+    
+    // Essayer de charger les volumes RESSCI 1-9 (couvre CD1-CD7 + extras)
+    for (int vol = 1; vol <= 9; vol++) {
+        std::string ressciPath = resourceDir + "/RESSCI.00" + std::to_string(vol);
+        
+        // Vérifier si le fichier existe
+        FILE* test = fopen(ressciPath.c_str(), "rb");
+        if (!test) {
+            // Essayer le format RESSCI.001, RESSCI.002, etc.
+            char volStr[4];
+            snprintf(volStr, sizeof(volStr), "%03d", vol);
+            ressciPath = resourceDir + "/RESSCI." + std::string(volStr);
+            test = fopen(ressciPath.c_str(), "rb");
+            if (!test) {
+                continue;
+            }
+        }
+        fclose(test);
+        
+        fprintf(stderr, "  Loading volume %d: %s\n", vol, ressciPath.c_str());
+        if (parser.loadRessci(ressciPath, vol)) {
+            volumesLoaded++;
+        }
+    }
+    
+    if (volumesLoaded == 0) {
+        fprintf(stderr, "  No RESSCI files found\n");
+        return allPositions;
+    }
+    
+    fprintf(stderr, "  Loaded %d RESSCI volume(s)\n", volumesLoaded);
+    
+    // Exporter la liste de toutes les ressources dans output/resources_list.txt
+    std::string resourcesListPath = outputDir + "/resources_list.txt";
+    fprintf(stderr, "  Exporting resources list to: %s\n", resourcesListPath.c_str());
+    if (!parser.exportResourcesList(resourcesListPath)) {
+        fprintf(stderr, "  Warning: Failed to export resources list\n");
+    }
+    
+    // Extraire toutes les coordonnées Robot
+    fprintf(stderr, "  Extracting Robot coordinates...\n");
+    std::vector<SCI::RobotCoordinates> sciCoords = parser.extractRobotCoordinates();
+    
+    // Convertir vers le format ScummVMRobot::RobotPosition
+    for (const auto& coord : sciCoords) {
+        allPositions.push_back(RobotPosition(coord.robotId, coord.x, coord.y));
+    }
+    
+    if (!allPositions.empty()) {
+        fprintf(stderr, "  Found %zu Robot position(s)\n", allPositions.size());
+    }
+    
+    return allPositions;
+}
 
 // Fonction pour lister tous les fichiers .RBT dans un répertoire
 std::vector<std::string> findRbtFiles(const std::string& directory) {
@@ -523,9 +618,33 @@ int main(int argc, char* argv[]) {
     }
     fprintf(stderr, "FFmpeg found!\n");
     
-    // Charger les positions des robots
+    // Charger les positions des robots depuis RESSCI ou fichier cache
     fprintf(stderr, "\nLoading robot positions...\n");
-    std::vector<RobotPosition> robotPositions = loadRobotPositions();
+    std::vector<RobotPosition> robotPositions;
+    
+    // Essayer de charger depuis Resource/ ou Resource (plusieurs emplacements possibles)
+    std::vector<std::string> resourceDirs = {"Resource", "Resource/", "resource", "RESOURCE"};
+    bool foundRESSCI = false;
+    
+    for (const auto& resDir : resourceDirs) {
+        DIR* dir = opendir(resDir.c_str());
+        if (dir) {
+            closedir(dir);
+            robotPositions = loadRobotPositionsFromRESSCI(resDir, "output");
+            if (!robotPositions.empty()) {
+                foundRESSCI = true;
+                break;
+            }
+        }
+    }
+    
+    // Si aucun fichier RESSCI trouvé, essayer le fichier cache
+    if (!foundRESSCI || robotPositions.empty()) {
+        fprintf(stderr, "No Resource/ directory found, trying cache file...\n");
+        robotPositions = loadRobotPositions("robot_positions_extracted.txt");
+    }
+    
+    fprintf(stderr, "Total robot positions loaded: %zu\n", robotPositions.size());
     fprintf(stderr, "\n");
     
     // Chercher le répertoire RBT (essayer RBT/ puis RBT_test/)

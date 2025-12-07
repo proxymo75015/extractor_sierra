@@ -541,6 +541,78 @@ std::vector<RobotCoordinates> RESSCIParser::extractRobotCoordinates() {
     return allCoords;
 }
 
+bool RESSCIParser::exportResourcesList(const std::string& outputPath) {
+    std::ofstream file(outputPath);
+    if (!file) {
+        std::cerr << "Erreur: impossible de créer " << outputPath << std::endl;
+        return false;
+    }
+    
+    // En-tête
+    file << "=================================================================\n";
+    file << "LISTE DES RESSOURCES SIERRA SCI - RESMAP/RESSCI\n";
+    file << "=================================================================\n";
+    file << "Total ressources indexées: " << m_resourceIndex.size() << "\n";
+    file << "Volumes RESSCI chargés: " << m_ressciData.size() << "\n";
+    file << "=================================================================\n\n";
+    
+    // Compter par type
+    std::map<ResourceType, int> countByType;
+    for (const auto& entry : m_resourceIndex) {
+        countByType[entry.first.first]++;
+    }
+    
+    // Résumé par type
+    file << "RÉSUMÉ PAR TYPE DE RESSOURCE:\n";
+    file << "-----------------------------------------------------------------\n";
+    for (const auto& count : countByType) {
+        file << getResourceTypeName(count.first) 
+             << " (0x" << std::hex << (int)count.first << std::dec << "): "
+             << count.second << " ressource(s)\n";
+    }
+    file << "\n=================================================================\n\n";
+    
+    // Liste détaillée par type
+    ResourceType currentType = RT_INVALID;
+    for (const auto& entry : m_resourceIndex) {
+        ResourceType type = entry.first.first;
+        uint32_t number = entry.first.second;
+        uint32_t offset = entry.second;
+        
+        // Nouvelle section de type
+        if (type != currentType) {
+            currentType = type;
+            file << "\n-----------------------------------------------------------------\n";
+            file << getResourceTypeName(type) << " (0x" << std::hex << (int)type << std::dec << ")\n";
+            file << "-----------------------------------------------------------------\n";
+        }
+        
+        // Trouver le volume
+        uint8_t volume = 0;
+        auto volIt = m_resourceVolumes.find(entry.first);
+        if (volIt != m_resourceVolumes.end()) {
+            volume = volIt->second;
+        }
+        
+        file << "  " << number 
+             << " -> Offset: " << offset 
+             << " (0x" << std::hex << offset << std::dec << ")";
+        
+        if (volume > 0) {
+            file << ", Volume: " << (int)volume;
+        }
+        
+        file << "\n";
+    }
+    
+    file << "\n=================================================================\n";
+    file << "FIN DE LA LISTE\n";
+    file << "=================================================================\n";
+    
+    std::cout << "Liste des ressources exportée: " << outputPath << std::endl;
+    return true;
+}
+
 std::vector<RobotCoordinates> RESSCIParser::parseScriptForRobotCalls(
     const std::vector<uint8_t>& scriptData,
     uint32_t scriptId)

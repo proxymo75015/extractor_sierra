@@ -1,0 +1,1547 @@
+Microsoft Windows [version 10.0.26200.7309]
+(c) Microsoft Corporation. Tous droits réservés.
+
+C:\Windows\System32>cd..
+
+C:\Windows>cd..
+
+C:\>cd iso_cd
+
+C:\iso_CD>run
+================================================================================
+  EXTRACTOR SIERRA - Extraction Batch
+================================================================================
+
+Verification FFmpeg...
+OK FFmpeg trouve
+
+Lancement extraction...
+
+
+=== Robot Video Batch Export ===
+Version: 2.5.0 (2024-12-04) - ScummVM Canvas Auto-Detect
+Codec: h264
+Canvas: Auto-detect (standard game resolutions)
+
+
+Checking FFmpeg availability...
+FFmpeg found!
+
+Loading robot positions...
+Scanning RESSCI files in: Resource
+  Loading RESMAP.001: Resource/RESMAP.001
+RESMAP charg├®: 11524 octets
+  [D├®tection] 6 octets: 100/100 valides, 9 octets: 0/100 valides
+Ô£ô Format d├®tect├®: 6 octets (SCI1.1/variante)
+  Nombre d'entr├®es: 1920
+  Types de ressources trouv├®s: 22
+    Script (0x80): 5 ressources
+    Sound (0x81): 4 ressources
+    Memory (0x82): 11 ressources
+    Text (0x83): 7 ressources
+    Font (0x84): 6 ressources
+    Cursor (0x85): 5 ressources
+    Vocab (0x86): 6 ressources
+    Pic (0x87): 8 ressources
+    View (0x88): 3 ressources
+    Patch (0x89): 6 ressources
+    Bitmap (0x8a): 6 ressources
+    Palette (0x8b): 3 ressources
+    Unknown (0x8c): 8 ressources
+    Audio (0x8d): 11 ressources
+    Sync (0x8e): 7 ressources
+    Message (0x8f): 9 ressources
+    Map (0x90): 9 ressources
+    Heap (0x91): 3 ressources
+    Audio36 (0x92): 6 ressources
+    Sync36 (0x93): 10 ressources
+    Chunk (0x94): 9 ressources
+    AudioMap (0x95): 9 ressources
+  Total ressources index├®es: 151
+  Loading RESMAP.002: Resource/RESMAP.002
+RESMAP charg├®: 12064 octets
+  [D├®tection] 6 octets: 100/100 valides, 9 octets: 0/100 valides
+Ô£ô Format d├®tect├®: 6 octets (SCI1.1/variante)
+  Nombre d'entr├®es: 2010
+  Types de ressources trouv├®s: 22
+    Script (0x80): 6 ressources
+    Sound (0x81): 3 ressources
+    Memory (0x82): 9 ressources
+    Text (0x83): 7 ressources
+    Font (0x84): 13 ressources
+    Cursor (0x85): 6 ressources
+    Vocab (0x86): 7 ressources
+    Pic (0x87): 9 ressources
+    View (0x88): 4 ressources
+    Patch (0x89): 8 ressources
+    Bitmap (0x8a): 7 ressources
+    Palette (0x8b): 10 ressources
+    Unknown (0x8c): 12 ressources
+    Audio (0x8d): 11 ressources
+    Sync (0x8e): 5 ressources
+    Message (0x8f): 9 ressources
+    Map (0x90): 10 ressources
+    Heap (0x91): 2 ressources
+    Audio36 (0x92): 8 ressources
+    Sync36 (0x93): 11 ressources
+    Chunk (0x94): 14 ressources
+    AudioMap (0x95): 13 ressources
+  Total ressources index├®es: 235
+  Loading RESMAP.003: Resource/RESMAP.003
+RESMAP charg├®: 12340 octets
+  [D├®tection] 6 octets: 100/100 valides, 9 octets: 0/100 valides
+Ô£ô Format d├®tect├®: 6 octets (SCI1.1/variante)
+  Nombre d'entr├®es: 2056
+  Types de ressources trouv├®s: 22
+    Script (0x80): 4 ressources
+    Sound (0x81): 3 ressources
+    Memory (0x82): 11 ressources
+    Text (0x83): 3 ressources
+    Font (0x84): 8 ressources
+    Cursor (0x85): 5 ressources
+    Vocab (0x86): 4 ressources
+    Pic (0x87): 9 ressources
+    View (0x88): 6 ressources
+    Patch (0x89): 7 ressources
+    Bitmap (0x8a): 8 ressources
+    Palette (0x8b): 4 ressources
+    Unknown (0x8c): 11 ressources
+    Audio (0x8d): 13 ressources
+    Sync (0x8e): 9 ressources
+    Message (0x8f): 9 ressources
+    Map (0x90): 11 ressources
+    Heap (0x91): 4 ressources
+    Audio36 (0x92): 8 ressources
+    Sync36 (0x93): 11 ressources
+    Chunk (0x94): 9 ressources
+    AudioMap (0x95): 13 ressources
+  Total ressources index├®es: 299
+  Loading RESMAP.004: Resource/RESMAP.004
+RESMAP charg├®: 12562 octets
+  [D├®tection] 6 octets: 100/100 valides, 9 octets: 0/100 valides
+Ô£ô Format d├®tect├®: 6 octets (SCI1.1/variante)
+  Nombre d'entr├®es: 2093
+  Types de ressources trouv├®s: 22
+    Script (0x80): 5 ressources
+    Sound (0x81): 3 ressources
+    Memory (0x82): 9 ressources
+    Text (0x83): 7 ressources
+    Font (0x84): 7 ressources
+    Cursor (0x85): 6 ressources
+    Vocab (0x86): 8 ressources
+    Pic (0x87): 8 ressources
+    View (0x88): 5 ressources
+    Patch (0x89): 7 ressources
+    Bitmap (0x8a): 9 ressources
+    Palette (0x8b): 7 ressources
+    Unknown (0x8c): 9 ressources
+    Audio (0x8d): 17 ressources
+    Sync (0x8e): 10 ressources
+    Message (0x8f): 12 ressources
+    Map (0x90): 13 ressources
+    Heap (0x91): 3 ressources
+    Audio36 (0x92): 10 ressources
+    Sync36 (0x93): 15 ressources
+    Chunk (0x94): 11 ressources
+    AudioMap (0x95): 14 ressources
+  Total ressources index├®es: 394
+  Loading RESMAP.005: Resource/RESMAP.005
+RESMAP charg├®: 12616 octets
+  [D├®tection] 6 octets: 100/100 valides, 9 octets: 0/100 valides
+Ô£ô Format d├®tect├®: 6 octets (SCI1.1/variante)
+  Nombre d'entr├®es: 2102
+  Types de ressources trouv├®s: 22
+    Script (0x80): 11 ressources
+    Sound (0x81): 7 ressources
+    Memory (0x82): 11 ressources
+    Text (0x83): 6 ressources
+    Font (0x84): 8 ressources
+    Cursor (0x85): 7 ressources
+    Vocab (0x86): 8 ressources
+    Pic (0x87): 11 ressources
+    View (0x88): 7 ressources
+    Patch (0x89): 8 ressources
+    Bitmap (0x8a): 9 ressources
+    Palette (0x8b): 11 ressources
+    Unknown (0x8c): 12 ressources
+    Audio (0x8d): 16 ressources
+    Sync (0x8e): 7 ressources
+    Message (0x8f): 9 ressources
+    Map (0x90): 9 ressources
+    Heap (0x91): 5 ressources
+    Audio36 (0x92): 9 ressources
+    Sync36 (0x93): 10 ressources
+    Chunk (0x94): 14 ressources
+    AudioMap (0x95): 13 ressources
+  Total ressources index├®es: 502
+  Loading RESMAP.006: Resource/RESMAP.006
+RESMAP charg├®: 12538 octets
+  [D├®tection] 6 octets: 100/100 valides, 9 octets: 0/100 valides
+Ô£ô Format d├®tect├®: 6 octets (SCI1.1/variante)
+  Nombre d'entr├®es: 2089
+  Types de ressources trouv├®s: 22
+    Script (0x80): 6 ressources
+    Sound (0x81): 6 ressources
+    Memory (0x82): 10 ressources
+    Text (0x83): 2 ressources
+    Font (0x84): 11 ressources
+    Cursor (0x85): 6 ressources
+    Vocab (0x86): 4 ressources
+    Pic (0x87): 14 ressources
+    View (0x88): 6 ressources
+    Patch (0x89): 11 ressources
+    Bitmap (0x8a): 7 ressources
+    Palette (0x8b): 5 ressources
+    Unknown (0x8c): 11 ressources
+    Audio (0x8d): 13 ressources
+    Sync (0x8e): 5 ressources
+    Message (0x8f): 11 ressources
+    Map (0x90): 13 ressources
+    Heap (0x91): 5 ressources
+    Audio36 (0x92): 11 ressources
+    Sync36 (0x93): 10 ressources
+    Chunk (0x94): 9 ressources
+    AudioMap (0x95): 14 ressources
+  Total ressources index├®es: 592
+  Loading RESMAP.007: Resource/RESMAP.007
+RESMAP charg├®: 7984 octets
+  [D├®tection] 6 octets: 100/100 valides, 9 octets: 0/100 valides
+Ô£ô Format d├®tect├®: 6 octets (SCI1.1/variante)
+  Nombre d'entr├®es: 1330
+  Types de ressources trouv├®s: 22
+    Script (0x80): 4 ressources
+    Sound (0x81): 2 ressources
+    Memory (0x82): 9 ressources
+    Text (0x83): 1 ressources
+    Font (0x84): 6 ressources
+    Cursor (0x85): 4 ressources
+    Vocab (0x86): 4 ressources
+    Pic (0x87): 4 ressources
+    View (0x88): 3 ressources
+    Patch (0x89): 4 ressources
+    Bitmap (0x8a): 8 ressources
+    Palette (0x8b): 4 ressources
+    Unknown (0x8c): 9 ressources
+    Audio (0x8d): 12 ressources
+    Sync (0x8e): 3 ressources
+    Message (0x8f): 6 ressources
+    Map (0x90): 7 ressources
+    Heap (0x91): 2 ressources
+    Audio36 (0x92): 5 ressources
+    Sync36 (0x93): 9 ressources
+    Chunk (0x94): 8 ressources
+    AudioMap (0x95): 8 ressources
+  Total ressources index├®es: 617
+  Loaded 7 RESMAP file(s)
+  Loading volume 1: Resource/RESSCI.001
+RESSCI volume 1 charg├®: 69963685 octets
+  Loading volume 2: Resource/RESSCI.002
+RESSCI volume 2 charg├®: 74556497 octets
+  Loading volume 3: Resource/RESSCI.003
+RESSCI volume 3 charg├®: 76612091 octets
+  Loading volume 4: Resource/RESSCI.004
+RESSCI volume 4 charg├®: 78757484 octets
+  Loading volume 5: Resource/RESSCI.005
+RESSCI volume 5 charg├®: 81160893 octets
+  Loading volume 6: Resource/RESSCI.006
+RESSCI volume 6 charg├®: 81076474 octets
+  Loading volume 7: Resource/RESSCI.007
+RESSCI volume 7 charg├®: 26251564 octets
+  Loaded 7 RESSCI volume(s)
+  Exporting resources list to: output/resources_list.txt
+Erreur: impossible de cr├®er output/resources_list.txt
+  Warning: Failed to export resources list
+  Extracting Robot coordinates...
+Donn├®es trop grandes: offset=435727 size=206905480 total=69963685
+M├®thode de compression non support├®e: 0x28
+Donn├®es trop grandes: offset=1294 size=2064655597 total=69963685
+M├®thode de compression non support├®e: 0x11
+Donn├®es trop grandes: offset=3865616 size=449939599 total=69963685
+M├®thode de compression non support├®e: 0xca
+Donn├®es trop grandes: offset=591375 size=3626599881 total=69963685
+M├®thode de compression non support├®e: 0x57
+Donn├®es trop grandes: offset=3353618 size=3830234212 total=69963685
+M├®thode de compression non support├®e: 0xc8
+Donn├®es trop grandes: offset=2327058 size=1360133652 total=69963685
+M├®thode de compression non support├®e: 0x56
+Donn├®es trop grandes: offset=591375 size=3626599881 total=69963685
+M├®thode de compression non support├®e: 0x57
+Donn├®es trop grandes: offset=143375 size=2853393799 total=69963685
+M├®thode de compression non support├®e: 0x91
+Donn├®es trop grandes: offset=2319378 size=1482589369 total=69963685
+M├®thode de compression non support├®e: 0x2
+Donn├®es trop grandes: offset=8776977 size=1491784740 total=69963685
+M├®thode de compression non support├®e: 0x1d
+Donn├®es trop grandes: offset=1306127 size=1547193798 total=69963685
+M├®thode de compression non support├®e: 0x35
+Donn├®es trop grandes: offset=7273233 size=3420523907 total=69963685
+M├®thode de compression non support├®e: 0x1c
+Donn├®es trop grandes: offset=1356815 size=1704792308 total=69963685
+M├®thode de compression non support├®e: 0xc4
+Donn├®es trop grandes: offset=650256 size=375352243 total=69963685
+M├®thode de compression non support├®e: 0x8e
+Donn├®es trop grandes: offset=232975 size=3653849193 total=69963685
+M├®thode de compression non support├®e: 0x93
+Donn├®es trop grandes: offset=811792 size=2231321848 total=69963685
+M├®thode de compression non support├®e: 0x35
+Donn├®es trop grandes: offset=2608655 size=1730812257 total=69963685
+M├®thode de compression non support├®e: 0xb
+Donn├®es trop grandes: offset=16616206 size=1602550597 total=69963685
+Donn├®es trop grandes: offset=11763218 size=382083184 total=69963685
+M├®thode de compression non support├®e: 0xed
+Donn├®es trop grandes: offset=4633614 size=263500684 total=69963685
+M├®thode de compression non support├®e: 0x30
+Donn├®es trop grandes: offset=2309905 size=164585252 total=69963685
+M├®thode de compression non support├®e: 0x1f
+Donn├®es trop grandes: offset=2316049 size=3782873574 total=69963685
+M├®thode de compression non support├®e: 0xae
+Donn├®es trop grandes: offset=3969295 size=459346193 total=69963685
+M├®thode de compression non support├®e: 0x3a
+
+Analyse de 1 scripts pour coordonn├®es Robot...
+Donn├®es trop grandes: offset=3609616 size=917395827 total=69963685
+M├®thode de compression non support├®e: 0xb3
+Donn├®es trop grandes: offset=3968272 size=1163415172 total=69963685
+M├®thode de compression non support├®e: 0x44
+Donn├®es trop grandes: offset=4662032 size=1332138652 total=69963685
+M├®thode de compression non support├®e: 0xc3
+Donn├®es trop grandes: offset=6292497 size=187118596 total=69963685
+M├®thode de compression non support├®e: 0x6b
+Donn├®es trop grandes: offset=2319890 size=572303908 total=69963685
+M├®thode de compression non support├®e: 0x22
+Donn├®es trop grandes: offset=5173776 size=243424384 total=69963685
+M├®thode de compression non support├®e: 0x99
+Donn├®es trop grandes: offset=954895 size=4044409711 total=69963685
+M├®thode de compression non support├®e: 0xcf
+Donn├®es trop grandes: offset=4891408 size=1254296708 total=69963685
+M├®thode de compression non support├®e: 0xb9
+Donn├®es trop grandes: offset=2483727 size=1469542460 total=69963685
+M├®thode de compression non support├®e: 0x2c
+Donn├®es trop grandes: offset=8759058 size=3968038694 total=69963685
+M├®thode de compression non support├®e: 0xa4
+Donn├®es trop grandes: offset=8281617 size=3331867395 total=69963685
+M├®thode de compression non support├®e: 0x19
+Donn├®es trop grandes: offset=2476049 size=597384984 total=69963685
+M├®thode de compression non support├®e: 0x35
+Donn├®es trop grandes: offset=2743055 size=560779777 total=69963685
+M├®thode de compression non support├®e: 0x17
+Donn├®es trop grandes: offset=7683854 size=355460312 total=69963685
+M├®thode de compression non support├®e: 0x3e
+Donn├®es trop grandes: offset=179471 size=796454911 total=69963685
+M├®thode de compression non support├®e: 0xc2
+Donn├®es trop grandes: offset=2309649 size=3849014291 total=69963685
+M├®thode de compression non support├®e: 0x9f
+Donn├®es trop grandes: offset=6233616 size=2786156822 total=69963685
+M├®thode de compression non support├®e: 0x26
+Analyse de 1 HEAPs pour coordonn├®es Robot...
+  Found 78305 Robot position(s)
+Total robot positions loaded: 78305
+
+Scanning RBT/...
+
+Found 958 RBT file(s):
+  - RBT/1000.RBT
+  - RBT/1011.RBT
+  - RBT/10120.RBT
+  - RBT/1014.RBT
+  - RBT/1015.RBT
+  - RBT/1021.RBT
+  - RBT/1030.RBT
+  - RBT/1040.RBT
+  - RBT/1041.RBT
+  - RBT/1061.RBT
+  - RBT/1080.RBT
+  - RBT/1084.RBT
+  - RBT/1091.RBT
+  - RBT/1101.RBT
+  - RBT/1110.RBT
+  - RBT/1111.RBT
+  - RBT/1120.RBT
+  - RBT/1121.RBT
+  - RBT/1130.RBT
+  - RBT/1140.RBT
+  - RBT/1150.RBT
+  - RBT/1160.RBT
+  - RBT/1170.RBT
+  - RBT/1171.RBT
+  - RBT/1180.RBT
+  - RBT/1181.RBT
+  - RBT/1182.RBT
+  - RBT/1183.RBT
+  - RBT/1190.RBT
+  - RBT/1191.RBT
+  - RBT/1221.RBT
+  - RBT/12400.RBT
+  - RBT/12401.RBT
+  - RBT/1260.RBT
+  - RBT/1261.RBT
+  - RBT/1262.RBT
+  - RBT/1282.RBT
+  - RBT/1283.RBT
+  - RBT/1292.RBT
+  - RBT/12922.RBT
+  - RBT/1293.RBT
+  - RBT/12932.RBT
+  - RBT/1294.RBT
+  - RBT/12942.RBT
+  - RBT/1295.RBT
+  - RBT/12952.RBT
+  - RBT/1296.RBT
+  - RBT/12962.RBT
+  - RBT/1297.RBT
+  - RBT/1305.RBT
+  - RBT/1311.RBT
+  - RBT/1380.RBT
+  - RBT/1400.RBT
+  - RBT/1420.RBT
+  - RBT/1430.RBT
+  - RBT/1450.RBT
+  - RBT/1460.RBT
+  - RBT/1470.RBT
+  - RBT/1480.RBT
+  - RBT/1530.RBT
+  - RBT/1551.RBT
+  - RBT/1561.RBT
+  - RBT/1570.RBT
+  - RBT/1571.RBT
+  - RBT/1601.RBT
+  - RBT/1602.RBT
+  - RBT/1603.RBT
+  - RBT/1605.RBT
+  - RBT/161.RBT
+  - RBT/1610.RBT
+  - RBT/162.RBT
+  - RBT/1621.RBT
+  - RBT/1630.RBT
+  - RBT/1631.RBT
+  - RBT/1632.RBT
+  - RBT/1640.RBT
+  - RBT/1670.RBT
+  - RBT/1690.RBT
+  - RBT/170.RBT
+  - RBT/1700.RBT
+  - RBT/1710.RBT
+  - RBT/1720.RBT
+  - RBT/1721.RBT
+  - RBT/1730.RBT
+  - RBT/1731.RBT
+  - RBT/1740.RBT
+  - RBT/1760.RBT
+  - RBT/1761.RBT
+  - RBT/1769.RBT
+  - RBT/1770.RBT
+  - RBT/1780.RBT
+  - RBT/1781.RBT
+  - RBT/1790.RBT
+  - RBT/1791.RBT
+  - RBT/1798.RBT
+  - RBT/1799.RBT
+  - RBT/1802.RBT
+  - RBT/1803.RBT
+  - RBT/1804.RBT
+  - RBT/1808.RBT
+  - RBT/1809.RBT
+  - RBT/1810.RBT
+  - RBT/1820.RBT
+  - RBT/1821.RBT
+  - RBT/1840.RBT
+  - RBT/1861.RBT
+  - RBT/1870.RBT
+  - RBT/1880.RBT
+  - RBT/1890.RBT
+  - RBT/1900.RBT
+  - RBT/1901.RBT
+  - RBT/1902.RBT
+  - RBT/1910.RBT
+  - RBT/1930.RBT
+  - RBT/1931.RBT
+  - RBT/1940.RBT
+  - RBT/1960.RBT
+  - RBT/1970.RBT
+  - RBT/1980.RBT
+  - RBT/2000.RBT
+  - RBT/2001.RBT
+  - RBT/2002.RBT
+  - RBT/2020.RBT
+  - RBT/2021.RBT
+  - RBT/2022.RBT
+  - RBT/2023.RBT
+  - RBT/2029.RBT
+  - RBT/2030.RBT
+  - RBT/2040.RBT
+  - RBT/2041.RBT
+  - RBT/2051.RBT
+  - RBT/2070.RBT
+  - RBT/2071.RBT
+  - RBT/2072.RBT
+  - RBT/2080.RBT
+  - RBT/2090.RBT
+  - RBT/2110.RBT
+  - RBT/212.RBT
+  - RBT/213.RBT
+  - RBT/2130.RBT
+  - RBT/2131.RBT
+  - RBT/2132.RBT
+  - RBT/2152.RBT
+  - RBT/2154.RBT
+  - RBT/2155.RBT
+  - RBT/2157.RBT
+  - RBT/2160.RBT
+  - RBT/2161.RBT
+  - RBT/2179.RBT
+  - RBT/2190.RBT
+  - RBT/2193.RBT
+  - RBT/220.RBT
+  - RBT/222.RBT
+  - RBT/2220.RBT
+  - RBT/2230.RBT
+  - RBT/2240.RBT
+  - RBT/2241.RBT
+  - RBT/2242.RBT
+  - RBT/230.RBT
+  - RBT/2310.RBT
+  - RBT/2360.RBT
+  - RBT/2361.RBT
+  - RBT/2362.RBT
+  - RBT/2370.RBT
+  - RBT/2390.RBT
+  - RBT/240.RBT
+  - RBT/2401.RBT
+  - RBT/2410.RBT
+  - RBT/2430.RBT
+  - RBT/2431.RBT
+  - RBT/2440.RBT
+  - RBT/2441.RBT
+  - RBT/2442.RBT
+  - RBT/2480.RBT
+  - RBT/2510.RBT
+  - RBT/2520.RBT
+  - RBT/2521.RBT
+  - RBT/2522.RBT
+  - RBT/2530.RBT
+  - RBT/2570.RBT
+  - RBT/2571.RBT
+  - RBT/2572.RBT
+  - RBT/2573.RBT
+  - RBT/2574.RBT
+  - RBT/2575.RBT
+  - RBT/2580.RBT
+  - RBT/2581.RBT
+  - RBT/2591.RBT
+  - RBT/260.RBT
+  - RBT/2620.RBT
+  - RBT/2630.RBT
+  - RBT/2640.RBT
+  - RBT/2650.RBT
+  - RBT/270.RBT
+  - RBT/2700.RBT
+  - RBT/2701.RBT
+  - RBT/271.RBT
+  - RBT/2710.RBT
+  - RBT/2720.RBT
+  - RBT/2730.RBT
+  - RBT/2760.RBT
+  - RBT/2770.RBT
+  - RBT/2771.RBT
+  - RBT/2780.RBT
+  - RBT/2791.RBT
+  - RBT/2792.RBT
+  - RBT/2793.RBT
+  - RBT/2799.RBT
+  - RBT/2800.RBT
+  - RBT/2810.RBT
+  - RBT/2812.RBT
+  - RBT/2820.RBT
+  - RBT/2821.RBT
+  - RBT/2822.RBT
+  - RBT/2840.RBT
+  - RBT/2841.RBT
+  - RBT/2842.RBT
+  - RBT/2843.RBT
+  - RBT/2844.RBT
+  - RBT/2845.RBT
+  - RBT/2846.RBT
+  - RBT/2847.RBT
+  - RBT/2848.RBT
+  - RBT/2849.RBT
+  - RBT/2850.RBT
+  - RBT/2857.RBT
+  - RBT/2858.RBT
+  - RBT/2859.RBT
+  - RBT/2861.RBT
+  - RBT/2862.RBT
+  - RBT/2870.RBT
+  - RBT/2871.RBT
+  - RBT/2880.RBT
+  - RBT/2881.RBT
+  - RBT/2882.RBT
+  - RBT/2885.RBT
+  - RBT/2890.RBT
+  - RBT/2891.RBT
+  - RBT/2892.RBT
+  - RBT/2893.RBT
+  - RBT/2901.RBT
+  - RBT/2902.RBT
+  - RBT/2903.RBT
+  - RBT/2904.RBT
+  - RBT/2905.RBT
+  - RBT/2906.RBT
+  - RBT/2907.RBT
+  - RBT/2908.RBT
+  - RBT/2910.RBT
+  - RBT/2911.RBT
+  - RBT/2912.RBT
+  - RBT/2913.RBT
+  - RBT/2914.RBT
+  - RBT/2916.RBT
+  - RBT/2917.RBT
+  - RBT/2918.RBT
+  - RBT/2919.RBT
+  - RBT/2920.RBT
+  - RBT/2922.RBT
+  - RBT/2923.RBT
+  - RBT/2925.RBT
+  - RBT/2930.RBT
+  - RBT/2931.RBT
+  - RBT/2932.RBT
+  - RBT/2933.RBT
+  - RBT/2934.RBT
+  - RBT/2935.RBT
+  - RBT/2940.RBT
+  - RBT/2941.RBT
+  - RBT/2942.RBT
+  - RBT/2950.RBT
+  - RBT/2951.RBT
+  - RBT/2952.RBT
+  - RBT/2953.RBT
+  - RBT/2954.RBT
+  - RBT/2955.RBT
+  - RBT/2956.RBT
+  - RBT/2980.RBT
+  - RBT/300.RBT
+  - RBT/3000.RBT
+  - RBT/301.RBT
+  - RBT/3010.RBT
+  - RBT/3020.RBT
+  - RBT/3021.RBT
+  - RBT/3030.RBT
+  - RBT/3031.RBT
+  - RBT/3032.RBT
+  - RBT/3051.RBT
+  - RBT/3052.RBT
+  - RBT/3060.RBT
+  - RBT/3061.RBT
+  - RBT/3062.RBT
+  - RBT/3090.RBT
+  - RBT/3091.RBT
+  - RBT/3110.RBT
+  - RBT/3111.RBT
+  - RBT/3112.RBT
+  - RBT/3120.RBT
+  - RBT/3130.RBT
+  - RBT/3140.RBT
+  - RBT/3141.RBT
+  - RBT/3160.RBT
+  - RBT/3161.RBT
+  - RBT/3190.RBT
+  - RBT/3191.RBT
+  - RBT/3200.RBT
+  - RBT/3201.RBT
+  - RBT/3202.RBT
+  - RBT/3213.RBT
+  - RBT/3230.RBT
+  - RBT/3250.RBT
+  - RBT/3260.RBT
+  - RBT/3271.RBT
+  - RBT/3281.RBT
+  - RBT/3290.RBT
+  - RBT/3300.RBT
+  - RBT/3312.RBT
+  - RBT/3320.RBT
+  - RBT/3330.RBT
+  - RBT/3340.RBT
+  - RBT/3350.RBT
+  - RBT/3351.RBT
+  - RBT/3352.RBT
+  - RBT/3370.RBT
+  - RBT/3371.RBT
+  - RBT/3372.RBT
+  - RBT/3373.RBT
+  - RBT/3380.RBT
+  - RBT/340.RBT
+  - RBT/3400.RBT
+  - RBT/3401.RBT
+  - RBT/3410.RBT
+  - RBT/3411.RBT
+  - RBT/3412.RBT
+  - RBT/3413.RBT
+  - RBT/3414.RBT
+  - RBT/3415.RBT
+  - RBT/3416.RBT
+  - RBT/3420.RBT
+  - RBT/3421.RBT
+  - RBT/3430.RBT
+  - RBT/3442.RBT
+  - RBT/3450.RBT
+  - RBT/3451.RBT
+  - RBT/3452.RBT
+  - RBT/3453.RBT
+  - RBT/3454.RBT
+  - RBT/3455.RBT
+  - RBT/3456.RBT
+  - RBT/3457.RBT
+  - RBT/3458.RBT
+  - RBT/3459.RBT
+  - RBT/3481.RBT
+  - RBT/3490.RBT
+  - RBT/3491.RBT
+  - RBT/3492.RBT
+  - RBT/3493.RBT
+  - RBT/3494.RBT
+  - RBT/3500.RBT
+  - RBT/3501.RBT
+  - RBT/3502.RBT
+  - RBT/3510.RBT
+  - RBT/3520.RBT
+  - RBT/3540.RBT
+  - RBT/3541.RBT
+  - RBT/3542.RBT
+  - RBT/3550.RBT
+  - RBT/3560.RBT
+  - RBT/3570.RBT
+  - RBT/3580.RBT
+  - RBT/3590.RBT
+  - RBT/3600.RBT
+  - RBT/3610.RBT
+  - RBT/3620.RBT
+  - RBT/36205.RBT
+  - RBT/3630.RBT
+  - RBT/3640.RBT
+  - RBT/3650.RBT
+  - RBT/3651.RBT
+  - RBT/3680.RBT
+  - RBT/3690.RBT
+  - RBT/3700.RBT
+  - RBT/3701.RBT
+  - RBT/3720.RBT
+  - RBT/37200.RBT
+  - RBT/37320.RBT
+  - RBT/37325.RBT
+  - RBT/3770.RBT
+  - RBT/3771.RBT
+  - RBT/3772.RBT
+  - RBT/380.RBT
+  - RBT/3800.RBT
+  - RBT/3801.RBT
+  - RBT/3810.RBT
+  - RBT/3811.RBT
+  - RBT/3812.RBT
+  - RBT/3820.RBT
+  - RBT/3830.RBT
+  - RBT/3831.RBT
+  - RBT/3880.RBT
+  - RBT/3881.RBT
+  - RBT/3882.RBT
+  - RBT/3890.RBT
+  - RBT/3900.RBT
+  - RBT/3901.RBT
+  - RBT/3902.RBT
+  - RBT/3903.RBT
+  - RBT/3904.RBT
+  - RBT/3910.RBT
+  - RBT/3920.RBT
+  - RBT/3921.RBT
+  - RBT/3931.RBT
+  - RBT/3941.RBT
+  - RBT/3950.RBT
+  - RBT/3952.RBT
+  - RBT/3960.RBT
+  - RBT/3961.RBT
+  - RBT/3990.RBT
+  - RBT/401.RBT
+  - RBT/4020.RBT
+  - RBT/4030.RBT
+  - RBT/4040.RBT
+  - RBT/4050.RBT
+  - RBT/4051.RBT
+  - RBT/4052.RBT
+  - RBT/4060.RBT
+  - RBT/4061.RBT
+  - RBT/4062.RBT
+  - RBT/4063.RBT
+  - RBT/4070.RBT
+  - RBT/4080.RBT
+  - RBT/4090.RBT
+  - RBT/410.RBT
+  - RBT/4100.RBT
+  - RBT/4110.RBT
+  - RBT/4111.RBT
+  - RBT/4112.RBT
+  - RBT/4120.RBT
+  - RBT/4121.RBT
+  - RBT/4130.RBT
+  - RBT/4160.RBT
+  - RBT/4161.RBT
+  - RBT/4180.RBT
+  - RBT/4190.RBT
+  - RBT/420.RBT
+  - RBT/4200.RBT
+  - RBT/4210.RBT
+  - RBT/4220.RBT
+  - RBT/4230.RBT
+  - RBT/4231.RBT
+  - RBT/4234.RBT
+  - RBT/4235.RBT
+  - RBT/4236.RBT
+  - RBT/4237.RBT
+  - RBT/4238.RBT
+  - RBT/4239.RBT
+  - RBT/42390.RBT
+  - RBT/42391.RBT
+  - RBT/42393.RBT
+  - RBT/42394.RBT
+  - RBT/42395.RBT
+  - RBT/4241.RBT
+  - RBT/4251.RBT
+  - RBT/4262.RBT
+  - RBT/4271.RBT
+  - RBT/4290.RBT
+  - RBT/430.RBT
+  - RBT/4300.RBT
+  - RBT/431.RBT
+  - RBT/4310.RBT
+  - RBT/432.RBT
+  - RBT/4320.RBT
+  - RBT/433.RBT
+  - RBT/4330.RBT
+  - RBT/4340.RBT
+  - RBT/4350.RBT
+  - RBT/436.RBT
+  - RBT/4360.RBT
+  - RBT/437.RBT
+  - RBT/438.RBT
+  - RBT/4380.RBT
+  - RBT/4381.RBT
+  - RBT/4382.RBT
+  - RBT/4383.RBT
+  - RBT/4384.RBT
+  - RBT/439.RBT
+  - RBT/4394.RBT
+  - RBT/4395.RBT
+  - RBT/4400.RBT
+  - RBT/4401.RBT
+  - RBT/4402.RBT
+  - RBT/4403.RBT
+  - RBT/4410.RBT
+  - RBT/4420.RBT
+  - RBT/4421.RBT
+  - RBT/4422.RBT
+  - RBT/4423.RBT
+  - RBT/4424.RBT
+  - RBT/4425.RBT
+  - RBT/4426.RBT
+  - RBT/4427.RBT
+  - RBT/4430.RBT
+  - RBT/4431.RBT
+  - RBT/4432.RBT
+  - RBT/4433.RBT
+  - RBT/4440.RBT
+  - RBT/4441.RBT
+  - RBT/4451.RBT
+  - RBT/4460.RBT
+  - RBT/4470.RBT
+  - RBT/4480.RBT
+  - RBT/450.RBT
+  - RBT/4500.RBT
+  - RBT/4501.RBT
+  - RBT/4502.RBT
+  - RBT/4503.RBT
+  - RBT/4504.RBT
+  - RBT/451.RBT
+  - RBT/4510.RBT
+  - RBT/4511.RBT
+  - RBT/4540.RBT
+  - RBT/4541.RBT
+  - RBT/4560.RBT
+  - RBT/4570.RBT
+  - RBT/4580.RBT
+  - RBT/4581.RBT
+  - RBT/4582.RBT
+  - RBT/4583.RBT
+  - RBT/4590.RBT
+  - RBT/460.RBT
+  - RBT/4600.RBT
+  - RBT/4601.RBT
+  - RBT/4602.RBT
+  - RBT/4603.RBT
+  - RBT/461.RBT
+  - RBT/4610.RBT
+  - RBT/462.RBT
+  - RBT/4620.RBT
+  - RBT/4623.RBT
+  - RBT/4624.RBT
+  - RBT/4660.RBT
+  - RBT/4670.RBT
+  - RBT/4681.RBT
+  - RBT/4690.RBT
+  - RBT/470.RBT
+  - RBT/4700.RBT
+  - RBT/4701.RBT
+  - RBT/4702.RBT
+  - RBT/4703.RBT
+  - RBT/471.RBT
+  - RBT/4740.RBT
+  - RBT/4750.RBT
+  - RBT/4760.RBT
+  - RBT/4771.RBT
+  - RBT/4780.RBT
+  - RBT/4781.RBT
+  - RBT/4802.RBT
+  - RBT/4831.RBT
+  - RBT/4832.RBT
+  - RBT/4833.RBT
+  - RBT/4890.RBT
+  - RBT/4891.RBT
+  - RBT/490.RBT
+  - RBT/4900.RBT
+  - RBT/4901.RBT
+  - RBT/4902.RBT
+  - RBT/4903.RBT
+  - RBT/491.RBT
+  - RBT/4920.RBT
+  - RBT/4921.RBT
+  - RBT/4922.RBT
+  - RBT/4923.RBT
+  - RBT/4924.RBT
+  - RBT/4925.RBT
+  - RBT/4960.RBT
+  - RBT/4961.RBT
+  - RBT/4990.RBT
+  - RBT/500.RBT
+  - RBT/5000.RBT
+  - RBT/501.RBT
+  - RBT/502.RBT
+  - RBT/5020.RBT
+  - RBT/503.RBT
+  - RBT/5040.RBT
+  - RBT/50400.RBT
+  - RBT/50401.RBT
+  - RBT/50402.RBT
+  - RBT/50403.RBT
+  - RBT/50404.RBT
+  - RBT/50405.RBT
+  - RBT/5041.RBT
+  - RBT/5042.RBT
+  - RBT/505.RBT
+  - RBT/5051.RBT
+  - RBT/5052.RBT
+  - RBT/5053.RBT
+  - RBT/506.RBT
+  - RBT/5060.RBT
+  - RBT/5061.RBT
+  - RBT/507.RBT
+  - RBT/5090.RBT
+  - RBT/5095.RBT
+  - RBT/510.RBT
+  - RBT/5100.RBT
+  - RBT/5110.RBT
+  - RBT/5120.RBT
+  - RBT/5130.RBT
+  - RBT/5140.RBT
+  - RBT/5141.RBT
+  - RBT/5142.RBT
+  - RBT/5143.RBT
+  - RBT/5144.RBT
+  - RBT/5150.RBT
+  - RBT/5152.RBT
+  - RBT/5160.RBT
+  - RBT/5170.RBT
+  - RBT/5171.RBT
+  - RBT/5180.RBT
+  - RBT/5181.RBT
+  - RBT/5182.RBT
+  - RBT/5183.RBT
+  - RBT/5184.RBT
+  - RBT/5185.RBT
+  - RBT/5189.RBT
+  - RBT/5190.RBT
+  - RBT/5191.RBT
+  - RBT/520.RBT
+  - RBT/5200.RBT
+  - RBT/5210.RBT
+  - RBT/5211.RBT
+  - RBT/5212.RBT
+  - RBT/5214.RBT
+  - RBT/5215.RBT
+  - RBT/5220.RBT
+  - RBT/5229.RBT
+  - RBT/5240.RBT
+  - RBT/5249.RBT
+  - RBT/5260.RBT
+  - RBT/5269.RBT
+  - RBT/5280.RBT
+  - RBT/5281.RBT
+  - RBT/5282.RBT
+  - RBT/5283.RBT
+  - RBT/5284.RBT
+  - RBT/5285.RBT
+  - RBT/5287.RBT
+  - RBT/5290.RBT
+  - RBT/5291.RBT
+  - RBT/530.RBT
+  - RBT/5310.RBT
+  - RBT/5320.RBT
+  - RBT/5330.RBT
+  - RBT/5340.RBT
+  - RBT/5342.RBT
+  - RBT/5350.RBT
+  - RBT/5370.RBT
+  - RBT/5371.RBT
+  - RBT/5372.RBT
+  - RBT/5373.RBT
+  - RBT/5381.RBT
+  - RBT/5383.RBT
+  - RBT/5390.RBT
+  - RBT/540.RBT
+  - RBT/5401.RBT
+  - RBT/5402.RBT
+  - RBT/5403.RBT
+  - RBT/5404.RBT
+  - RBT/5405.RBT
+  - RBT/5406.RBT
+  - RBT/5407.RBT
+  - RBT/5410.RBT
+  - RBT/542.RBT
+  - RBT/543.RBT
+  - RBT/5430.RBT
+  - RBT/5431.RBT
+  - RBT/5432.RBT
+  - RBT/5433.RBT
+  - RBT/5434.RBT
+  - RBT/5473.RBT
+  - RBT/5474.RBT
+  - RBT/5477.RBT
+  - RBT/5480.RBT
+  - RBT/5490.RBT
+  - RBT/5492.RBT
+  - RBT/5493.RBT
+  - RBT/5494.RBT
+  - RBT/5495.RBT
+  - RBT/5496.RBT
+  - RBT/5497.RBT
+  - RBT/550.RBT
+  - RBT/5500.RBT
+  - RBT/5520.RBT
+  - RBT/5530.RBT
+  - RBT/5540.RBT
+  - RBT/5541.RBT
+  - RBT/5542.RBT
+  - RBT/5570.RBT
+  - RBT/5580.RBT
+  - RBT/5581.RBT
+  - RBT/5582.RBT
+  - RBT/5610.RBT
+  - RBT/5611.RBT
+  - RBT/5612.RBT
+  - RBT/5620.RBT
+  - RBT/5621.RBT
+  - RBT/5622.RBT
+  - RBT/5623.RBT
+  - RBT/5624.RBT
+  - RBT/5625.RBT
+  - RBT/5626.RBT
+  - RBT/5627.RBT
+  - RBT/5630.RBT
+  - RBT/5640.RBT
+  - RBT/5650.RBT
+  - RBT/5660.RBT
+  - RBT/5670.RBT
+  - RBT/5680.RBT
+  - RBT/5690.RBT
+  - RBT/570.RBT
+  - RBT/5701.RBT
+  - RBT/580.RBT
+  - RBT/5830.RBT
+  - RBT/5831.RBT
+  - RBT/5832.RBT
+  - RBT/5840.RBT
+  - RBT/5841.RBT
+  - RBT/5842.RBT
+  - RBT/5843.RBT
+  - RBT/5844.RBT
+  - RBT/5845.RBT
+  - RBT/5880.RBT
+  - RBT/5890.RBT
+  - RBT/5900.RBT
+  - RBT/5910.RBT
+  - RBT/5920.RBT
+  - RBT/5930.RBT
+  - RBT/5931.RBT
+  - RBT/5934.RBT
+  - RBT/5940.RBT
+  - RBT/5941.RBT
+  - RBT/5942.RBT
+  - RBT/5950.RBT
+  - RBT/5960.RBT
+  - RBT/5970.RBT
+  - RBT/5980.RBT
+  - RBT/6010.RBT
+  - RBT/610.RBT
+  - RBT/611.RBT
+  - RBT/612.RBT
+  - RBT/6180.RBT
+  - RBT/6182.RBT
+  - RBT/6190.RBT
+  - RBT/620.RBT
+  - RBT/6200.RBT
+  - RBT/6210.RBT
+  - RBT/6211.RBT
+  - RBT/6220.RBT
+  - RBT/6230.RBT
+  - RBT/6240.RBT
+  - RBT/6250.RBT
+  - RBT/6251.RBT
+  - RBT/631.RBT
+  - RBT/6570.RBT
+  - RBT/6571.RBT
+  - RBT/6580.RBT
+  - RBT/6581.RBT
+  - RBT/660.RBT
+  - RBT/6630.RBT
+  - RBT/6750.RBT
+  - RBT/6751.RBT
+  - RBT/6752.RBT
+  - RBT/6753.RBT
+  - RBT/6820.RBT
+  - RBT/6821.RBT
+  - RBT/6822.RBT
+  - RBT/6824.RBT
+  - RBT/6825.RBT
+  - RBT/6826.RBT
+  - RBT/6830.RBT
+  - RBT/7150.RBT
+  - RBT/7151.RBT
+  - RBT/7152.RBT
+  - RBT/7153.RBT
+  - RBT/7154.RBT
+  - RBT/7155.RBT
+  - RBT/7156.RBT
+  - RBT/7163.RBT
+  - RBT/7164.RBT
+  - RBT/7220.RBT
+  - RBT/7230.RBT
+  - RBT/7231.RBT
+  - RBT/7232.RBT
+  - RBT/7234.RBT
+  - RBT/7250.RBT
+  - RBT/7251.RBT
+  - RBT/7252.RBT
+  - RBT/7253.RBT
+  - RBT/730.RBT
+  - RBT/740.RBT
+  - RBT/842.RBT
+  - RBT/843.RBT
+  - RBT/844.RBT
+  - RBT/845.RBT
+  - RBT/846.RBT
+  - RBT/847.RBT
+  - RBT/860.RBT
+  - RBT/861.RBT
+  - RBT/890.RBT
+  - RBT/90.RBT
+  - RBT/901.RBT
+  - RBT/902.RBT
+  - RBT/903.RBT
+  - RBT/904.RBT
+  - RBT/905.RBT
+  - RBT/906.RBT
+  - RBT/907.RBT
+  - RBT/908.RBT
+  - RBT/909.RBT
+  - RBT/91.RBT
+  - RBT/920.RBT
+  - RBT/9202.RBT
+  - RBT/9203.RBT
+  - RBT/9210.RBT
+  - RBT/9211.RBT
+  - RBT/9221.RBT
+  - RBT/9230.RBT
+  - RBT/9231.RBT
+  - RBT/9239.RBT
+  - RBT/9240.RBT
+  - RBT/9241.RBT
+  - RBT/9242.RBT
+  - RBT/9243.RBT
+  - RBT/9244.RBT
+  - RBT/9245.RBT
+  - RBT/9246.RBT
+  - RBT/9247.RBT
+  - RBT/9248.RBT
+  - RBT/9249.RBT
+  - RBT/9250.RBT
+  - RBT/9252.RBT
+  - RBT/9253.RBT
+  - RBT/9260.RBT
+  - RBT/9261.RBT
+  - RBT/9262.RBT
+  - RBT/9270.RBT
+  - RBT/9271.RBT
+  - RBT/9280.RBT
+  - RBT/9281.RBT
+  - RBT/9290.RBT
+  - RBT/9292.RBT
+  - RBT/9293.RBT
+  - RBT/9294.RBT
+  - RBT/9300.RBT
+  - RBT/9301.RBT
+  - RBT/9302.RBT
+  - RBT/9303.RBT
+  - RBT/9304.RBT
+  - RBT/9305.RBT
+  - RBT/9306.RBT
+  - RBT/9307.RBT
+  - RBT/9308.RBT
+  - RBT/9309.RBT
+  - RBT/9310.RBT
+  - RBT/9312.RBT
+  - RBT/9315.RBT
+  - RBT/940.RBT
+  - RBT/941.RBT
+  - RBT/9410.RBT
+  - RBT/9411.RBT
+  - RBT/942.RBT
+  - RBT/9420.RBT
+  - RBT/9421.RBT
+  - RBT/943.RBT
+  - RBT/9430.RBT
+  - RBT/9431.RBT
+  - RBT/9432.RBT
+  - RBT/9500.RBT
+  - RBT/9501.RBT
+  - RBT/9510.RBT
+  - RBT/9520.RBT
+  - RBT/9531.RBT
+  - RBT/9540.RBT
+  - RBT/9541.RBT
+  - RBT/9542.RBT
+  - RBT/9543.RBT
+  - RBT/9544.RBT
+  - RBT/9545.RBT
+  - RBT/9546.RBT
+  - RBT/9550.RBT
+  - RBT/9551.RBT
+  - RBT/9560.RBT
+  - RBT/9561.RBT
+  - RBT/9562.RBT
+  - RBT/9570.RBT
+  - RBT/9571.RBT
+  - RBT/9580.RBT
+  - RBT/9590.RBT
+  - RBT/9595.RBT
+  - RBT/9620.RBT
+  - RBT/9621.RBT
+  - RBT/9622.RBT
+  - RBT/9630.RBT
+  - RBT/9631.RBT
+  - RBT/9640.RBT
+  - RBT/9641.RBT
+  - RBT/9642.RBT
+  - RBT/9643.RBT
+  - RBT/9644.RBT
+  - RBT/9645.RBT
+  - RBT/9646.RBT
+  - RBT/9647.RBT
+  - RBT/9648.RBT
+  - RBT/9660.RBT
+  - RBT/9661.RBT
+  - RBT/9670.RBT
+  - RBT/9671.RBT
+  - RBT/9680.RBT
+  - RBT/9681.RBT
+  - RBT/9683.RBT
+  - RBT/9684.RBT
+  - RBT/9691.RBT
+  - RBT/9693.RBT
+  - RBT/9700.RBT
+  - RBT/9701.RBT
+  - RBT/9710.RBT
+  - RBT/9711.RBT
+  - RBT/9712.RBT
+  - RBT/9720.RBT
+  - RBT/9730.RBT
+  - RBT/9731.RBT
+  - RBT/9732.RBT
+  - RBT/9733.RBT
+  - RBT/9740.RBT
+  - RBT/9741.RBT
+  - RBT/9742.RBT
+  - RBT/9743.RBT
+  - RBT/9744.RBT
+  - RBT/9745.RBT
+  - RBT/9750.RBT
+  - RBT/9760.RBT
+  - RBT/9761.RBT
+  - RBT/9784.RBT
+  - RBT/9785.RBT
+  - RBT/9790.RBT
+  - RBT/9791.RBT
+  - RBT/9792.RBT
+  - RBT/980.RBT
+  - RBT/9800.RBT
+  - RBT/9801.RBT
+  - RBT/9802.RBT
+  - RBT/9815.RBT
+  - RBT/9816.RBT
+  - RBT/9817.RBT
+  - RBT/9820.RBT
+  - RBT/9821.RBT
+  - RBT/9822.RBT
+  - RBT/9830.RBT
+  - RBT/9831.RBT
+
+
+========================================
+Processing [1/958]: 1000
+========================================
+primer: even=19922 odd=21024 total=40946 reserved=40960
+HunkPalette: startColor=55 numColors=81 used=1 sharedUsed=1
+tableA[0..4]: 5185,5048,4966,5020,5310
+tableB[0..4]: 7406,7269,7187,7241,7531
+candidate offset=0 swap=0 plausible=8
+candidate offset=0 swap=1 plausible=1
+candidate offset=6 swap=0 plausible=0
+candidate offset=6 swap=1 plausible=1
+chosen fileOffset=0 tableSwap=0 plausible=8
+parseHeader: version=5 frames=143 audioBlockSize=2221 hasAudio=1 paletteSize=1200 primerReservedSize=40960
+videoSizes[0..4]: 5185,5048,4966,5020,5310
+packetSizes[0..4]: 7406,7269,7187,7241,7531
+first record position: 45056
+record[0]=45056 videoSize=5185 packetSize=7406
+record[1]=52462 videoSize=5048 packetSize=7269
+record[2]=59731 videoSize=4966 packetSize=7187
+record[3]=66918 videoSize=5020 packetSize=7241
+record[4]=74159 videoSize=5310 packetSize=7531
+record[5]=81690 videoSize=5313 packetSize=7534
+record[6]=89224 videoSize=5394 packetSize=7615
+record[7]=96839 videoSize=5424 packetSize=7645
+record[8]=104484 videoSize=5502 packetSize=7723
+record[9]=112207 videoSize=5350 packetSize=7571
+record[10]=119778 videoSize=5212 packetSize=7433
+record[11]=127211 videoSize=5164 packetSize=7385
+record[12]=134596 videoSize=5244 packetSize=7465
+record[13]=142061 videoSize=5320 packetSize=7541
+record[14]=149602 videoSize=5294 packetSize=7515
+record[15]=157117 videoSize=5335 packetSize=7556
+record[16]=164673 videoSize=5426 packetSize=7647
+record[17]=172320 videoSize=5306 packetSize=7527
+record[18]=179847 videoSize=5322 packetSize=7543
+record[19]=187390 videoSize=5271 packetSize=7492
+record[20]=194882 videoSize=5400 packetSize=7621
+record[21]=202503 videoSize=5288 packetSize=7509
+record[22]=210012 videoSize=5251 packetSize=7472
+record[23]=217484 videoSize=5271 packetSize=7492
+record[24]=224976 videoSize=5288 packetSize=7509
+record[25]=232485 videoSize=5341 packetSize=7562
+record[26]=240047 videoSize=5300 packetSize=7521
+record[27]=247568 videoSize=5291 packetSize=7512
+record[28]=255080 videoSize=5306 packetSize=7527
+record[29]=262607 videoSize=5282 packetSize=7503
+record[30]=270110 videoSize=5367 packetSize=7588
+record[31]=277698 videoSize=5353 packetSize=7574
+record[32]=285272 videoSize=5345 packetSize=7566
+record[33]=292838 videoSize=5430 packetSize=7651
+record[34]=300489 videoSize=5454 packetSize=7675
+record[35]=308164 videoSize=5255 packetSize=7476
+record[36]=315640 videoSize=5315 packetSize=7536
+record[37]=323176 videoSize=5421 packetSize=7642
+record[38]=330818 videoSize=5300 packetSize=7521
+record[39]=338339 videoSize=5304 packetSize=7525
+record[40]=345864 videoSize=5388 packetSize=7609
+record[41]=353473 videoSize=5355 packetSize=7576
+record[42]=361049 videoSize=5414 packetSize=7635
+record[43]=368684 videoSize=5398 packetSize=7619
+record[44]=376303 videoSize=5345 packetSize=7566
+record[45]=383869 videoSize=5252 packetSize=7473
+record[46]=391342 videoSize=5263 packetSize=7484
+record[47]=398826 videoSize=5307 packetSize=7528
+record[48]=406354 videoSize=5177 packetSize=7398
+record[49]=413752 videoSize=5170 packetSize=7391
+record[50]=421143 videoSize=5267 packetSize=7488
+record[51]=428631 videoSize=5219 packetSize=7440
+record[52]=436071 videoSize=5349 packetSize=7570
+record[53]=443641 videoSize=5238 packetSize=7459
+record[54]=451100 videoSize=5177 packetSize=7398
+record[55]=458498 videoSize=5293 packetSize=7514
+record[56]=466012 videoSize=5238 packetSize=7459
+record[57]=473471 videoSize=5251 packetSize=7472
+record[58]=480943 videoSize=5451 packetSize=7672
+record[59]=488615 videoSize=5292 packetSize=7513
+record[60]=496128 videoSize=5255 packetSize=7476
+record[61]=503604 videoSize=5209 packetSize=7430
+record[62]=511034 videoSize=5298 packetSize=7519
+record[63]=518553 videoSize=5188 packetSize=7409
+record[64]=525962 videoSize=5303 packetSize=7524
+record[65]=533486 videoSize=5328 packetSize=7549
+record[66]=541035 videoSize=5163 packetSize=7384
+record[67]=548419 videoSize=5257 packetSize=7478
+record[68]=555897 videoSize=5273 packetSize=7494
+record[69]=563391 videoSize=5128 packetSize=7349
+record[70]=570740 videoSize=5229 packetSize=7450
+record[71]=578190 videoSize=5133 packetSize=7354
+record[72]=585544 videoSize=5044 packetSize=7265
+record[73]=592809 videoSize=5090 packetSize=7311
+record[74]=600120 videoSize=5183 packetSize=7404
+record[75]=607524 videoSize=5116 packetSize=7337
+record[76]=614861 videoSize=5168 packetSize=7389
+record[77]=622250 videoSize=5203 packetSize=7424
+record[78]=629674 videoSize=5169 packetSize=7390
+record[79]=637064 videoSize=5185 packetSize=7406
+record[80]=644470 videoSize=5317 packetSize=7538
+record[81]=652008 videoSize=5296 packetSize=7517
+record[82]=659525 videoSize=5193 packetSize=7414
+record[83]=666939 videoSize=5112 packetSize=7333
+record[84]=674272 videoSize=5222 packetSize=7443
+record[85]=681715 videoSize=5214 packetSize=7435
+record[86]=689150 videoSize=5302 packetSize=7523
+record[87]=696673 videoSize=5290 packetSize=7511
+record[88]=704184 videoSize=5217 packetSize=7438
+record[89]=711622 videoSize=5255 packetSize=7476
+record[90]=719098 videoSize=5280 packetSize=7501
+record[91]=726599 videoSize=5179 packetSize=7400
+record[92]=733999 videoSize=5145 packetSize=7366
+record[93]=741365 videoSize=5264 packetSize=7485
+record[94]=748850 videoSize=5177 packetSize=7398
+record[95]=756248 videoSize=5106 packetSize=7327
+record[96]=763575 videoSize=5190 packetSize=7411
+record[97]=770986 videoSize=5165 packetSize=7386
+record[98]=778372 videoSize=5127 packetSize=7348
+record[99]=785720 videoSize=5182 packetSize=7403
+record[100]=793123 videoSize=5260 packetSize=7481
+record[101]=800604 videoSize=5219 packetSize=5392
+record[102]=805996 videoSize=5377 packetSize=5550
+record[103]=811546 videoSize=5231 packetSize=5404
+record[104]=816950 videoSize=5198 packetSize=5371
+record[105]=822321 videoSize=5356 packetSize=5529
+record[106]=827850 videoSize=5262 packetSize=5435
+record[107]=833285 videoSize=5260 packetSize=5433
+record[108]=838718 videoSize=5225 packetSize=5398
+record[109]=844116 videoSize=5159 packetSize=5332
+record[110]=849448 videoSize=5368 packetSize=5541
+record[111]=854989 videoSize=5317 packetSize=5490
+record[112]=860479 videoSize=5237 packetSize=5410
+record[113]=865889 videoSize=5336 packetSize=5509
+record[114]=871398 videoSize=5233 packetSize=5406
+record[115]=876804 videoSize=5122 packetSize=5295
+record[116]=882099 videoSize=5246 packetSize=5419
+record[117]=887518 videoSize=5210 packetSize=5383
+record[118]=892901 videoSize=5225 packetSize=5398
+record[119]=898299 videoSize=5203 packetSize=5376
+record[120]=903675 videoSize=5078 packetSize=5251
+record[121]=908926 videoSize=5208 packetSize=5381
+record[122]=914307 videoSize=5246 packetSize=5419
+record[123]=919726 videoSize=5281 packetSize=5454
+record[124]=925180 videoSize=5314 packetSize=5487
+record[125]=930667 videoSize=5233 packetSize=5406
+record[126]=936073 videoSize=5218 packetSize=5391
+record[127]=941464 videoSize=5269 packetSize=5442
+record[128]=946906 videoSize=5162 packetSize=5335
+record[129]=952241 videoSize=5278 packetSize=5451
+record[130]=957692 videoSize=5281 packetSize=5454
+record[131]=963146 videoSize=5231 packetSize=5404
+record[132]=968550 videoSize=5237 packetSize=5410
+record[133]=973960 videoSize=5192 packetSize=5365
+record[134]=979325 videoSize=5092 packetSize=5265
+record[135]=984590 videoSize=5178 packetSize=5351
+record[136]=989941 videoSize=5155 packetSize=5328
+record[137]=995269 videoSize=5224 packetSize=5397
+record[138]=1000666 videoSize=4986 packetSize=5159
+record[139]=1005825 videoSize=4858 packetSize=5031
+record[140]=1010856 videoSize=4778 packetSize=4951
+record[141]=1015807 videoSize=5004 packetSize=5177
+record[142]=1020984 videoSize=5102 packetSize=5275
+
+Frames: 143 @ 10 fps (14.30 seconds)
+Audio: yes
+Calcul des dimensions maximales du Robot...
+Ô£ô Dimensions maximales: 254x182 (analys├® 143 frames)
+Mode canvas d├®sactiv├®: extraction en crop serr├®
+
+Robot 1000: CROP MODE (not found in RESSCI)
+  Using max cel dimensions: 254x182 from RBT file
+  celX/celY metadata will be exported separately
+Extracting 143 frames...
+  Extracting frame 143/143...
+primer: even=19922 odd=21024 total=40946 reserved=40960
+HunkPalette: startColor=55 numColors=81 used=1 sharedUsed=1
+tableA[0..4]: 5185,5048,4966,5020,5310
+tableB[0..4]: 7406,7269,7187,7241,7531
+candidate offset=0 swap=0 plausible=8
+candidate offset=0 swap=1 plausible=1
+candidate offset=6 swap=0 plausible=0
+candidate offset=6 swap=1 plausible=1
+chosen fileOffset=0 tableSwap=0 plausible=8
+parseHeader: version=5 frames=143 audioBlockSize=2221 hasAudio=1 paletteSize=1200 primerReservedSize=40960
+videoSizes[0..4]: 5185,5048,4966,5020,5310
+packetSizes[0..4]: 7406,7269,7187,7241,7531
+first record position: 45056
+record[0]=45056 videoSize=5185 packetSize=7406
+record[1]=52462 videoSize=5048 packetSize=7269
+record[2]=59731 videoSize=4966 packetSize=7187
+record[3]=66918 videoSize=5020 packetSize=7241
+record[4]=74159 videoSize=5310 packetSize=7531
+record[5]=81690 videoSize=5313 packetSize=7534
+record[6]=89224 videoSize=5394 packetSize=7615
+record[7]=96839 videoSize=5424 packetSize=7645
+record[8]=104484 videoSize=5502 packetSize=7723
+record[9]=112207 videoSize=5350 packetSize=7571
+record[10]=119778 videoSize=5212 packetSize=7433
+record[11]=127211 videoSize=5164 packetSize=7385
+record[12]=134596 videoSize=5244 packetSize=7465
+record[13]=142061 videoSize=5320 packetSize=7541
+record[14]=149602 videoSize=5294 packetSize=7515
+record[15]=157117 videoSize=5335 packetSize=7556
+record[16]=164673 videoSize=5426 packetSize=7647
+record[17]=172320 videoSize=5306 packetSize=7527
+record[18]=179847 videoSize=5322 packetSize=7543
+record[19]=187390 videoSize=5271 packetSize=7492
+record[20]=194882 videoSize=5400 packetSize=7621
+record[21]=202503 videoSize=5288 packetSize=7509
+record[22]=210012 videoSize=5251 packetSize=7472
+record[23]=217484 videoSize=5271 packetSize=7492
+record[24]=224976 videoSize=5288 packetSize=7509
+record[25]=232485 videoSize=5341 packetSize=7562
+record[26]=240047 videoSize=5300 packetSize=7521
+record[27]=247568 videoSize=5291 packetSize=7512
+record[28]=255080 videoSize=5306 packetSize=7527
+record[29]=262607 videoSize=5282 packetSize=7503
+record[30]=270110 videoSize=5367 packetSize=7588
+record[31]=277698 videoSize=5353 packetSize=7574
+record[32]=285272 videoSize=5345 packetSize=7566
+record[33]=292838 videoSize=5430 packetSize=7651
+record[34]=300489 videoSize=5454 packetSize=7675
+record[35]=308164 videoSize=5255 packetSize=7476
+record[36]=315640 videoSize=5315 packetSize=7536
+record[37]=323176 videoSize=5421 packetSize=7642
+record[38]=330818 videoSize=5300 packetSize=7521
+record[39]=338339 videoSize=5304 packetSize=7525
+record[40]=345864 videoSize=5388 packetSize=7609
+record[41]=353473 videoSize=5355 packetSize=7576
+record[42]=361049 videoSize=5414 packetSize=7635
+record[43]=368684 videoSize=5398 packetSize=7619
+record[44]=376303 videoSize=5345 packetSize=7566
+record[45]=383869 videoSize=5252 packetSize=7473
+record[46]=391342 videoSize=5263 packetSize=7484
+record[47]=398826 videoSize=5307 packetSize=7528
+record[48]=406354 videoSize=5177 packetSize=7398
+record[49]=413752 videoSize=5170 packetSize=7391
+record[50]=421143 videoSize=5267 packetSize=7488
+record[51]=428631 videoSize=5219 packetSize=7440
+record[52]=436071 videoSize=5349 packetSize=7570
+record[53]=443641 videoSize=5238 packetSize=7459
+record[54]=451100 videoSize=5177 packetSize=7398
+record[55]=458498 videoSize=5293 packetSize=7514
+record[56]=466012 videoSize=5238 packetSize=7459
+record[57]=473471 videoSize=5251 packetSize=7472
+record[58]=480943 videoSize=5451 packetSize=7672
+record[59]=488615 videoSize=5292 packetSize=7513
+record[60]=496128 videoSize=5255 packetSize=7476

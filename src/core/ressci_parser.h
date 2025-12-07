@@ -208,6 +208,21 @@ public:
     std::vector<RobotCoordinates> extractRobotCoordinates();
     
     /**
+     * @brief Exporte la liste de toutes les ressources indexées dans un fichier texte
+     * @param outputPath Chemin du fichier de sortie
+     * @return true si succès
+     */
+    bool exportResourcesList(const std::string& outputPath);
+    
+    /**
+     * @brief Obtient toutes les ressources indexées
+     * @return Map des ressources (type, number) -> offset
+     */
+    const std::map<std::pair<ResourceType, uint32_t>, uint32_t>& getResourceIndex() const {
+        return m_resourceIndex;
+    }
+    
+    /**
      * @brief Décompresse des données selon la méthode spécifiée
      * @param compressed Données compressées
      * @param method Méthode de compression

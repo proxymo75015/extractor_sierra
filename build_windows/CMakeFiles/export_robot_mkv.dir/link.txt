@@ -1,0 +1,3 @@
+/usr/bin/cmake -E rm -f CMakeFiles/export_robot_mkv.dir/objects.a
+/usr/bin/x86_64-w64-mingw32-ar qc CMakeFiles/export_robot_mkv.dir/objects.a @CMakeFiles/export_robot_mkv.dir/objects1.rsp
+/usr/bin/x86_64-w64-mingw32-g++  -static-libgcc -static-libstdc++ -static -Wl,--whole-archive CMakeFiles/export_robot_mkv.dir/objects.a -Wl,--no-whole-archive -o export_robot_mkv.exe -Wl,--out-implib,libexport_robot_mkv.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles/export_robot_mkv.dir/linkLibs.rsp

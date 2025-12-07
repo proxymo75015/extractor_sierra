@@ -1,0 +1,3 @@
+/usr/bin/cmake -E rm -f CMakeFiles/robot_extractor.dir/objects.a
+/usr/bin/x86_64-w64-mingw32-ar qc CMakeFiles/robot_extractor.dir/objects.a @CMakeFiles/robot_extractor.dir/objects1.rsp
+/usr/bin/x86_64-w64-mingw32-g++  -static-libgcc -static-libstdc++ -static -Wl,--whole-archive CMakeFiles/robot_extractor.dir/objects.a -Wl,--no-whole-archive -o robot_extractor.exe -Wl,--out-implib,librobot_extractor.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles/robot_extractor.dir/linkLibs.rsp

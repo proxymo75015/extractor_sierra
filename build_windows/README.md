@@ -75,20 +75,6 @@ output/1000/
 └── metadata.txt                  # Métadonnées (ID, frames, FPS, position, etc.)
 ```
 
-**Liste globale des ressources :**
-```
-output/
-└── resources_list.txt            # Catalogue complet de toutes les ressources RESSCI
-                                  # (Scripts, Bitmaps, Audio, Palettes, etc.)
-                                  # Généré automatiquement lors de la première extraction
-```
-
-Ce fichier `resources_list.txt` contient :
-- Total des ressources indexées depuis tous les RESMAP.00X
-- Résumé par type de ressource (Script, Bitmap, Audio, etc.)
-- Liste détaillée : numéro → offset (hex/decimal) + volume RESSCI
-- Utile pour debugging, analyse du contenu CD, et extraction manuelle
-
 ## 📊 Modes de rendu
 
 ### Mode Canvas (630×450)

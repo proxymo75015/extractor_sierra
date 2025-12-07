@@ -5,6 +5,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Compilation statique pour Windows (inclure toutes les dépendances)
+if(WIN32)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++ -static")
+endif()
+
 option(BUILD_TESTS "Construire les tests unitaires" ON)
 
 # Add main executable
@@ -29,6 +34,7 @@ target_include_directories(robot_extractor PRIVATE
 add_executable(export_robot_mkv
     src/export_robot_mkv.cpp
     src/core/rbt_parser.cpp
+    src/core/ressci_parser.cpp
     src/core/scummvm_robot_helpers.cpp
     src/formats/robot_mkv_exporter.cpp
     src/formats/decompressor_lzs.cpp
