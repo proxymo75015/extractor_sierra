@@ -6,6 +6,7 @@ add_executable(robot_decoder
     main.cpp
     core/rbt_parser.cpp
     core/ressci_parser.cpp
+    core/scummvm_robot_helpers.cpp
     formats/dpcm.cpp
     formats/lzs.cpp
     formats/decompressor_lzs.cpp

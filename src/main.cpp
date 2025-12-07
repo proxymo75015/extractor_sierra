@@ -173,18 +173,21 @@ bool processRobotFile(const std::string& rbtPath, const std::string& ressciDir,
             }
             
             // Extraire les pixels de chaque frame
-            for (size_t frameIdx = 0; frameIdx < maxFrames && frameIdx < parser2.getNumFrames(); ++frameIdx) {
+            for (size_t frameIdx = 0; frameIdx < maxFrames; ++frameIdx) {
                 std::vector<uint8_t> pixelIndices;
-                int width, height;
+                int width = 0, height = 0;
+                int offsetX = 0, offsetY = 0;
                 
-                if (!parser2.extractFramePixels(frameIdx, pixelIndices, width, height)) {
+                if (!parser2.extractFramePixels(frameIdx, pixelIndices, width, height, offsetX, offsetY)) {
                     std::fprintf(stderr, "   ⚠️  Frame %zu extraction échec\n", frameIdx);
                     continue;
                 }
                 
-                // Décomposer en couches
+                // Décomposer en couches avec les offsets corrects
                 try {
                     RobotLayerFrame layer = decomposeRobotFrame(pixelIndices, palette, width, height);
+                    layer.offsetX = offsetX;
+                    layer.offsetY = offsetY;
                     allLayers.push_back(std::move(layer));
                 } catch (const std::exception& e) {
                     std::fprintf(stderr, "   ⚠️  Frame %zu décomposition échec: %s\n", frameIdx, e.what());

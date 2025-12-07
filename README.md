@@ -39,8 +39,8 @@ brew install cmake ffmpeg
 ### Compilation
 
 ```bash
-git clone https://github.com/proxymo75015/extractor_sierra.git
-cd extractor_sierra
+git clone https://github.com/proxymo75015/robot_extract.git
+cd robot_extract
 mkdir -p build && cd build
 cmake ..
 make -j$(nproc)
@@ -198,7 +198,7 @@ MIT License - voir [LICENSE](LICENSE)
 
 ## 📞 Support
 
-- **Issues** : [GitHub Issues](https://github.com/proxymo75015/extractor_sierra/issues)
+- **Issues** : [GitHub Issues](https://github.com/proxymo75015/robot_extract/issues)
 - **Documentation** : [docs/README.md](docs/README.md)
 
 ---

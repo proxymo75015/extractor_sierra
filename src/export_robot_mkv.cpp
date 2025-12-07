@@ -5,7 +5,7 @@
  * Les résultats sont placés dans output/<rbt_name>/ avec:
  *   - <rbt>_video.mkv (MKV 4 pistes + audio)
  *   - <rbt>_audio.wav (PCM 22 kHz natif)
- *   - <rbt>_composite.mov (vidéo composite ProRes 4444 RGBA + audio)
+ *   - <rbt>_video.mov (vidéo composite ProRes 4444 RGBA + audio)
  *   - <rbt>_metadata.txt (métadonnées)
  *   - <rbt>_frames/ (frames PNG individuelles)
  * 
@@ -24,6 +24,7 @@
  */
 
 #include "core/rbt_parser.h"
+#include "core/scummvm_robot_helpers.h"
 #include "formats/robot_mkv_exporter.h"
 #include "utils/sci_util.h"
 #include "../include/stb_image_write.h"
@@ -37,6 +38,7 @@
 #include <algorithm>
 
 using namespace RobotExtractor;
+using namespace ScummVMRobot;
 
 // Fonction pour lister tous les fichiers .RBT dans un répertoire
 std::vector<std::string> findRbtFiles(const std::string& directory) {
@@ -104,7 +106,8 @@ void detectCanvasSize(int contentWidth, int contentHeight, int& canvasWidth, int
 // Fonction pour traiter un seul fichier RBT
 bool processRbtFile(const std::string& inputPath, const std::string& outputDir, 
                     const char* codecName, MKVExportConfig::Codec codec,
-                    int forceCanvasWidth = 0, int forceCanvasHeight = 0) {
+                    int forceCanvasWidth, int forceCanvasHeight,
+                    const std::vector<RobotPosition>& robotPositions) {
     
     // Ouvrir le fichier Robot
     FILE* f = fopen(inputPath.c_str(), "rb");
@@ -130,6 +133,63 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
             numFrames, frameRate, (double)numFrames / frameRate);
     fprintf(stderr, "Audio: %s\n", hasAudio ? "yes" : "no");
     
+    // Extraire l'ID du robot depuis le nom du fichier (ex: "1000.RBT" -> 1000)
+    std::string filename = inputPath;
+    size_t lastSlash = filename.find_last_of("/\\");
+    if (lastSlash != std::string::npos) {
+        filename = filename.substr(lastSlash + 1);
+    }
+    size_t lastDot = filename.find_last_of(".");
+    if (lastDot != std::string::npos) {
+        filename = filename.substr(0, lastDot);
+    }
+    int robotId = atoi(filename.c_str());
+    
+    // Chercher les coordonnées du robot dans RESSCI
+    RobotPosition robotPos = findRobotPosition(robotPositions, robotId);
+    
+    // Pré-calculer les dimensions max (scan rapide)
+    parser.computeMaxDimensions();
+    
+    // Décider du mode selon disponibilité des coordonnées RESSCI
+    bool useCanvasMode = (robotPos.robotId == robotId); // Trouvé dans RESSCI
+    
+    // Déclaration des dimensions canvas (utilisées dans tous les cas)
+    int canvasWidth, canvasHeight;
+    
+    if (useCanvasMode) {
+        // Mode Canvas : Robot trouvé dans RESSCI, utiliser architecture ScummVM
+        canvasWidth = (forceCanvasWidth > 0) ? forceCanvasWidth : 630;
+        canvasHeight = (forceCanvasHeight > 0) ? forceCanvasHeight : 450;
+        
+        // Activer le mode canvas avec position du robot (_position.x, _position.y)
+        // Cette position sera combinée avec celX/celY pour chaque cel individuellement
+        parser.setCanvasMode(robotPos.x, robotPos.y, canvasWidth, canvasHeight);
+        
+        fprintf(stderr, "\nRobot %d: CANVAS MODE (found in RESSCI)\n", robotId);
+        fprintf(stderr, "  Position: (%d, %d) on %dx%d canvas\n", 
+                robotPos.x, robotPos.y, canvasWidth, canvasHeight);
+        fprintf(stderr, "  Formula: screenPos = robotPos + celPos (ScummVM)\n");
+    } else {
+        // Mode Crop : Robot NON trouvé dans RESSCI, utiliser dimensions max
+        parser.disableCanvasMode();
+        
+        // Obtenir dimensions max calculées
+        uint16_t maxW, maxH;
+        if (parser.getMaxDimensions(maxW, maxH)) {
+            canvasWidth = maxW;
+            canvasHeight = maxH;
+        } else {
+            // Fallback
+            canvasWidth = 630;
+            canvasHeight = 450;
+        }
+        
+        fprintf(stderr, "\nRobot %d: CROP MODE (not found in RESSCI)\n", robotId);
+        fprintf(stderr, "  Using max cel dimensions: %dx%d from RBT file\n", canvasWidth, canvasHeight);
+        fprintf(stderr, "  celX/celY metadata will be exported separately\n");
+    }
+    
     // Configuration MKV
     MKVExportConfig config;
     config.framerate = frameRate;
@@ -137,21 +197,21 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
     
     // Extraire le nom de base du fichier RBT (sans extension et chemin)
     std::string inputFilename = inputPath;
-    size_t lastSlash = inputFilename.find_last_of("/\\");
-    if (lastSlash != std::string::npos) {
-        inputFilename = inputFilename.substr(lastSlash + 1);
+    size_t lastSlashFilename = inputFilename.find_last_of("/\\");
+    if (lastSlashFilename != std::string::npos) {
+        inputFilename = inputFilename.substr(lastSlashFilename + 1);
     }
-    size_t lastDot = inputFilename.find_last_of(".");
-    if (lastDot != std::string::npos) {
-        inputFilename = inputFilename.substr(0, lastDot);
+    size_t lastDotFilename = inputFilename.find_last_of(".");
+    if (lastDotFilename != std::string::npos) {
+        inputFilename = inputFilename.substr(0, lastDotFilename);
     }
     
     // Chemins de sortie
     std::string mkvPath = outputDir + "/" + inputFilename + "_video";
     std::string wavPath = outputDir + "/" + inputFilename + "_audio.wav";
-    std::string movPath = outputDir + "/" + inputFilename + "_composite.mov";
     std::string metadataPath = outputDir + "/" + inputFilename + "_metadata.txt";
     std::string framesDir = outputDir + "/" + inputFilename + "_frames";
+    // Note: Le fichier MOV est généré par robot_mkv_exporter.cpp avec le nom *_video.mov
     
     // Créer le sous-répertoire pour les frames
 #ifdef _WIN32
@@ -168,10 +228,6 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
         fclose(f);
         return false;
     }
-    
-    // Calculer les dimensions maximales pour mode crop cohérent
-    fprintf(stderr, "Computing maximum dimensions...\n");
-    parser.computeMaxDimensions();
     
     // Extraire toutes les frames et les décomposer en couches
     fprintf(stderr, "Extracting %zu frames...\n", numFrames);
@@ -210,38 +266,41 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
     }
     fprintf(stderr, "\n");
     
-    // Utiliser les dimensions maximales calculées si disponibles
-    uint16_t computedMaxWidth, computedMaxHeight;
-    int canvasWidth, canvasHeight;
-    int contentWidth = 0, contentHeight = 0;  // Déclaration en dehors du if pour le scope
-    
-    if (parser.getMaxDimensions(computedMaxWidth, computedMaxHeight)) {
-        // Utiliser dimensions max calculées (mode crop cohérent)
-        canvasWidth = computedMaxWidth;
-        canvasHeight = computedMaxHeight;
-        contentWidth = computedMaxWidth;   // Pour metadata
-        contentHeight = computedMaxHeight;
-        fprintf(stderr, "Using computed max dimensions: %dx%d\n", canvasWidth, canvasHeight);
-    } else {
-        // Fallback: calculer depuis les layers extraits
-        for (const auto& layer : allLayers) {
-            if (layer.width > contentWidth) contentWidth = layer.width;
-            if (layer.height > contentHeight) contentHeight = layer.height;
-        }
-        fprintf(stderr, "Content Resolution: %dx%d\n", contentWidth, contentHeight);
-        
-        // Appliquer canvas forcé ou auto-détection
-        if (forceCanvasWidth > 0 && forceCanvasHeight > 0) {
-            canvasWidth = forceCanvasWidth;
-            canvasHeight = forceCanvasHeight;
-            fprintf(stderr, "Canvas (forced): %dx%d\n", canvasWidth, canvasHeight);
-        } else {
-            detectCanvasSize(contentWidth, contentHeight, canvasWidth, canvasHeight);
+    // Exporter les métadonnées celX/celY pour mode crop
+    if (!useCanvasMode) {
+        std::string celMetadataPath = outputDir + "/" + inputFilename + "_cel_positions.txt";
+        FILE* celMetaFile = fopen(celMetadataPath.c_str(), "w");
+        if (celMetaFile) {
+            fprintf(celMetaFile, "# Cel Position Metadata for Robot %d\n", robotId);
+            fprintf(celMetaFile, "# Format: frame_number celX celY celWidth celHeight\n");
+            fprintf(celMetaFile, "# These values come from the RBT file cel headers\n");
+            fprintf(celMetaFile, "# Use these to reconstruct ScummVM positioning if needed\n\n");
+            
+            // Re-parcourir les frames pour extraire celX/celY
+            fseek(f, 0, SEEK_SET);
+            parser.parseHeader();
+            
+            for (size_t i = 0; i < numFrames; ++i) {
+                int width = 0, height = 0;
+                int celX = 0, celY = 0;
+                std::vector<uint8_t> pixelIndices;
+                
+                if (parser.extractFramePixelsWithMetadata(i, pixelIndices, width, height, celX, celY)) {
+                    fprintf(celMetaFile, "%zu %d %d %d %d\n", i, celX, celY, width, height);
+                }
+            }
+            
+            fclose(celMetaFile);
+            fprintf(stderr, "  ✓ Cel metadata: %s\n", celMetadataPath.c_str());
         }
     }
     
+    // Canvas déjà configuré avec setCanvasMode() ci-dessus
+    // Les dimensions sont maintenant fixées selon ScummVM
     const int maxWidth = canvasWidth;
     const int maxHeight = canvasHeight;
+    
+    fprintf(stderr, "Final canvas size: %dx%d\n", maxWidth, maxHeight);
     
     // Extraire l'audio
     if (hasAudio) {
@@ -254,7 +313,7 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
     fprintf(stderr, "Encoding MKV (%s)...\n", codecName);
     
     RobotMKVExporter exporter(config);
-    if (!exporter.exportMultiTrack(allLayers, mkvPath, hasAudio ? wavPath : "")) {
+    if (!exporter.exportMultiTrack(allLayers, mkvPath, hasAudio ? wavPath : "", canvasWidth, canvasHeight)) {
         fprintf(stderr, "Error: Multi-track MKV export failed\n");
         fclose(f);
         return false;
@@ -332,28 +391,8 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
         fprintf(stderr, "✓ Frames verified in: %s\n", framesDir.c_str());
     }
     
-    // Générer vidéo composite MOV avec ProRes 4444 (support transparence)
-    fprintf(stderr, "Generating composite MOV (ProRes 4444 with alpha)...\n");
-    std::string ffmpegCmd = "ffmpeg -y -v verbose";
-    ffmpegCmd += " -start_number 0 -framerate " + std::to_string(frameRate);
-    ffmpegCmd += " -i \"" + framesDir + "/frame_%04d.png\"";
-    if (hasAudio) {
-        ffmpegCmd += " -i \"" + wavPath + "\"";
-    }
-    // ProRes 4444 : support natif RGBA avec transparence
-    ffmpegCmd += " -c:v prores_ks -profile:v 4444 -pix_fmt yuva444p10le";
-    if (hasAudio) {
-        ffmpegCmd += " -c:a pcm_s16le";  // Audio PCM lossless dans MOV
-    }
-    ffmpegCmd += " \"" + movPath + "\"";
-    
-    fprintf(stderr, "\nFFmpeg command:\n%s\n\n", ffmpegCmd.c_str());
-    int ret = system(ffmpegCmd.c_str());
-    if (ret == 0) {
-        fprintf(stderr, "  ✓ MOV: %s (ProRes 4444 RGBA)\n", movPath.c_str());
-    } else {
-        fprintf(stderr, "  ⚠ Warning: MOV generation failed (check FFmpeg ProRes support)\n");
-    }
+    // Note: Le fichier MOV ProRes 4444 est généré par robot_mkv_exporter.cpp (Step 2bis)
+    // Pas besoin de le regénérer ici (doublon supprimé)
     
     // Générer le fichier de métadonnées
     fprintf(stderr, "Writing metadata...\n");
@@ -369,11 +408,7 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
         fprintf(metaFile, "  Frame Rate: %d fps\n", frameRate);
         fprintf(metaFile, "  Duration: %.2f seconds\n", (double)numFrames / frameRate);
         fprintf(metaFile, "  Canvas Resolution: %dx%d\n", canvasWidth, canvasHeight);
-        
-        if (!allLayers.empty()) {
-            fprintf(metaFile, "  Content Resolution: %dx%d\n", contentWidth, contentHeight);
-        }
-        
+        fprintf(metaFile, "  Robot Position: (%d, %d)\n", robotPos.x, robotPos.y);
         fprintf(metaFile, "  Codec: %s\n\n", codecName);
         
         fprintf(metaFile, "Audio:\n");
@@ -403,7 +438,7 @@ bool processRbtFile(const std::string& inputPath, const std::string& outputDir,
         fprintf(metaFile, "    * Track 3: LUMINANCE (grayscale Y)\n");
         fprintf(metaFile, "    * Audio: PCM 48 kHz mono\n");
         fprintf(metaFile, "  %s_audio.wav - PCM WAV 22 kHz (native quality)\n", inputFilename.c_str());
-        fprintf(metaFile, "  %s_composite.mov - ProRes 4444 RGBA with alpha + PCM audio\n", inputFilename.c_str());
+        fprintf(metaFile, "  %s_video.mov - ProRes 4444 RGBA with alpha + PCM audio\n", inputFilename.c_str());
         fprintf(metaFile, "  %s_metadata.txt - This file\n\n", inputFilename.c_str());
         
         time_t now = time(nullptr);
@@ -488,6 +523,11 @@ int main(int argc, char* argv[]) {
     }
     fprintf(stderr, "FFmpeg found!\n");
     
+    // Charger les positions des robots
+    fprintf(stderr, "\nLoading robot positions...\n");
+    std::vector<RobotPosition> robotPositions = loadRobotPositions();
+    fprintf(stderr, "\n");
+    
     // Chercher le répertoire RBT (essayer RBT/ puis RBT_test/)
     std::vector<std::string> rbtFiles;
     std::string rbtDir;
@@ -554,8 +594,8 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Processing [%zu/%zu]: %s\n", i + 1, rbtFiles.size(), filename.c_str());
         fprintf(stderr, "========================================\n");
         
-        // Traiter le fichier
-        if (processRbtFile(inputPath, fileOutputDir, codecStr, codec, forceCanvasWidth, forceCanvasHeight)) {
+        // Traiter le fichier avec les positions des robots
+        if (processRbtFile(inputPath, fileOutputDir, codecStr, codec, forceCanvasWidth, forceCanvasHeight, robotPositions)) {
             successCount++;
             fprintf(stderr, "✓ SUCCESS: %s\n", filename.c_str());
         } else {
@@ -572,6 +612,49 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "  Success: %zu\n", successCount);
     fprintf(stderr, "  Failed: %zu\n", failCount);
     fprintf(stderr, "\nAll outputs saved to: output/\n");
+    
+    // Générer le récapitulatif des coordonnées
+    fprintf(stderr, "\nGenerating coordinates summary...\n");
+    std::string coordinatesSummaryPath = "output/robot_coordinates_summary.txt";
+    FILE* coordFile = fopen(coordinatesSummaryPath.c_str(), "w");
+    if (coordFile) {
+        fprintf(coordFile, "=== Robot Coordinates Summary ===\n");
+        fprintf(coordFile, "Extracted from: robot_positions_extracted.txt\n");
+        fprintf(coordFile, "Total robots with RESSCI positions: %zu\n\n", robotPositions.size());
+        
+        fprintf(coordFile, "Format: RobotID | X | Y\n");
+        fprintf(coordFile, "%-10s | %-6s | %-6s\n", "Robot ID", "X", "Y");
+        fprintf(coordFile, "--------------------------------\n");
+        
+        // Afficher TOUTES les positions trouvées dans RESSCI (triées par ID)
+        std::vector<RobotPosition> sortedPositions = robotPositions;
+        std::sort(sortedPositions.begin(), sortedPositions.end(), 
+                  [](const RobotPosition& a, const RobotPosition& b) {
+                      return a.robotId < b.robotId;
+                  });
+        
+        for (const auto& pos : sortedPositions) {
+            fprintf(coordFile, "%-10d | %-6d | %-6d\n", 
+                    pos.robotId, pos.x, pos.y);
+        }
+        
+        fprintf(coordFile, "\n=== Information ===\n");
+        fprintf(coordFile, "These coordinates represent Robot positions found in RESSCI files.\n");
+        fprintf(coordFile, "Canvas resolution: 630x450 pixels (Phantasmagoria)\n");
+        fprintf(coordFile, "Origin: top-left corner (0,0)\n\n");
+        fprintf(coordFile, "ScummVM positioning formula:\n");
+        fprintf(coordFile, "  screenX = robotX + celX\n");
+        fprintf(coordFile, "  screenY = robotY + celY - celHeight\n");
+        fprintf(coordFile, "  (where celX/celY are relative offsets from RBT files)\n");
+        
+        time_t now = time(nullptr);
+        fprintf(coordFile, "\nGenerated: %s", ctime(&now));
+        
+        fclose(coordFile);
+        fprintf(stderr, "✓ Coordinates summary: %s\n", coordinatesSummaryPath.c_str());
+    } else {
+        fprintf(stderr, "⚠ Warning: Could not create coordinates summary file\n");
+    }
     
     return (failCount > 0) ? 1 : 0;
 }

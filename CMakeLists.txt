@@ -11,6 +11,7 @@ option(BUILD_TESTS "Construire les tests unitaires" ON)
 add_executable(robot_extractor
     src/main.cpp
     src/core/rbt_parser.cpp
+    src/core/scummvm_robot_helpers.cpp
     src/formats/robot_mkv_exporter.cpp
     src/formats/decompressor_lzs.cpp
     src/formats/lzs.cpp
@@ -28,6 +29,7 @@ target_include_directories(robot_extractor PRIVATE
 add_executable(export_robot_mkv
     src/export_robot_mkv.cpp
     src/core/rbt_parser.cpp
+    src/core/scummvm_robot_helpers.cpp
     src/formats/robot_mkv_exporter.cpp
     src/formats/decompressor_lzs.cpp
     src/formats/lzs.cpp

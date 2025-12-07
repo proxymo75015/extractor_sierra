@@ -58,6 +58,14 @@ public:
      * @return true si succès, pixels stockés dans outPixels (320x240)
      */
     bool extractFramePixels(size_t frameIndex, std::vector<uint8_t>& outPixels, int& outWidth, int& outHeight);
+    bool extractFramePixels(size_t frameIndex, std::vector<uint8_t>& outPixels, int& outWidth, int& outHeight, int& outOffsetX, int& outOffsetY);
+    
+    /**
+     * Extrait les pixels d'une frame avec métadonnées cel complètes (celX, celY)
+     */
+    bool extractFramePixelsWithMetadata(size_t frameIndex, std::vector<uint8_t>& outPixels, 
+                                        int& outWidth, int& outHeight, 
+                                        int& outCelX, int& outCelY);
     
     /**
      * Récupère la palette RGB courante

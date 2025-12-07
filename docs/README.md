@@ -56,8 +56,8 @@ Documentation complète du projet **robot_extractor** - Extracteur vidéo unifi�
 ### Installation et compilation
 
 ```bash
-git clone https://github.com/proxymo75015/extractor_sierra.git
-cd extractor_sierra
+git clone https://github.com/proxymo75015/robot_extract.git
+cd robot_extract
 mkdir -p build && cd build
 cmake ..
 make -j$(nproc)
@@ -133,7 +133,7 @@ for (pixel : frame) {
 ## 📖 Structure projet
 
 ```
-extractor_sierra/
+robot_extract/
 ├── build/
 │   └── robot_extractor           # Programme unifié
 ├── src/

@@ -1,4 +1,5 @@
 #include "rbt_parser.h"
+#include "scummvm_robot_helpers.h"
 #include <cassert>
 #include <cstring>
 #include <map>
@@ -16,6 +17,8 @@
 #include "utils/memory_stream.h"
 #include "formats/decompressor_lzs.h"
 #include "utils/sci_util.h"
+
+using namespace ScummVMRobot;
 
 // Local constants copied from ScummVM behaviour.
 static const size_t kRobotZeroCompressSize = 2048;
@@ -744,39 +747,37 @@ uint32_t RbtParser::createCel5(const uint8_t *rawVideoData, const int16_t screen
     // write PPM (RGB) avec palette
     char name[512];
     
-    // Déterminer les dimensions finales de l'image
+    // Créer métadonnées du cel pour calculs ScummVM
+    CelMetadata celMeta(celX, celY, celWidth, celHeight);
+    CelScreenPosition screenPos;
+    
     int finalWidth, finalHeight;
-    int offsetX = 0, offsetY = 0;
     
     if (_useCanvasMode) {
-        // Mode canvas: dimensions fixes 630x450, Robot positionné selon coordonnées
-        finalWidth = _canvasWidth;
-        finalHeight = _canvasHeight;
-        offsetX = _canvasX + celX;  // Position absolue = coordonnées Robot + offset du cel
-        offsetY = _canvasY + celY;
+        // Mode CANVAS: Utiliser formule ScummVM avec position RESSCI
+        RobotPosition robotPos(0, _canvasX, _canvasY);  // robotId=0 pour compatibilité
+        
+        screenPos = calculateCanvasPosition(robotPos, celMeta);
+        finalWidth = celWidth;   // Dimensions réelles du cel (pas de padding canvas)
+        finalHeight = celHeight;
     } else {
-        // Mode crop serré: utiliser dimensions maximales du Robot pour cohérence
+        // Mode CROP: Utiliser formule ScummVM sans position RESSCI
+        screenPos = calculateCropPosition(celMeta);
+        
         if (!_maxDimensionsComputed || _maxCelWidth == 0 || _maxCelHeight == 0) {
             // Fallback: dimensions du cel si pas calculées
             finalWidth = celWidth;
             finalHeight = celHeight;
-            offsetX = 0;
-            offsetY = 0;
         } else {
-            // Utiliser dimensions max et respecter offsets ScummVM (celX, celY)
+            // Canvas aux dimensions MAX du RBT
             finalWidth = _maxCelWidth;
             finalHeight = _maxCelHeight;
-            // Utiliser les offsets du cel comme dans ScummVM
-            offsetX = celX;
-            offsetY = celY;
         }
     }
     
     // IMPORTANT: Padder les dimensions à un multiple de 2 pour H.264/YUV420p
-    int paddedWidth = finalWidth;
-    int paddedHeight = finalHeight;
-    if (paddedWidth % 2 != 0) paddedWidth++;
-    if (paddedHeight % 2 != 0) paddedHeight++;
+    int paddedWidth = roundToEven(finalWidth);
+    int paddedHeight = roundToEven(finalHeight);
     
     if (!_paletteData.empty() && _paletteSize >= 768) {
         snprintf(name, sizeof(name), "%s/frame_%04zu_cel_%02d.ppm", outDir, frameIndex, screenItemIndex);
@@ -785,9 +786,9 @@ uint32_t RbtParser::createCel5(const uint8_t *rawVideoData, const int16_t screen
         
         for (int y = 0; y < paddedHeight; ++y) {
             for (int x = 0; x < paddedWidth; ++x) {
-                // Calculer la position relative dans le cel
-                int celRelX = x - offsetX;
-                int celRelY = y - offsetY;
+                // Calculer la position relative dans le cel (utiliser screenPos calculé)
+                int celRelX = x - screenPos.offsetX;
+                int celRelY = y - screenPos.offsetY;
                 
                 // Vérifier si on est dans la zone du cel
                 bool inCel = (celRelX >= 0 && celRelX < celWidth && celRelY >= 0 && celRelY < celHeight);
@@ -817,8 +818,8 @@ uint32_t RbtParser::createCel5(const uint8_t *rawVideoData, const int16_t screen
         img << "P5\n" << paddedWidth << " " << paddedHeight << "\n255\n";
         for (int y = 0; y < paddedHeight; ++y) {
             for (int x = 0; x < paddedWidth; ++x) {
-                int celRelX = x - offsetX;
-                int celRelY = y - offsetY;
+                int celRelX = x - screenPos.offsetX;
+                int celRelY = y - screenPos.offsetY;
                 bool inCel = (celRelX >= 0 && celRelX < celWidth && celRelY >= 0 && celRelY < celHeight);
                 
                 if (x >= finalWidth || y >= finalHeight || !inCel) {
@@ -1345,3 +1346,96 @@ bool RbtParser::extractFramePixels(size_t frameIndex, std::vector<uint8_t>& outP
     
     return true;
 }
+
+// Surcharge retournant aussi les offsets pour le mode canvas
+bool RbtParser::extractFramePixels(size_t frameIndex, std::vector<uint8_t>& outPixels, int& outWidth, int& outHeight, int& outOffsetX, int& outOffsetY) {
+    if (frameIndex >= _recordPositions.size()) {
+        return false;
+    }
+    
+    // Initialiser offsets à 0 par défaut
+    outOffsetX = 0;
+    outOffsetY = 0;
+    
+    // Position de la frame
+    size_t startPos = _recordPositions[frameIndex];
+    if (!seekSet(startPos)) return false;
+    
+    // Lire le nombre de cels
+    uint16_t numCels = _bigEndian ? readUint16BE() : readUint16LE();
+    if (numCels == 0 || numCels > 10) return false;
+    
+    // Lire les données brutes pour obtenir les dimensions du premier cel
+    std::vector<uint8_t> rawVideoData(_videoSizes[frameIndex]);
+    seekSet(startPos);
+    if (fread(rawVideoData.data(), 1, _videoSizes[frameIndex], _f) != _videoSizes[frameIndex]) {
+        return false;
+    }
+    
+    const uint8_t *p = rawVideoData.data() + 2;  // Skip numCels
+    
+    // Lire le premier cel pour obtenir ses dimensions et position
+    const uint16_t celWidth = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 2);
+    const uint16_t celHeight = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 4);
+    const uint16_t celX = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 10);
+    const uint16_t celY = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 12);
+    
+    // Calculer les offsets selon le mode
+    if (_useCanvasMode) {
+        // Mode canvas: combiner position Robot + offset relatif du cel (comme ScummVM)
+        outOffsetX = _canvasX + celX;
+        // NOTE: _canvasY + celY représente le BAS du sprite (pieds), comme ScummVM
+        outOffsetY = _canvasY + celY - celHeight;
+        outWidth = _canvasWidth;
+        outHeight = _canvasHeight;
+    } else if (_maxDimensionsComputed && _maxCelWidth > 0 && _maxCelHeight > 0) {
+        // Mode crop: utiliser celX/celY comme offsets relatifs
+        outOffsetX = celX;
+        outOffsetY = celY;
+        outWidth = _maxCelWidth;
+        outHeight = _maxCelHeight;
+    } else {
+        outOffsetX = celX;
+        outOffsetY = celY;
+        outWidth = celWidth;
+        outHeight = celHeight;
+    }
+    
+    // Appeler la version originale pour extraire les pixels
+    return extractFramePixels(frameIndex, outPixels, outWidth, outHeight);
+}
+
+bool RbtParser::extractFramePixelsWithMetadata(size_t frameIndex, std::vector<uint8_t>& outPixels, 
+                                               int& outWidth, int& outHeight, 
+                                               int& outCelX, int& outCelY) {
+    if (frameIndex >= _recordPositions.size()) {
+        return false;
+    }
+    
+    // Position de la frame
+    size_t startPos = _recordPositions[frameIndex];
+    if (!seekSet(startPos)) return false;
+    
+    // Lire le nombre de cels
+    uint16_t numCels = _bigEndian ? readUint16BE() : readUint16LE();
+    if (numCels == 0 || numCels > 10) return false;
+    
+    // Lire les données brutes pour obtenir les dimensions du premier cel
+    std::vector<uint8_t> rawVideoData(_videoSizes[frameIndex]);
+    seekSet(startPos);
+    if (fread(rawVideoData.data(), 1, _videoSizes[frameIndex], _f) != _videoSizes[frameIndex]) {
+        return false;
+    }
+    
+    const uint8_t *p = rawVideoData.data() + 2;  // Skip numCels
+    
+    // Lire le premier cel pour obtenir ses métadonnées complètes
+    outWidth = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 2);
+    outHeight = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 4);
+    outCelX = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 10);
+    outCelY = SciHelpers::READ_SCI11ENDIAN_UINT16(p + 12);
+    
+    // Extraire les pixels (version simple sans offsets)
+    return extractFramePixels(frameIndex, outPixels, outWidth, outHeight);
+}
+

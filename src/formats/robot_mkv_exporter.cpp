@@ -1,4 +1,5 @@
 #include "robot_mkv_exporter.h"
+#include "../core/scummvm_robot_helpers.h"
 #include "../include/stb_image_write.h"
 #include <sstream>
 #include <cstdlib>
@@ -8,6 +9,8 @@
 #include <ctime>
 
 namespace RobotExtractor {
+
+using namespace ScummVMRobot;
 
 RobotMKVExporter::RobotMKVExporter(const MKVExportConfig& config)
     : config_(config) {
@@ -26,12 +29,12 @@ RobotLayerFrame decomposeRobotFrame(
     // Référence: ScummVM engines/sci/graphics/robot.cpp
     const uint8_t REMAP_START_PC = 236;
     const uint8_t REMAP_END = 254;
-    const uint8_t SKIP_COLOR = 255;
+    // SKIP_COLOR maintenant défini dans scummvm_robot_helpers.h
     
     for (size_t i = 0; i < pixelCount; ++i) {
         uint8_t paletteIndex = pixelIndices[i];
         
-        if (paletteIndex == SKIP_COLOR) {
+        if (isTransparentPixel(paletteIndex)) {
             // Type 3: SKIP - Pixel transparent
             frame.alpha[i] = 0;  // Transparent
             frame.base_r[i] = 0;
@@ -88,11 +91,12 @@ bool RobotMKVExporter::exportMultiTrack(
     // Utiliser canvas forcé si fourni, sinon calculer bbox globale réelle
     int maxWidth = canvasWidth;
     int maxHeight = canvasHeight;
-    int cropOffsetX = 0, cropOffsetY = 0;  // Offset à retirer
+    int cropOffsetX = 0, cropOffsetY = 0;  // Offset à retirer (mode tight crop)
+    bool isCanvasMode = (canvasWidth > 0 && canvasHeight > 0);
     int globalMinX = 0, globalMinY = 0, globalMaxX = 0, globalMaxY = 0;
     
-    if (maxWidth == 0 || maxHeight == 0) {
-        // Calculer la bounding box globale de tous les pixels visibles
+    if (!isCanvasMode) {
+        // Mode tight crop: calculer la bounding box globale de tous les pixels visibles
         globalMinX = INT_MAX;
         globalMinY = INT_MAX;
         globalMaxX = 0;
@@ -134,7 +138,8 @@ bool RobotMKVExporter::exportMultiTrack(
         fprintf(stderr, "Tight crop bounding box: %dx%d (removing offset %d,%d)\n", 
                 maxWidth, maxHeight, cropOffsetX, cropOffsetY);
     } else {
-        fprintf(stderr, "Using forced canvas: %dx%d\n", maxWidth, maxHeight);
+        // Mode CANVAS: conserver les dimensions du canvas sans crop
+        fprintf(stderr, "Canvas mode: %dx%d (no cropping, full canvas resolution)\n", maxWidth, maxHeight);
     }
     
     const int w = maxWidth;
@@ -208,15 +213,23 @@ bool RobotMKVExporter::exportMultiTrack(
             for (int x = 0; x < frameWidth; ++x) {
                 const size_t srcIdx = y * frameWidth + x;
                 
-                // Appliquer le crop: vérifier si ce pixel est dans la bbox
-                int croppedX = x - cropOffsetX;
-                int croppedY = y - cropOffsetY;
-                
-                if (croppedX < 0 || croppedX >= w || croppedY < 0 || croppedY >= h) {
-                    continue;  // Pixel en dehors de la bbox, ignorer
+                int dstX, dstY;
+                if (isCanvasMode) {
+                    // Mode canvas: les pixels sont déjà positionnés correctement dans le layer
+                    // (le positionnement a été fait lors de la création des frames)
+                    dstX = x;
+                    dstY = y;
+                } else {
+                    // Mode tight crop: appliquer le crop offset
+                    dstX = x - cropOffsetX;
+                    dstY = y - cropOffsetY;
                 }
                 
-                const size_t dstIdx = croppedY * w + croppedX;  // Position dans le buffer croppé
+                if (dstX < 0 || dstX >= w || dstY < 0 || dstY >= h) {
+                    continue;  // Pixel en dehors du canvas/bbox
+                }
+                
+                const size_t dstIdx = dstY * w + dstX;
                 
                 // BASE: Pixels opaques non-remap (RGB complet)
                 if (layer.remap_mask[srcIdx] == 0 && layer.alpha[srcIdx] == 255) {
@@ -421,20 +434,27 @@ bool RobotMKVExporter::exportMultiTrack(
         const size_t canvasPixelCount = (size_t)w * (size_t)h;
         std::vector<uint8_t> rgbaImage(canvasPixelCount * 4, 0);  // Noir transparent par défaut
         
-        // Copier pixels de la frame vers le canvas croppé
+        // Copier pixels de la frame vers le canvas
         for (int y = 0; y < frameHeight; ++y) {
             for (int x = 0; x < frameWidth; ++x) {
                 const size_t srcIdx = y * frameWidth + x;
                 
-                // Appliquer le crop offset
-                int croppedX = x - cropOffsetX;
-                int croppedY = y - cropOffsetY;
-                
-                if (croppedX < 0 || croppedX >= w || croppedY < 0 || croppedY >= h) {
-                    continue;  // Pixel en dehors de la bbox
+                int dstX, dstY;
+                if (isCanvasMode) {
+                    // Mode canvas: les pixels sont déjà positionnés correctement dans le layer
+                    dstX = x;
+                    dstY = y;
+                } else {
+                    // Mode tight crop: appliquer le crop offset
+                    dstX = x - cropOffsetX;
+                    dstY = y - cropOffsetY;
                 }
                 
-                const size_t dstIdx = croppedY * w + croppedX;
+                if (dstX < 0 || dstX >= w || dstY < 0 || dstY >= h) {
+                    continue;  // Pixel en dehors du canvas/bbox
+                }
+                
+                const size_t dstIdx = dstY * w + dstX;
                 
                 if (layer.alpha[srcIdx] == 0) {
                     // Transparent (skip pixel 255)
@@ -467,7 +487,7 @@ bool RobotMKVExporter::exportMultiTrack(
     }
     
     // Générer MOV ProRes 4444 avec canal alpha
-    std::string movFile = outputPath + "_composite.mov";
+    std::string movFile = outputPath + ".mov";
     std::ostringstream movCmd;
     movCmd << "ffmpeg -y -loglevel error -framerate " << config_.framerate
            << " -start_number 0 -i " << framesDir << "/frame_%04d.png";
