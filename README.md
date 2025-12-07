@@ -205,27 +205,4 @@ MIT License - voir [LICENSE](LICENSE)
 
 **Version 3.0.0** - Extracteur unifié avec MKV multicouche + MOV ProRes 4444 RGBA
 
-
-Voir [CHANGELOG.md](CHANGELOG.md) pour l'historique complet des versions.
-
-### Version actuelle : 2.6.0
-
-**Nouveautés :**
-- ✨ Modes automatiques Crop/Canvas selon coordonnées
-- 🎯 Intégration RESSCI avec positionnement
-- 🎨 Rendu sur canvas 630x450 ou dimensions Robot
-- 📖 Documentation complète restructurée
-
-## 📜 Licence
-
-Ce projet est sous licence MIT. Voir [LICENSE](LICENSE) pour plus de détails.
-
-## 🙏 Remerciements
-
-- **ScummVM Team** : Reverse engineering SCI32
-- **Sierra On-Line** : Création du moteur SCI
-- **Communauté Phantasmagoria** : Tests et feedback
-
----
-
 **Développé avec ❤️ pour la préservation des jeux classiques Sierra**

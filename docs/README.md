@@ -66,27 +66,27 @@ make -j$(nproc)
 ### Extraction batch
 
 ```bash
-./build/robot_extractor RBT/ Resource/ output/
+./build/export_robot_mkv RBT/
 ```
 
 Génère pour chaque `{ID}.RBT` :
-- `{ID}_video.mkv` - MKV 4 pistes
-- `{ID}_video_composite.mov` - MOV ProRes 4444 RGBA
+- `{ID}_video.mkv` - MKV 4 pistes + audio
+- `{ID}_video.mov` - MOV ProRes 4444 RGBA + audio
 - `{ID}_audio.wav` - Audio WAV 22050 Hz
 - `{ID}_frames/` - PNG RGBA
-- `metadata.txt` - Métadonnées
+- `{ID}_metadata.txt` - Métadonnées
 
 ### Modes automatiques
 
 **Canvas 630×450** si coordonnées RESSCI trouvées :
 ```
-Robot 1000: position (270, 150) → canvas 630×450
+Robot 260: position (257, 257) → canvas 630×450
 ```
 
 **Tight crop** sinon :
 ```
-Robot 1180: 133×296 (réduction 69% vs crop simple)
-Robot 230: 170×342 (réduction 68% vs crop simple)
+Robot 161: 112×155 (crop automatique)
+Robot 162: 258×332 (crop automatique)
 ```
 
 ---
@@ -105,27 +105,27 @@ Robot 230: 170×342 (réduction 68% vs crop simple)
 - **Format** : yuva444p10le (YUV 4:4:4 + alpha 10-bit)
 - **Transparence** : Canal alpha complet
 
-### Tight Crop Algorithm
+### Architecture ScummVM
+
+**Mode CANVAS** (coordonnées RESSCI disponibles) :
 ```cpp
-// 1. Calcul bounding box globale
-for (frame : frames) {
-    for (pixel : frame if alpha > 0) {
-        globalMinX = min(globalMinX, x);
-        globalMaxX = max(globalMaxX, x);
-        globalMinY = min(globalMinY, y);
-        globalMaxY = max(globalMaxY, y);
-    }
-}
+// Formule positionnement ScummVM
+screenX = robotX + celX
+screenY = robotY + celY - celHeight
 
-// 2. Dimensions finales
-width = globalMaxX - globalMinX + 1;
-height = globalMaxY - globalMinY + 1;
+// Exemple Robot 260 (position RESSCI: 257, 257)
+// Cel: width=235, height=267, celX=0, celY=267
+screenX = 257 + 0 = 257
+screenY = 257 + 267 - 267 = 257
+// Résultat: canvas 630×450 pixels
+```
 
-// 3. Application crop
-for (pixel : frame) {
-    croppedX = x - globalMinX;
-    croppedY = y - globalMinY;
-}
+**Mode CROP** (pas de coordonnées RESSCI) :
+```cpp
+// Tight crop automatique
+screenX = celX
+screenY = celY - celHeight
+// Résultat: dimensions minimales (bounding box)
 ```
 
 ---
@@ -135,12 +135,13 @@ for (pixel : frame) {
 ```
 robot_extract/
 ├── build/
-│   └── robot_extractor           # Programme unifié
+│   └── export_robot_mkv          # Programme extraction batch
 ├── src/
-│   ├── main.cpp                  # robot_extractor
+│   ├── export_robot_mkv.cpp      # Extraction batch MKV/MOV
 │   ├── core/
 │   │   ├── rbt_parser.cpp        # Parser Robot
-│   │   └── ressci_parser.cpp     # Parser RESSCI
+│   │   ├── ressci_parser.cpp     # Parser RESSCI
+│   │   └── scummvm_robot_helpers.cpp # Formules ScummVM
 │   ├── formats/
 │   │   ├── robot_mkv_exporter.cpp # Export MKV/MOV
 │   │   ├── lzs.cpp               # Décompression LZS
@@ -149,7 +150,6 @@ robot_extract/
 ├── docs/
 │   └── reference/                # Documentation formats
 ├── RBT/                          # Fichiers .RBT input
-├── Resource/                     # Fichiers RESSCI (coordonnées)
 └── output/                       # Fichiers générés
 ```
 

@@ -12,8 +12,6 @@ namespace RobotExtractor {
 struct RobotLayerFrame {
     int width;
     int height;
-    int offsetX;  // Position X sur le canvas (pour mode canvas)
-    int offsetY;  // Position Y sur le canvas (pour mode canvas)
     
     // Couche 1: RGB base (pixels 0-235) - Couleurs fixes opaques
     std::vector<uint8_t> base_r;
@@ -29,8 +27,8 @@ struct RobotLayerFrame {
     // Couche 3: Alpha transparency (pixel 255) - Transparence
     std::vector<uint8_t> alpha;  // 255 = opaque, 0 = transparent (skip)
     
-    RobotLayerFrame(int w, int h, int ox = 0, int oy = 0) 
-        : width(w), height(h), offsetX(ox), offsetY(oy) {
+    RobotLayerFrame(int w, int h) 
+        : width(w), height(h) {
         size_t size = (size_t)w * (size_t)h;
         
         // Protection contre allocations trop grandes
