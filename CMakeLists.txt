@@ -10,9 +10,7 @@ if(WIN32)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++ -static")
 endif()
 
-option(BUILD_TESTS "Construire les tests unitaires" ON)
-
-# Add main executable
+# Extracteur principal : analyse RBT et extrait frames/audio
 add_executable(robot_extractor
     src/main.cpp
     src/core/rbt_parser.cpp
@@ -30,7 +28,7 @@ target_include_directories(robot_extractor PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
 
-# Add MKV exporter executable
+# Exporteur MKV : génère vidéos MKV depuis RBT avec coordonnées
 add_executable(export_robot_mkv
     src/export_robot_mkv.cpp
     src/core/rbt_parser.cpp
@@ -49,22 +47,9 @@ target_include_directories(export_robot_mkv PRIVATE
     ${CMAKE_SOURCE_DIR}/src
 )
 
-# Add RESSCI coordinate extractor
-add_executable(extract_coordinates
-    src/extract_coordinates.cpp
-    src/core/ressci_parser.cpp
-    src/formats/lzs.cpp
-    src/formats/decompressor_lzs.cpp
-)
-target_include_directories(extract_coordinates PRIVATE 
-    ${CMAKE_SOURCE_DIR} 
-    ${CMAKE_SOURCE_DIR}/include 
-    ${CMAKE_SOURCE_DIR}/src
-)
-
 include(FetchContent)
 
-# Find or fetch nlohmann_json
+# JSON library pour configuration
 find_package(nlohmann_json 3.11.2 CONFIG QUIET)
 if(NOT nlohmann_json_FOUND)
   FetchContent_Declare(nlohmann_json
@@ -73,30 +58,5 @@ if(NOT nlohmann_json_FOUND)
   FetchContent_MakeAvailable(nlohmann_json)
 endif()
 
-if(NOT BUILD_TESTS)
-  # Disabled for now - missing source file
-  # add_executable(robot_extractor src/robot_extractor.cpp)
-  # target_include_directories(robot_extractor PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src)
-  # target_link_libraries(robot_extractor PRIVATE nlohmann_json::nlohmann_json)
-endif()
-
-# Utility to dump RBT compressed blocks for inspection (disabled - missing source)
-# add_executable(rbt_dumper src/rbt_dumper.cpp src/robot_extractor.cpp)
-# target_include_directories(rbt_dumper PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src)
-
-if(BUILD_TESTS)
-  # Disabled for now - missing source file
-  # enable_testing()
-  # FetchContent_Declare(Catch2 GIT_REPOSITORY https://github.com/catchorg/Catch2.git GIT_TAG v3.4.0)
-  # FetchContent_MakeAvailable(Catch2)
-
-  # file(GLOB TEST_SOURCES tests/*.cpp)
-  # add_executable(tests ${TEST_SOURCES} src/robot_extractor.cpp)
-  # target_compile_definitions(tests PRIVATE ROBOT_EXTRACTOR_NO_MAIN ROBOT_EXTRACTOR_TESTING)
-  # target_include_directories(tests PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/src)
-  # target_link_libraries(tests PRIVATE Catch2::Catch2WithMain nlohmann_json::nlohmann_json)
-  # add_test(NAME ExtractionTests COMMAND tests)
-endif()
-
-install(FILES readme.md DESTINATION . CONFIGURATIONS Release)
+install(FILES README.md LICENSE DESTINATION . CONFIGURATIONS Release)
 

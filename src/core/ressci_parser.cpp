@@ -23,6 +23,8 @@
 #include <iostream>
 #include <cstring>
 #include <algorithm>
+#include <set>
+#include <set>
 
 namespace SCI {
 
@@ -39,6 +41,9 @@ static const char* s_compressionMethodNames[] = {
     "RLE+Huffman", "LZ Advanced", "Unknown", "STACpack"
 };
 
+// Suivi des méthodes de compression non supportées
+std::set<uint8_t> RESSCIParser::s_unsupportedMethodsLogged;
+
 // Helpers pour lecture little-endian
 static inline uint16_t readLE16(const uint8_t* data) {
     return data[0] | (data[1] << 8);
@@ -52,18 +57,21 @@ static inline int16_t readSLE16(const uint8_t* data) {
     return static_cast<int16_t>(readLE16(data));
 }
 
-RESSCIParser::RESSCIParser() {
+RESSCIParser::RESSCIParser() : m_currentVolume(1), m_detectedFormat(ResMapFormat::FORMAT_UNKNOWN) {
 }
 
 RESSCIParser::~RESSCIParser() {
 }
 
-bool RESSCIParser::loadResMap(const std::string& path) {
+bool RESSCIParser::loadResMap(const std::string& path, uint8_t volumeNumber) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
         std::cerr << "Erreur: impossible d'ouvrir " << path << std::endl;
         return false;
     }
+    
+    // Sauvegarder le numéro de volume pour l'indexation
+    m_currentVolume = volumeNumber;
     
     // Lire tout le fichier
     file.seekg(0, std::ios::end);
@@ -179,67 +187,178 @@ bool RESSCIParser::parseResMapHeader() {
         return false;
     }
     
-    // Détection automatique du format
-    ResMapFormat format = detectFormat();
+    // PARSING STYLE SCUMMVM : Table d'indirection + listes par type
+    // Format SCI1/SCI1.1 : Header avec (type[1B] + offset[2B LE]) répété jusqu'à 0xFF
+    // Puis pour chaque type : liste de (number[2B LE] + offset[3B ou 4B LE])
     
     std::map<uint8_t, int> typeCounts;
+    std::map<uint8_t, std::pair<uint16_t, uint16_t>> typeTable; // type -> (offset, size)
     
-    if (format == ResMapFormat::FORMAT_6_BYTES) {
-        // Format 6 octets: type[1B] + number[2B LE] + offset[3B LE]
-        size_t numEntries = m_resMapData.size() / 6;
-        std::cout << "✓ Format détecté: 6 octets (SCI1.1/variante)" << std::endl;
-        std::cout << "  Nombre d'entrées: " << numEntries << std::endl;
+    // ÉTAPE 1 : Lire la table d'indirection (header)
+    size_t pos = 0;
+    uint8_t prevType = 0;
+    uint16_t prevOffset = 0;
+    
+    std::cout << "Parsing RESMAP (style ScummVM avec table d'indirection)..." << std::endl;
+    
+    // Table de conversion type index → ResourceType (comme ScummVM)
+    // Index dans RESMAP (0-31) → ResourceType (0x80-0x95)
+    static const uint8_t typeConversionTable[] = {
+        0x88, // 0x00 → RT_VIEW
+        0x87, // 0x01 → RT_PIC  
+        0x80, // 0x02 → RT_SCRIPT
+        0x83, // 0x03 → RT_TEXT
+        0x81, // 0x04 → RT_SOUND
+        0x82, // 0x05 → RT_MEMORY
+        0x86, // 0x06 → RT_VOCAB
+        0x84, // 0x07 → RT_FONT
+        0x85, // 0x08 → RT_CURSOR
+        0x89, // 0x09 → RT_PATCH
+        0x8A, // 0x0A → RT_BITMAP
+        0x8B, // 0x0B → RT_PALETTE
+        0x8C, // 0x0C → RT_CDAUDIO
+        0x8D, // 0x0D → RT_AUDIO
+        0x8E, // 0x0E → RT_SYNC
+        0x8F, // 0x0F → RT_MESSAGE
+        0x90, // 0x10 → RT_CHUNK
+        0x91, // 0x11 → RT_HEAP
+        0x92, // 0x12 → RT_AUDIO36
+        0x93, // 0x13 → RT_SYNC36
+        0x94, // 0x14 → RT_CHUNK
+        0x95, // 0x15 → RT_AUDIOMAP
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF  // 0x16-0x1F unused
+    };
+    
+    // ÉTAPE 1a : Lire tous les (type, offset) y compris le terminateur
+    std::vector<std::pair<uint8_t, uint16_t>> allEntries;
+    
+    while (pos + 3 <= m_resMapData.size()) {
+        uint8_t typeRaw = m_resMapData[pos];
+        uint8_t type = typeRaw & 0x1F;  // Masquer pour obtenir type réel
+        uint16_t offset = readLE16(&m_resMapData[pos + 1]);
+        
+        pos += 3;
+        
+        allEntries.push_back({type, offset});
+        
+        // 0x1F (0xFF & 0x1F) = terminateur
+        if (type == 0x1F) {
+            std::cout << "  Terminateur trouvé à l'offset " << pos - 3 << std::endl;
+            break;
+        }
+    }
+    
+    // ÉTAPE 1b : Calculer les tailles en utilisant l'offset suivant
+    for (size_t i = 0; i < allEntries.size(); i++) {
+        uint8_t type = allEntries[i].first;
+        uint16_t offset = allEntries[i].second;
+        
+        if (type == 0x1F) break;  // Ignorer le terminateur
+        
+        // Calculer la taille jusqu'au prochain offset (ou fin du fichier)
+        uint16_t size;
+        if (i + 1 < allEntries.size()) {
+            size = allEntries[i + 1].second - offset;
+        } else {
+            // Dernier type : utiliser la taille du fichier RESMAP
+            size = m_resMapData.size() - offset;
+        }
+        
+        typeTable[type] = std::make_pair(offset, size);
+    }
+    
+    std::cout << "  Table d'indirection : " << typeTable.size() << " types trouvés" << std::endl;
+    
+    // ÉTAPE 2 : Détection automatique du format d'entrée (comme ScummVM)
+    // SCI1.1/SCI2: 5 bytes (number[2B] + offset[3B])
+    // SCI0/SCI1:   6 bytes (number[2B] + offset[4B])
+    // Méthode ScummVM: tester si les tailles de sections sont divisibles par 5 ou 6
+    
+    ResMapFormat mapDetected = RES_FORMAT_UNKNOWN;
+    
+    // Parcourir les sections pour détecter le format
+    for (const auto& [typeRaw, offsetSize] : typeTable) {
+        uint16_t sizeBytes = offsetSize.second;
+        
+        if (sizeBytes == 0) continue;
+        
+        // ScummVM logic (resource.cpp ligne 1352-1356):
+        // if ((directorySize % 5) && (directorySize % 6 == 0))
+        //     mapDetected = kResVersionSci1Late;
+        // if ((directorySize % 5 == 0) && (directorySize % 6))
+        //     mapDetected = kResVersionSci11;
+        
+        bool divisibleBy5 = (sizeBytes % 5 == 0);
+        bool divisibleBy6 = (sizeBytes % 6 == 0);
+        
+        if (!divisibleBy5 && divisibleBy6) {
+            // Divisible par 6 mais pas 5 → SCI1 Late (6 bytes/entrée)
+            if (mapDetected == RES_FORMAT_UNKNOWN || mapDetected == RES_FORMAT_SCI1_LATE) {
+                mapDetected = RES_FORMAT_SCI1_LATE;
+            }
+        } else if (divisibleBy5 && !divisibleBy6) {
+            // Divisible par 5 mais pas 6 → SCI1.1 (5 bytes/entrée)
+            if (mapDetected == RES_FORMAT_UNKNOWN || mapDetected == RES_FORMAT_SCI11) {
+                mapDetected = RES_FORMAT_SCI11;
+            }
+        }
+        // Note: Si divisible par les deux (ex: 30 bytes), on ne peut pas décider avec cette section seule
+    }
+    
+    // Par défaut, assumer SCI1 Late si pas de détection claire
+    if (mapDetected == RES_FORMAT_UNKNOWN) {
+        mapDetected = RES_FORMAT_SCI1_LATE;
+    }
+    
+    bool isSCI11 = (mapDetected == RES_FORMAT_SCI11);
+    size_t entrySize = isSCI11 ? 5 : 6;
+    
+    std::cout << "  Format détecté: " << (isSCI11 ? "SCI1.1 (5 bytes/entrée)" : "SCI1 Late (6 bytes/entrée)") << std::endl;
+    
+    for (const auto& [typeRaw, offsetSize] : typeTable) {
+        uint16_t offset = offsetSize.first;
+        uint16_t sizeBytes = offsetSize.second;
+        
+        if (offset >= m_resMapData.size()) continue;
+        
+        // Convertir type index (0x00-0x1F) vers ResourceType (0x80-0x95)
+        if (typeRaw > 0x15) continue;  // Type invalide
+        uint8_t type = typeConversionTable[typeRaw];
+        if (type == 0xFF) continue;  // Type non utilisé
+        
+        ResourceType resType = static_cast<ResourceType>(type);
+        
+        // Calculer nombre d'entrées
+        size_t numEntries = sizeBytes / entrySize;
         
         for (size_t i = 0; i < numEntries; i++) {
-            size_t offset = i * 6;
-            if (offset + 6 > m_resMapData.size()) break;
+            size_t entryPos = offset + i * entrySize;
             
-            const ResMapEntry6* entry = reinterpret_cast<const ResMapEntry6*>(&m_resMapData[offset]);
+            if (entryPos + entrySize > m_resMapData.size()) break;
             
-            uint8_t type = entry->type;
-            uint16_t number = entry->resourceNumber;
-            uint32_t resOffset = entry->getOffset();
+            // Lire number (2 bytes LE)
+            uint16_t number = readLE16(&m_resMapData[entryPos]);
             
-            // Filtrer les types invalides (fin de table, etc.)
-            if (type < 0x80 || type > 0x95) continue;
+            // Lire offset
+            uint32_t resOffset;
+            if (isSCI11) {
+                // SCI1.1/SCI2: 3 bytes (low word[2B] + high byte[1B]), peut avoir shift
+                resOffset = m_resMapData[entryPos + 2] | 
+                           (m_resMapData[entryPos + 3] << 8) | 
+                           (m_resMapData[entryPos + 4] << 16);
+                // Note: SCI1.1 utilise shift, SCI2 non (à implémenter si nécessaire)
+            } else {
+                // SCI0/SCI1: 4 bytes LE, pas de shift
+                resOffset = readLE32(&m_resMapData[entryPos + 2]);
+            }
             
-            ResourceType resType = static_cast<ResourceType>(type);
+            // Indexer la ressource
             auto key = std::make_pair(resType, static_cast<uint32_t>(number));
             m_resourceIndex[key] = resOffset;
-            m_resourceVolumes[key] = 1;
+            m_resourceVolumes[key] = m_currentVolume;
             
             typeCounts[type]++;
         }
-        
-    } else if (format == ResMapFormat::FORMAT_9_BYTES) {
-        // Format 9 octets: type[1B] + number[4B LE] + offset[4B LE]
-        size_t numEntries = m_resMapData.size() / 9;
-        std::cout << "✓ Format détecté: 9 octets (SCI32 standard)" << std::endl;
-        std::cout << "  Nombre d'entrées: " << numEntries << std::endl;
-        
-        for (size_t i = 0; i < numEntries; i++) {
-            size_t offset = i * 9;
-            if (offset + 9 > m_resMapData.size()) break;
-            
-            const ResMapEntry9* entry = reinterpret_cast<const ResMapEntry9*>(&m_resMapData[offset]);
-            
-            uint8_t type = entry->type;
-            uint32_t number = entry->resourceNumber;
-            uint32_t resOffset = entry->offset;
-            
-            if (type < 0x80 || type > 0x95) continue;
-            
-            ResourceType resType = static_cast<ResourceType>(type);
-            auto key = std::make_pair(resType, number);
-            m_resourceIndex[key] = resOffset;
-            m_resourceVolumes[key] = 1;
-            
-            typeCounts[type]++;
-        }
-        
-    } else {
-        std::cerr << "❌ Format RESMAP non reconnu (ni 6 ni 9 octets valides)" << std::endl;
-        return false;
     }
     
     std::cout << "  Types de ressources trouvés: " << typeCounts.size() << std::endl;
@@ -313,28 +432,99 @@ ResourceInfo RESSCIParser::extractResource(ResourceType type, uint32_t number) {
     
     const auto& volumeData = dataIt->second;
     
-    // Vérifier que l'offset est valide
-    if (info.offset + sizeof(ResourceHeader) > volumeData.size()) {
+    // Vérifier que l'offset est valide pour un header minimum
+    if (info.offset + 13 > volumeData.size()) {  // SCI2.1 nécessite 13 octets
         std::cerr << "Offset invalide: " << info.offset << std::endl;
         return info;
     }
     
-    // Lire le header de la ressource (SCI32 = 14 octets)
-    ResourceHeader header;
-    std::memcpy(&header, volumeData.data() + info.offset, sizeof(header));
+    const uint8_t* headerPtr = volumeData.data() + info.offset;
+    size_t headerSize = 0;
     
-    info.compressedSize = header.compressedSize;
-    info.decompressedSize = header.decompressedSize;
-    info.method = static_cast<CompressionMethod>(header.method);
+    // Lire octet 0 et octets 1-2
+    uint8_t resType = headerPtr[0];
+    uint16_t resNumber = readLE16(headerPtr + 1);
     
-    // Lire les données compressées (compressedSize = taille exacte des données)
-    size_t dataOffset = info.offset + sizeof(ResourceHeader);  // 14 octets
+    // Détecter le format RESSCI : SCI1.1 (6-10 bytes) ou SCI2.1 (13 bytes)
+    // Phantasmagoria (SCI2.1) utilise RESMAP 6 bytes + RESSCI 13 bytes
+    // Heuristique : Forcer SCI2.1 si le volume est > 50 Mo (CD-ROM game)
+    bool forceSCI21 = (volumeData.size() > 50000000);
+    
+    // Lire les valeurs comme SCI2.1
+    uint32_t compSize4 = readLE32(headerPtr + 3);
+    uint32_t decompSize4 = readLE32(headerPtr + 7);
+    uint16_t method16 = readLE16(headerPtr + 11);
+    
+    // SCI2.1 si forcé OU si les valeurs semblent valides
+    bool validSizes = (compSize4 > 0 && compSize4 < volumeData.size() &&
+                       decompSize4 > 0 && decompSize4 < volumeData.size() * 10);
+    bool validMethod = (method16 == 0 || method16 == 1 || method16 == 2 || method16 == 3 ||
+                        method16 == 4 || method16 == 18 || method16 == 19 || method16 == 20 ||
+                        method16 == 32 || method16 < 256);
+    
+    bool isSCI21 = forceSCI21 || (validSizes && validMethod);
+    
+    if (isSCI21) {
+        // FORMAT SCI2.1 : 13 bytes
+        // 0: Type (1B)
+        // 1-2: Number (2B LE)
+        // 3-6: CompSize (4B LE)
+        // 7-10: DecompSize (4B LE)
+        // 11-12: Method (2B LE)
+        headerSize = 13;
+        info.compressedSize = compSize4;
+        info.decompressedSize = decompSize4;
+        info.method = static_cast<CompressionMethod>(method16);
+        
+        // DEBUG
+        if (type == RT_SCRIPT || type == RT_HEAP) {
+            std::cout << "  " << getResourceTypeName(type) << " #" << number 
+                      << " (SCI2.1): method=0x" << std::hex << method16 << std::dec
+                      << ", compSize=" << info.compressedSize 
+                      << ", decompSize=" << info.decompressedSize << std::endl;
+        }
+    } else {
+        // FORMAT SCI1.1 : 6-10 bytes (variable)
+        // Octet 0: type + flag compression (bit 7)
+        bool hasCompression = (resType & 0x80) != 0;
+        resType = resType & 0x7F;
+        
+        // Octets 3-5: taille compressée (LE24)
+        uint32_t size3bytes = headerPtr[3] | (headerPtr[4] << 8) | (headerPtr[5] << 16);
+        info.compressedSize = size3bytes;
+        info.decompressedSize = size3bytes;
+        info.method = CM_NONE;
+        headerSize = 6;
+        
+        // Si compression, lire méthode (1B) + decompSize (3B)
+        if (hasCompression && info.offset + 10 <= volumeData.size()) {
+            info.method = static_cast<CompressionMethod>(headerPtr[6]);
+            info.decompressedSize = headerPtr[7] | (headerPtr[8] << 8) | (headerPtr[9] << 16);
+            headerSize = 10;
+        }
+        
+        // DEBUG
+        if (type == RT_SCRIPT || type == RT_HEAP) {
+            std::cout << "  " << getResourceTypeName(type) << " #" << number 
+                      << " (SCI1.1): method=0x" << std::hex << (int)info.method << std::dec
+                      << ", compSize=" << info.compressedSize 
+                      << ", decompSize=" << info.decompressedSize << std::endl;
+        }
+    }
+    
+    // Lire les données compressées
+    size_t dataOffset = info.offset + headerSize;
     size_t dataSize = info.compressedSize;
     
-    if (dataOffset + dataSize > volumeData.size()) {
-        std::cerr << "Données trop grandes: offset=" << dataOffset 
-                  << " size=" << dataSize << " total=" << volumeData.size() << std::endl;
-        dataSize = volumeData.size() - dataOffset;
+    // Validation stricte
+    if (dataOffset >= volumeData.size() || dataSize == 0 || dataSize > volumeData.size() || 
+        dataOffset + dataSize > volumeData.size()) {
+        // Ne logger que si c'est proche d'être valide
+        if (dataOffset < volumeData.size() && dataSize > 0 && dataSize < volumeData.size() * 2) {
+            std::cerr << "Données invalides ignorées: offset=" << dataOffset 
+                      << " size=" << dataSize << " total=" << volumeData.size() << std::endl;
+        }
+        return info;
     }
     
     std::vector<uint8_t> compressedData(volumeData.begin() + dataOffset,
@@ -386,6 +576,7 @@ std::vector<uint8_t> RESSCIParser::decompress(
         case CM_UNKNOWN:
             return decompressLZ(compressed, decompressedSize);
             
+        case CM_LZS:         // 0x20 - LZS pour Phantasmagoria scripts
         case CM_STACPACK:
         case CM_STACPACK_OLD:
             return decompressSTACpack(compressed, decompressedSize);
@@ -398,8 +589,12 @@ std::vector<uint8_t> RESSCIParser::decompress(
             }
             
         default:
-            std::cerr << "Méthode de compression non supportée: 0x" 
-                     << std::hex << (int)method << std::dec << std::endl;
+            // Logger seulement une fois par méthode inconnue pour éviter le spam
+            if (s_unsupportedMethodsLogged.find((uint8_t)method) == s_unsupportedMethodsLogged.end()) {
+                std::cerr << "Méthode de compression non supportée: 0x" 
+                         << std::hex << (int)method << std::dec << std::endl;
+                s_unsupportedMethodsLogged.insert((uint8_t)method);
+            }
             return std::vector<uint8_t>();
     }
 }
@@ -521,22 +716,26 @@ std::vector<RobotCoordinates> RESSCIParser::extractRobotCoordinates() {
     // Extraire tous les scripts
     auto scripts = extractAllResourcesOfType(RT_SCRIPT);
     
-    std::cout << "\nAnalyse de " << scripts.size() << " scripts pour coordonnées Robot..." << std::endl;
+    std::cout << "Analyse de " << scripts.size() << " scripts pour CALLK Robot (opcode 0x76)...\n";
     
+    int scriptsWithRobot = 0;
     for (const auto& script : scripts) {
         auto coords = parseScriptForRobotCalls(script.data, script.number);
+        if (!coords.empty()) {
+            scriptsWithRobot++;
+            std::cout << "  Script #" << script.number << ": " 
+                     << coords.size() << " appel(s) kRobot trouvé(s)\n";
+            for (const auto& c : coords) {
+                std::cout << "    → Robot #" << c.robotId 
+                         << " @ (" << c.x << ", " << c.y << ")"
+                         << " [Pri:" << c.priority << "]\n";
+            }
+        }
         allCoords.insert(allCoords.end(), coords.begin(), coords.end());
     }
     
-    // Extraire tous les HEAPs
-    auto heaps = extractAllResourcesOfType(RT_HEAP);
-    
-    std::cout << "Analyse de " << heaps.size() << " HEAPs pour coordonnées Robot..." << std::endl;
-    
-    for (const auto& heap : heaps) {
-        auto coords = parseHeapForCoordinates(heap.data, heap.number);
-        allCoords.insert(allCoords.end(), coords.begin(), coords.end());
-    }
+    std::cout << "\n✅ " << scriptsWithRobot << " script(s) avec appels kRobot\n";
+    std::cout << "📊 Total: " << allCoords.size() << " coordonnée(s) Robot extraite(s)\n";
     
     return allCoords;
 }
@@ -621,62 +820,91 @@ std::vector<RobotCoordinates> RESSCIParser::parseScriptForRobotCalls(
     
     if (scriptData.size() < 20) return coords;
     
-    // Opcodes SCI2.1
-    const uint8_t OP_PUSHI = 0x38;       // Push immediate value
-    const uint8_t OP_CALLK = 0x42;       // Call kernel function
-    const uint8_t OP_CALLK_LONG = 0x43;  // Call kernel with more args
+    // Opcodes SCI32 (format réel selon ScummVM)
+    const uint8_t OP_PUSHI = 0x38;      // Push immediate 16-bit value
+    const uint8_t OP_CALLK = 0x76;      // Call kernel (format: 0x76 kernelId argc)
     
-    // kRobot kernel ID en SCI2.1
-    const uint16_t KROBOT_KERNEL_ID = 0x7B; // 123 decimal
-    
-    // Scanner le bytecode
-    for (size_t i = 0; i < scriptData.size() - 20; i++) {
-        uint8_t opcode = scriptData[i];
+    // Scanner le bytecode pour CALLK avec différents kernel IDs possibles pour Robot
+    // Kernel ID peut varier selon version SCI, on cherche patterns connus
+    for (size_t i = 0; i < scriptData.size() - 15; i++) {
+        // Chercher CALLK (0x76)
+        if (scriptData[i] != OP_CALLK) continue;
         
-        if (opcode == OP_CALLK || opcode == OP_CALLK_LONG) {
-            if (i + 4 > scriptData.size()) break;
+        // Vérifier qu'on a assez de bytes pour lire kernelId + argc
+        if (i + 3 >= scriptData.size()) continue;
+        
+        // Format: 0x76 <kernelId> <argc>
+        uint8_t kernelId = scriptData[i + 1];
+        uint8_t argc = scriptData[i + 2];
+        
+        // Kernel IDs Robot observés dans Phantasmagoria: 57, 67, 74, 84
+        // Filtrer pour réduire les faux positifs
+        const std::set<uint8_t> robotKernelIds = {57, 67, 74, 84};
+        if (robotKernelIds.find(kernelId) == robotKernelIds.end()) continue;
+        
+        // On cherche argc=4 à 6 (robotId, x, y, priority, [palette], [extra])
+        if (argc < 4 || argc > 6) continue;
+        
+        // Chercher les PUSHI en arrière (arguments empilés avant CALLK)
+        std::vector<int16_t> params;
+        
+        // Scanner jusqu'à 50 bytes en arrière
+        for (int back = std::min<int>(i, 50); back > 0; back--) {
+            size_t pos = i - back;
             
-            uint16_t kernelId = readLE16(&scriptData[i + 1]);
-            uint8_t argc = scriptData[i + 3];
-            
-            if (kernelId == KROBOT_KERNEL_ID && argc >= 5) {
-                // Remonter pour trouver les arguments (pushi values)
-                std::vector<int16_t> args;
-                size_t searchPos = (i > 100) ? i - 100 : 0;
+            if (scriptData[pos] == OP_PUSHI && pos + 3 <= scriptData.size()) {
+                int16_t value = (int16_t)readLE16(&scriptData[pos + 1]);
+                params.push_back(value);
                 
-                // Chercher les pushi avant le callk
-                for (size_t j = i; j > searchPos && args.size() < argc; j--) {
-                    if (scriptData[j] == OP_PUSHI && j + 3 <= scriptData.size()) {
-                        int16_t value = readSLE16(&scriptData[j + 1]);
-                        args.insert(args.begin(), value);
-                    }
-                }
-                
-                // Vérifier si c'est un kRobotOpen avec coordonnées
-                if (args.size() >= 5) {
-                    int16_t subop = args[0];
-                    int16_t robotId = args[1];
-                    int16_t x = args.size() > 3 ? args[3] : 0;
-                    int16_t y = args.size() > 4 ? args[4] : 0;
-                    int16_t priority = args.size() > 2 ? args[2] : 0;
-                    int16_t scale = args.size() > 5 ? args[5] : 128;
-                    
-                    // subop 0 = kRobotOpen
-                    if (subop == 0 && robotId > 0 && robotId < 10000) {
-                        // Vérifier que les coordonnées sont plausibles
-                        if (x >= 0 && x <= 630 && y >= 0 && y <= 450) {
-                            RobotCoordinates rc;
-                            rc.robotId = robotId;
-                            rc.x = x;
-                            rc.y = y;
-                            rc.priority = priority;
-                            rc.scale = scale;
-                            rc.scriptId = scriptId;
-                            coords.push_back(rc);
-                        }
-                    }
-                }
+                // On a assez de params
+                if (params.size() >= argc) break;
             }
+        }
+        
+        // Vérifier qu'on a au moins 3 params (robotId, x, y)
+        if (params.size() < 3) continue;
+        
+        // Les params sont empilés dans l'ordre: robotId, x, y, priority...
+        // Donc le premier PUSHI trouvé en arrière est le dernier argument
+        // Il faut inverser pour avoir l'ordre correct
+        std::reverse(params.begin(), params.end());
+        
+        // Debug: afficher tous les params pour comprendre l'ordre
+        if (scriptId == 90 || scriptId == 91 || scriptId == 161 || scriptId == 162 || scriptId == 170 || scriptId == 260 ||
+            scriptId == 1800 || scriptId == 22100) {
+            std::cout << "      DEBUG params (reversed): ";
+            for (size_t p = 0; p < params.size(); p++) {
+                std::cout << params[p];
+                if (p < params.size() - 1) std::cout << ", ";
+            }
+            std::cout << std::endl;
+        }
+        
+        int16_t robotId = params[0];
+        int16_t x = params[1];
+        int16_t y = params[2];
+        int16_t priority = (params.size() >= 4) ? params[3] : 0;
+        
+        // Canvas Phantasmagoria: 640×480 pixels
+        // Accepter coordonnées négatives (robots hors écran)
+        // Filtrer uniquement les valeurs plausibles
+        if (robotId > 0 && robotId < 10000 &&
+            x >= -100 && x <= 740 && y >= -100 && y <= 580) {
+            
+            RobotCoordinates rc;
+            rc.robotId = robotId;
+            rc.x = x;
+            rc.y = y;
+            rc.priority = priority;
+            rc.scale = 128;  // Échelle par défaut
+            rc.scriptId = scriptId;
+            
+            coords.push_back(rc);
+            
+            // Debug: afficher ce qu'on a trouvé
+            std::cout << "    [Script " << scriptId << " offset 0x" << std::hex << i << std::dec 
+                      << "] CALLK " << (int)kernelId << " argc=" << (int)argc
+                      << " → Robot #" << robotId << " @ (" << x << ", " << y << ")" << std::endl;
         }
     }
     
@@ -759,11 +987,11 @@ const char* RESSCIParser::getResourceTypeName(ResourceType type) {
         case RT_AUDIO: return "Audio";
         case RT_SYNC: return "Sync";
         case RT_MESSAGE: return "Message";
-        case RT_MAP: return "Map";
+        case RT_CHUNK: return "Chunk";
         case RT_HEAP: return "Heap";
         case RT_AUDIO36: return "Audio36";
         case RT_SYNC36: return "Sync36";
-        case RT_CHUNK: return "Chunk";
+        case RT_ROBOTDATA: return "RobotData";
         case RT_AUDIOMAP: return "AudioMap";
         default: return "Unknown";
     }
@@ -778,7 +1006,7 @@ const char* RESSCIParser::getCompressionMethodName(CompressionMethod method) {
         case CM_LZ_BIT: return "LZ-Bit";
         case CM_RLE_HUFF: return "RLE+Huffman";
         case CM_LZ_ADV: return "LZ Advanced";
-        case CM_HUFFMAN_20: return "Huffman 0x20";
+        case CM_LZS: return "LZS/STACpack";
         case CM_LZSS_31: return "LZSS 0x31";
         case CM_RLE_0x34: return "RLE 0x34";
         case CM_HUFFMAN_V56: return "Huffman V56";

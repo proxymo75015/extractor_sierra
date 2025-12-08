@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <vector>
 #include <map>
+#include <set>
 #include <string>
 #include <memory>
 
@@ -43,12 +44,12 @@ enum ResourceType : uint8_t {
     RT_CDAUDIO    = 0x8C,  // Audio CD
     RT_AUDIO      = 0x8D,  // Audio général (MIDI/PCM)
     RT_SYNC       = 0x8E,  // Synchronisation
-    RT_MESSAGE    = 0x8F,  // Messages/dialogues
-    RT_MAP        = 0x90,  // Sous-maps
+    RT_MESSAGE    = 0x8F,  // Messages/dialogues (aussi appelé Robot dans certaines versions)
+    RT_CHUNK      = 0x90,  // Chunks/métadonnées (contient coordonnées Robot X/Y)
     RT_HEAP       = 0x91,  // Données heap pour scripts
     RT_AUDIO36    = 0x92,  // Audio compressé SCI1.1
     RT_SYNC36     = 0x93,  // Sync pour audio36
-    RT_CHUNK      = 0x94,  // Blocs de données
+    RT_ROBOTDATA  = 0x94,  // Données Robot supplémentaires
     RT_AUDIOMAP   = 0x95,  // Index audio
     RT_INVALID    = 0xFF
 };
@@ -67,7 +68,7 @@ enum CompressionMethod : uint8_t {
     CM_LZ_ADV     = 0x0C,  // LZSS-like
     CM_UNKNOWN    = 0x0D,  // Variante LZ non documentée
     CM_STACPACK_OLD = 0x0E,  // STACpack old
-    CM_HUFFMAN_20 = 0x20,  // Huffman basique (arbre statique)
+    CM_LZS        = 0x20,  // LZS/STACpack pour SCI32 (Phantasmagoria scripts)
     CM_LZSS_31    = 0x31,  // LZSS variant
     CM_RLE_0x34   = 0x34,  // RLE pour images
     CM_HUFFMAN_V56= 0x38,  // Huffman pour V56 (View)
@@ -156,10 +157,13 @@ public:
     /**
      * @brief Format du fichier RESMAP détecté
      */
-    enum class ResMapFormat {
-        FORMAT_6_BYTES,  // SCI1.1 / variantes (démos, versions modifiées)
-        FORMAT_9_BYTES,  // SCI32 standard (Phantasmagoria CD original)
-        FORMAT_UNKNOWN   // Format non reconnu
+    enum ResMapFormat {
+        RES_FORMAT_UNKNOWN = 0,   // Format non reconnu
+        RES_FORMAT_SCI1_LATE = 1, // SCI1 Late (6 bytes: number[2B] + offset[4B])
+        RES_FORMAT_SCI11 = 2,     // SCI1.1 (5 bytes: number[2B] + offset[3B])
+        FORMAT_6_BYTES = RES_FORMAT_SCI1_LATE,  // Alias pour compatibilité
+        FORMAT_9_BYTES = 3,       // SCI32 (9 bytes - non utilisé dans ce code)
+        FORMAT_UNKNOWN = RES_FORMAT_UNKNOWN    // Alias
     };
     
     RESSCIParser();
@@ -168,9 +172,10 @@ public:
     /**
      * @brief Charge un fichier RESMAP.00X
      * @param path Chemin vers RESMAP.00X
+     * @param volumeNumber Numéro du volume (1-7) pour association correcte avec RESSCI
      * @return true si succès
      */
-    bool loadResMap(const std::string& path);
+    bool loadResMap(const std::string& path, uint8_t volumeNumber = 1);
     
     /**
      * @brief Détecte automatiquement le format du RESMAP chargé
@@ -288,6 +293,12 @@ private:
     // Données RESMAP chargées
     std::vector<uint8_t> m_resMapData;
     
+    // Numéro de volume courant lors du parsing RESMAP
+    uint8_t m_currentVolume;
+    
+    // Format RESMAP détecté (6 ou 9 octets)
+    ResMapFormat m_detectedFormat;
+    
     // Index: (type, number) -> offset dans RESSCI (SCI32 utilise uint32)
     std::map<std::pair<ResourceType, uint32_t>, uint32_t> m_resourceIndex;
     
@@ -296,6 +307,9 @@ private:
     
     // Mapping: (type, number) -> volume
     std::map<std::pair<ResourceType, uint32_t>, uint8_t> m_resourceVolumes;
+    
+    // Suivi des méthodes de compression non supportées (pour éviter le spam)
+    static std::set<uint8_t> s_unsupportedMethodsLogged;
 };
 
 } // namespace SCI

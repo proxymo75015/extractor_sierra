@@ -64,7 +64,7 @@ std::vector<RobotPosition> loadRobotPositionsFromRESSCI(const std::string& resou
         if (testResmap) {
             fclose(testResmap);
             fprintf(stderr, "  Loading RESMAP.%s: %s\n", volStr, resmapPath.c_str());
-            if (parser.loadResMap(resmapPath)) {
+            if (parser.loadResMap(resmapPath, vol)) {  // Passer le numéro de volume
                 resmapsLoaded++;
             } else {
                 fprintf(stderr, "  Warning: Failed to load RESMAP.%s\n", volStr);
@@ -618,6 +618,13 @@ int main(int argc, char* argv[]) {
     }
     fprintf(stderr, "FFmpeg found!\n");
     
+    // Créer le répertoire output/ au début (nécessaire pour resources_list.txt)
+#ifdef _WIN32
+    mkdir("output");
+#else
+    mkdir("output", 0755);
+#endif
+
     // Charger les positions des robots depuis RESSCI ou fichier cache
     fprintf(stderr, "\nLoading robot positions...\n");
     std::vector<RobotPosition> robotPositions;
@@ -675,13 +682,6 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "  - %s\n", file.c_str());
     }
     fprintf(stderr, "\n");
-    
-    // Créer le répertoire output/
-#ifdef _WIN32
-    mkdir("output");
-#else
-    mkdir("output", 0755);
-#endif
     
     // Traiter chaque fichier
     size_t successCount = 0;
