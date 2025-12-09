@@ -880,12 +880,23 @@ std::vector<RobotCoordinates> RESSCIParser::parseScriptForRobotCalls(
             std::cout << std::endl;
         }
         
-        int16_t robotId = params[0];
-        int16_t x = params[1];
-        int16_t y = params[2];
-        int16_t priority = (params.size() >= 4) ? params[3] : 0;
+        // Ordre des paramètres kRobotOpen: robotId, plane, priority, x, y, scale
+        // params[0] = robotId
+        // params[1] = plane (objet, pas une coordonnée)
+        // params[2] = priority
+        // params[3] = x ← coordonnée X
+        // params[4] = y ← coordonnée Y
+        // params[5] = scale (optionnel)
         
-        // Canvas Phantasmagoria: 640×480 pixels
+        if (params.size() < 5) continue;  // Besoin d'au moins robotId, plane, priority, x, y
+        
+        int16_t robotId = params[0];
+        int16_t x = params[3];  // Position X (4ème paramètre)
+        int16_t y = params[4];  // Position Y (5ème paramètre)
+        int16_t priority = params[2];
+        int16_t scale = (params.size() >= 6) ? params[5] : 128;
+        
+        // Canvas Phantasmagoria: 640×480 pixels (mais peut être 630×450 en pratique)
         // Accepter coordonnées négatives (robots hors écran)
         // Filtrer uniquement les valeurs plausibles
         if (robotId > 0 && robotId < 10000 &&
@@ -896,15 +907,16 @@ std::vector<RobotCoordinates> RESSCIParser::parseScriptForRobotCalls(
             rc.x = x;
             rc.y = y;
             rc.priority = priority;
-            rc.scale = 128;  // Échelle par défaut
+            rc.scale = scale;
             rc.scriptId = scriptId;
             
             coords.push_back(rc);
             
             // Debug: afficher ce qu'on a trouvé
             std::cout << "    [Script " << scriptId << " offset 0x" << std::hex << i << std::dec 
-                      << "] CALLK " << (int)kernelId << " argc=" << (int)argc
-                      << " → Robot #" << robotId << " @ (" << x << ", " << y << ")" << std::endl;
+                      << "] CALLK Robot argc=" << (int)argc
+                      << " → Robot #" << robotId << " @ (" << x << ", " << y << ")"
+                      << " priority=" << priority << " scale=" << scale << std::endl;
         }
     }
     

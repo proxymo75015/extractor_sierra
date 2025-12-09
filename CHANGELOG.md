@@ -1,5 +1,21 @@
 # Changelog
 
+## Version 3.1.1 (2025-12-09)
+
+### 🐛 Corrections critiques
+
+- **Extraction coordonnées Robot** : Correction de l'ordre des paramètres kRobotOpen
+  - Bug: Utilisait params[1] et params[2] (plane et priority) au lieu de params[3] et params[4] (x et y)
+  - Fix: Ordre correct selon ScummVM : `kRobotOpen(robotId, plane, priority, x, y, scale)`
+  - Impact: Robot 162 passe de (179, 182) à (160, 8) - position correcte
+  - Impact: Robot 170 passe de (169, 179) à (250, 331)
+  - Impact: Robot 260 reste à (309, 130)
+  
+- **Canvas positioning** : Application correcte des coordonnées ScummVM
+  - Formule haute résolution : `screenX = celPosition.x + _position.x`
+  - Formule haute résolution : `screenY = celPosition.y + _position.y`
+  - Les coordonnées `_canvasX/_canvasY` sont maintenant correctement ajoutées aux `celX/celY`
+
 ## Version 3.1.0 (2025-12-08)
 
 ### ✨ Nouveautés

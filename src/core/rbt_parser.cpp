@@ -1324,17 +1324,15 @@ bool RbtParser::extractFramePixels(size_t frameIndex, std::vector<uint8_t>& outP
         }
         
         // Composer le cel dans le buffer final
-        // NOTE: Les coordonnées celX/celY dans le fichier RBT sont relatives
-        // ScummVM ajoute un _position global (fourni par le script du jeu) :
-        // highResY = celPosition.y + _position.y + celHeight - 1
-        // Comme nous n'avons pas accès à _position, on utilise celX/celY directement
-        // comme coordonnées TOP-LEFT du cel
+        // ScummVM formule: screenX = celPosition.x + _position.x
+        //                  screenY = celPosition.y + _position.y (pour haute résolution)
+        // En mode canvas, _canvasX/_canvasY correspondent à _position de ScummVM
         for (int y = 0; y < (int)celHeight; ++y) {
-            const int screenY = celY + y;
+            const int screenY = (_useCanvasMode ? _canvasY : 0) + celY + y;
             if (screenY < 0 || screenY >= (int)outHeight) continue;
             
             for (int x = 0; x < (int)celWidth; ++x) {
-                const int screenX = celX + x;
+                const int screenX = (_useCanvasMode ? _canvasX : 0) + celX + x;
                 if (screenX < 0 || screenX >= (int)outWidth) continue;
                 
                 uint8_t pixelIdx = finalCelPixels[y * celWidth + x];
